@@ -344,14 +344,14 @@ body{
       <button class="arr-btn" onclick="changeWeek(1)">›</button>
     </div>
     <div class="stats3">
-      <div class="s3"><div class="s3-lbl">Receita</div><div class="s3-val g" id="ws-inc">R$ 0</div></div>
-      <div class="s3"><div class="s3-lbl">Gastos</div><div class="s3-val r" id="ws-exp">R$ 0</div></div>
-      <div class="s3"><div class="s3-lbl">Líquido</div><div class="s3-val p" id="ws-liq">R$ 0</div></div>
+      <div class="s3"><div class="s3-lbl">Receita</div><div class="s3-val g" id="ws-inc">$ 0</div></div>
+      <div class="s3"><div class="s3-lbl">Gastos</div><div class="s3-val r" id="ws-exp">$ 0</div></div>
+      <div class="s3"><div class="s3-lbl">Líquido</div><div class="s3-val p" id="ws-liq">$ 0</div></div>
     </div>
     <div class="saldo-row">
       <span class="saldo-lbl">Saldo atual</span>
       <div class="saldo-right">
-        <span class="saldo-val" id="saldo-val">R$ 0,00</span>
+        <span class="saldo-val" id="saldo-val">$ 0,00</span>
         <button class="pencil-btn" onclick="openSaldoEdit()">✏️</button>
       </div>
     </div>
@@ -383,7 +383,7 @@ body{
   <div class="result-bar">
     <span class="result-lbl">Resultado do dia</span>
     <div class="result-track"><div class="result-fill" id="result-fill" style="width:0%"></div></div>
-    <span class="result-val pos" id="result-val">R$ 0,00</span>
+    <span class="result-val pos" id="result-val">$ 0,00</span>
   </div>
 </div>
 
@@ -391,8 +391,8 @@ body{
 <div class="page" id="page-reserva">
   <div class="res-main">
     <div class="res-lbl">Reserva de Emergência</div>
-    <div class="res-total" id="res-total">R$ 0,00</div>
-    <div class="res-meta" id="res-meta">Meta: R$ 0,00</div>
+    <div class="res-total" id="res-total">$ 0,00</div>
+    <div class="res-meta" id="res-meta">Meta: $ 0,00</div>
     <div class="res-prog"><div class="res-prog-fill" id="res-fill" style="width:0%"></div></div>
     <div class="res-pct" id="res-pct">0% da meta</div>
   </div>
@@ -433,7 +433,7 @@ body{
 <div class="page" id="page-fixos">
   <div class="fixed-total-card">
     <div class="fixed-total-lbl">Total Fixos / Mês</div>
-    <div class="fixed-total-val" id="fixed-total">R$ 0,00</div>
+    <div class="fixed-total-val" id="fixed-total">$ 0,00</div>
   </div>
   <div class="sec-card"><div id="fixed-list"></div></div>
   <div class="btn-plus-row">
@@ -447,7 +447,7 @@ body{
   <div class="sheet">
     <div class="sheet-handle"></div>
     <div class="sheet-title">Saldo Atual</div>
-    <div class="fg"><label class="fl">Valor atual em caixa / carteira (R$)</label>
+    <div class="fg"><label class="fl">Valor atual em caixa / carteira ($)</label>
       <input class="fi" type="number" id="saldo-input" min="0" step="0.01" placeholder="0.00"></div>
     <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.5">Este é o saldo real atual disponível. Ao alterar, o app mostrará exatamente o valor informado — sem somar receitas anteriores.</p>
     <button class="btn-save" onclick="saveSaldo()">Salvar</button>
@@ -468,7 +468,7 @@ body{
     <div class="sheet-title" id="fixed-modal-title">Gasto Fixo</div>
     <input type="hidden" id="fixed-edit-id">
     <div class="fg"><label class="fl">Nome</label><input class="fi" type="text" id="fi-name" placeholder="Ex: Aluguel, Netflix..."></div>
-    <div class="fg"><label class="fl">Valor Mensal (R$)</label><input class="fi" type="number" id="fi-amount" min="0" step="0.01"></div>
+    <div class="fg"><label class="fl">Valor Mensal ($)</label><input class="fi" type="number" id="fi-amount" min="0" step="0.01"></div>
     <div class="fg"><label class="fl">Categoria</label><select class="fsel" id="fi-cat"></select></div>
     <div class="fg"><label class="fl">Vence todo dia</label><input class="fi" type="number" id="fi-day" min="1" max="31" placeholder="Ex: 5"></div>
     <button class="btn-save" onclick="saveFixed()">Salvar</button>
@@ -535,7 +535,7 @@ function fmtMonthYear(off) {
   return d.toLocaleDateString('pt-BR',{month:'short',year:'numeric'});
 }
 function R(v) {
-  return 'R$ '+Math.abs(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return '$ '+Math.abs(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
 // ══════════════════════════════════════════
@@ -829,10 +829,10 @@ function openResModal(type) {
   const titles={dep:'Depositar na Reserva',ret:'Retirar da Reserva',meta:'Editar Meta'};
   document.getElementById('res-modal-title').textContent=titles[type];
   document.getElementById('res-modal-body').innerHTML=type==='meta'
-    ? `<div class="fg"><label class="fl">Meta da Reserva (R$)</label>
+    ? `<div class="fg"><label class="fl">Meta da Reserva ($)</label>
         <input class="fi" type="number" id="rm-meta" value="${D.emergency.target}" min="0" step="100"></div>
        <button class="btn-save" onclick="saveResMeta()">Salvar Meta</button>`
-    : `<div class="fg"><label class="fl">Valor (R$)</label>
+    : `<div class="fg"><label class="fl">Valor ($)</label>
         <input class="fi" type="number" id="rm-val" min="0" step="0.01" placeholder="0.00"></div>
        <div class="fg"><label class="fl">Observação (opcional)</label>
         <input class="fi" type="text" id="rm-note" placeholder="Ex: Salário, emergência..."></div>
