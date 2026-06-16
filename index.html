@@ -848,6 +848,7 @@ function saveResMove(type) {
   const note=document.getElementById('rm-note').value.trim();
   if(!val||val<=0){alert('Informe um valor válido.');return;}
   D.emergency.current=type==='dep' ? D.emergency.current+val : Math.max(0,D.emergency.current-val);
+  D.saldoDisponivel=type==='dep' ? (D.saldoDisponivel||0)-val : (D.saldoDisponivel||0)+val;
   D.reservaHistory.push({id:uid(),type,amount:val,note,date:todayStr()});
   save(); closeOverlay('modal-res'); renderReserva();
 }
@@ -855,6 +856,7 @@ function deleteResHist(id) {
   const h=D.reservaHistory.find(h=>h.id===id);
   if(!h) return;
   D.emergency.current=h.type==='dep' ? Math.max(0,D.emergency.current-h.amount) : D.emergency.current+h.amount;
+  D.saldoDisponivel=h.type==='dep' ? (D.saldoDisponivel||0)+h.amount : (D.saldoDisponivel||0)-h.amount;
   D.reservaHistory=D.reservaHistory.filter(h=>h.id!==id);
   save(); renderReserva();
 }
