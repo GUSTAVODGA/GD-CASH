@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="GD CASH">
-<meta name="theme-color" content="#0a0a0f">
+<meta name="theme-color" content="#0b0d12">
 <meta name="mobile-web-app-capable" content="yes">
 <title>GD CASH</title>
 <link rel="stylesheet" href="style.css">
@@ -14,14 +14,10 @@
 <body>
 
 <header class="topbar">
-  <div class="logo"><div class="logo-badge">$</div>GD CASH</div>
-  <nav class="tabs">
-    <button class="tab-btn active" data-tab="semana" onclick="switchTab('semana')">Semana</button>
-    <button class="tab-btn" data-tab="reserva" onclick="switchTab('reserva')">Reserva</button>
-    <button class="tab-btn" data-tab="mes" onclick="switchTab('mes')">Mês</button>
-    <button class="tab-btn" data-tab="fixos" onclick="switchTab('fixos')">Fixos</button>
-  </nav>
+  <div class="logo"><span class="logo-mark"></span>GD CASH</div>
 </header>
+
+<main>
 
 <!-- ════ SEMANA ════ -->
 <section class="page active" id="page-semana">
@@ -33,10 +29,13 @@
     <button class="nav-arrow" onclick="changeWeek(1)">›</button>
   </div>
 
-  <div class="stat-grid">
-    <div class="stat-card"><div class="stat-lbl">Receita</div><div class="stat-val v-green" id="ws-inc">$ 0,00</div></div>
-    <div class="stat-card"><div class="stat-lbl">Gastos</div><div class="stat-val v-red" id="ws-exp">$ 0,00</div></div>
-    <div class="stat-card" style="grid-column:1/-1"><div class="stat-lbl">Líquido da semana</div><div class="stat-val" id="ws-liq">$ 0,00</div></div>
+  <div class="hero-card" id="hero-semana">
+    <div class="hero-lbl">Líquido da semana</div>
+    <div class="hero-val" id="ws-liq">$ 0,00</div>
+    <div class="hero-chips">
+      <div class="hero-chip"><span class="chip-dot dot-green"></span>Receita <b id="ws-inc">$ 0,00</b></div>
+      <div class="hero-chip"><span class="chip-dot dot-red"></span>Gastos <b id="ws-exp">$ 0,00</b></div>
+    </div>
   </div>
 
   <div class="sec-title">Receita por plataforma</div>
@@ -77,18 +76,31 @@
 
 <!-- ════ RESERVA ════ -->
 <section class="page" id="page-reserva">
-  <div class="card res-total-card">
-    <div class="res-total-lbl">Reserva de Emergência</div>
-    <div class="res-total-val" id="res-total">$ 0,00</div>
-    <div class="res-meta-lbl" id="res-meta">Meta: $ 0,00</div>
-    <div class="res-bar-wrap"><div class="res-bar-fill" id="res-fill" style="width:0%"></div></div>
-    <div class="res-pct-lbl" id="res-pct"></div>
+  <div class="card res-hero">
+    <div class="res-ring-wrap">
+      <svg viewBox="0 0 160 160">
+        <defs>
+          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#ffb800"/>
+            <stop offset="100%" stop-color="#ff6b35"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-bg" cx="80" cy="80" r="68"/>
+        <circle class="ring-fill" id="res-ring-fill" cx="80" cy="80" r="68"/>
+      </svg>
+      <div class="res-ring-center">
+        <div class="res-ring-lbl">Reserva</div>
+        <div class="res-ring-val" id="res-total">$ 0,00</div>
+        <div class="res-ring-pct" id="res-pct">0%</div>
+      </div>
+    </div>
   </div>
+  <div class="res-meta-row" id="res-meta">Meta: $ 0,00</div>
 
   <div class="res-actions">
-    <button class="btn btn-secondary" onclick="openResModal('dep')">＋ Depositar</button>
-    <button class="btn btn-secondary" onclick="openResModal('ret')">－ Retirar</button>
-    <button class="btn btn-secondary" onclick="openResModal('meta')">🎯 Meta</button>
+    <button class="pill pill-dep" onclick="openResModal('dep')">＋ Depositar</button>
+    <button class="pill pill-ret" onclick="openResModal('ret')">－ Retirar</button>
+    <button class="pill pill-meta" onclick="openResModal('meta')">🎯 Meta</button>
   </div>
 
   <div class="sec-title">Histórico</div>
@@ -103,7 +115,15 @@
     <button class="nav-arrow" onclick="changeMonth(1)">›</button>
   </div>
 
-  <div class="stat-grid" id="mes-stats"></div>
+  <div class="hero-card" id="hero-mes">
+    <div class="hero-lbl">Líquido do mês</div>
+    <div class="hero-val" id="mes-liq">$ 0,00</div>
+    <div class="hero-chips">
+      <div class="hero-chip"><span class="chip-dot dot-green"></span>Receita <b id="mes-inc">$ 0,00</b></div>
+      <div class="hero-chip"><span class="chip-dot dot-red"></span>Gastos <b id="mes-exp">$ 0,00</b></div>
+      <div class="hero-chip"><span class="chip-dot dot-gold"></span>Reserva <b id="mes-resv">$ 0,00</b></div>
+    </div>
+  </div>
 
   <div class="sec-title">Receita por plataforma</div>
   <div class="card donut-card">
@@ -122,9 +142,7 @@
   </div>
 
   <div class="sec-title">Semana a semana</div>
-  <div class="card">
-    <table class="s2s-table" id="s2s-table"></table>
-  </div>
+  <div class="card" id="s2s-bars"></div>
 </section>
 
 <!-- ════ FIXOS ════ -->
@@ -136,15 +154,49 @@
 
   <div class="card"><div id="fixed-list"></div></div>
 
-  <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
-    <button class="btn btn-primary" onclick="openFixedModal()">＋ Adicionar gasto fixo</button>
-    <button class="btn btn-secondary" onclick="openCatModal()">⚙ Gerenciar categorias</button>
-    <button class="btn btn-secondary" onclick="openPlatSettings()">⚙ Gerenciar fontes de receita</button>
-    <button class="btn btn-secondary" onclick="exportData()">⬇ Exportar dados (backup)</button>
-    <button class="btn btn-secondary" onclick="document.getElementById('import-file-input').click()">⬆ Importar dados (backup)</button>
+  <button class="fab" onclick="openFixedModal()" title="Adicionar gasto fixo">+</button>
+</section>
+
+<!-- ════ AJUSTES ════ -->
+<section class="page" id="page-ajustes">
+  <div class="sec-title">Personalização</div>
+  <div class="card settings-list">
+    <button class="settings-row" onclick="openCatModal()"><span>Gerenciar categorias de gastos</span><span class="chev">›</span></button>
+    <button class="settings-row" onclick="openPlatSettings()"><span>Gerenciar fontes de receita</span><span class="chev">›</span></button>
+  </div>
+
+  <div class="sec-title">Dados</div>
+  <div class="card settings-list">
+    <button class="settings-row" onclick="exportData()"><span>Exportar dados (backup)</span><span class="chev">›</span></button>
+    <button class="settings-row" onclick="document.getElementById('import-file-input').click()"><span>Importar dados (backup)</span><span class="chev">›</span></button>
     <input type="file" id="import-file-input" accept="application/json" style="display:none" onchange="importData(event)">
   </div>
 </section>
+
+</main>
+
+<nav class="bottom-nav">
+  <button class="nav-item active" data-tab="semana" onclick="switchTab('semana')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <span>Semana</span>
+  </button>
+  <button class="nav-item" data-tab="reserva" onclick="switchTab('reserva')">
+    <svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+    <span>Reserva</span>
+  </button>
+  <button class="nav-item" data-tab="mes" onclick="switchTab('mes')">
+    <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span>Mês</span>
+  </button>
+  <button class="nav-item" data-tab="fixos" onclick="switchTab('fixos')">
+    <svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+    <span>Fixos</span>
+  </button>
+  <button class="nav-item" data-tab="ajustes" onclick="switchTab('ajustes')">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    <span>Ajustes</span>
+  </button>
+</nav>
 
 <!-- ════ MODALS ════ -->
 <div class="overlay" id="modal-res">

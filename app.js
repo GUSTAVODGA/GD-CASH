@@ -2,7 +2,8 @@
 // DATA & STORE
 // ══════════════════════════════════════════
 const WEEK_DAYS = ['SEG','TER','QUA','QUI','SEX','SÁB','DOM'];
-const PALETTE = ['#7d5fff','#0a84ff','#30d158','#ff9f0a','#ff453a','#64d2ff','#bf5af2','#ffd60a'];
+const PALETTE = ['#ffb800','#00e6a0','#3ec6ff','#ff6b35','#a78bfa','#ff4d6a','#5eead4','#ffe066'];
+const RING_R = 68, RING_CIRC = 2*Math.PI*RING_R;
 
 function defaultData() {
   return {
@@ -195,11 +196,11 @@ function renderSemana() {
   const inc=sumWeekIncome(weekOffset), exp=sumWeekExpenses(weekOffset), liq=inc-exp;
   document.getElementById('ws-inc').textContent=R(inc);
   document.getElementById('ws-exp').textContent=R(exp);
-  const liqEl=document.getElementById('ws-liq');
-  liqEl.textContent=R(liq); liqEl.className='stat-val '+(liq>=0?'v-green':'v-red');
+  document.getElementById('ws-liq').textContent=R(liq);
+  document.getElementById('hero-semana').className='hero-card '+(liq>=0?'pos':'neg');
 
   document.getElementById('plat-cards').innerHTML=D.platforms.map(p=>`
-    <div class="plat-c" style="border-left-color:${p.color}" onclick="openPlatSettings()">
+    <div class="plat-c" style="border-top-color:${p.color}" onclick="openPlatSettings()">
       <div class="plat-c-name" style="color:${p.color}">${p.name}</div>
       <div class="plat-c-val">${R(sumPlatWeek(p.id,weekOffset))}</div>
     </div>`).join('');
@@ -299,11 +300,11 @@ function deleteExpense(id) { D.expenses=D.expenses.filter(e=>e.id!==id); save();
 function renderMes() {
   document.getElementById('month-lbl').textContent=fmtMonthYear(monthOffset);
   const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp, resv=sumMonthReserva(monthOffset);
-  document.getElementById('mes-stats').innerHTML=`
-    <div class="stat-card"><div class="stat-lbl">Receita total</div><div class="stat-val v-green">${R(inc)}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Gastos total</div><div class="stat-val v-red">${R(exp)}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Líquido</div><div class="stat-val ${liq>=0?'v-green':'v-red'}">${R(liq)}</div></div>
-    <div class="stat-card"><div class="stat-lbl">Reserva no mês</div><div class="stat-val ${resv>=0?'v-green':'v-red'}">${R(resv)}</div></div>`;
+  document.getElementById('mes-inc').textContent=R(inc);
+  document.getElementById('mes-exp').textContent=R(exp);
+  document.getElementById('mes-liq').textContent=R(liq);
+  document.getElementById('mes-resv').textContent=R(resv);
+  document.getElementById('hero-mes').className='hero-card '+(liq>=0?'pos':'neg');
 
   const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:p.color})).filter(i=>i.value>0);
   renderDonut('plat-donut','plat-legend',platItems);
@@ -324,14 +325,17 @@ function renderMes() {
     return {wI,wL:wI-wE};
   });
   const maxWI=Math.max(1,...weekSums.map(w=>w.wI));
-  document.getElementById('s2s-table').innerHTML=`
-    <thead><tr><th>Semana</th><th>Progresso</th><th>Receita</th><th>Líquido</th></tr></thead>
-    <tbody>${weekSums.map((w,i)=>`<tr>
-        <td class="s2s-wlbl">S${i+1}</td>
-        <td><div class="s2s-prog"><div class="s2s-prog-fill" style="width:${Math.min(100,(w.wI/maxWI)*100)}%"></div></div></td>
-        <td class="v-green" style="font-weight:700">${w.wI>0?R(w.wI):'—'}</td>
-        <td class="${w.wL>=0?'v-green':'v-red'}" style="font-weight:700">${w.wI>0?R(w.wL):'—'}</td>
-      </tr>`).join('')}</tbody>`;
+  document.getElementById('s2s-bars').innerHTML=weekSums.map((w,i)=>`
+    <div class="s2s-row">
+      <div class="s2s-top">
+        <span class="s2s-wlbl">Semana ${i+1}</span>
+        <span class="s2s-vals">
+          <span class="v-green">${w.wI>0?R(w.wI):'—'}</span>
+          <span class="${w.wL>=0?'v-green':'v-red'}">${w.wI>0?R(w.wL):'—'}</span>
+        </span>
+      </div>
+      <div class="s2s-bar-wrap"><div class="s2s-bar-fill" style="width:${Math.min(100,(w.wI/maxWI)*100)}%"></div></div>
+    </div>`).join('');
 }
 function changeMonth(dir) { monthOffset+=dir; renderMes(); }
 
@@ -342,9 +346,12 @@ function renderReserva() {
   const emg=D.emergency;
   const pct=emg.target>0?Math.min(100,(emg.current/emg.target)*100):0;
   document.getElementById('res-total').textContent=R(emg.current);
-  document.getElementById('res-meta').textContent=`Meta: ${R(emg.target)}`;
-  document.getElementById('res-fill').style.width=pct+'%';
-  document.getElementById('res-pct').textContent=`${Math.round(pct)}% da meta — faltam ${R(Math.max(0,emg.target-emg.current))}`;
+  document.getElementById('res-pct').textContent=`${Math.round(pct)}%`;
+  const ring=document.getElementById('res-ring-fill');
+  ring.style.strokeDasharray=`${RING_CIRC}`;
+  ring.style.strokeDashoffset=`${RING_CIRC*(1-pct/100)}`;
+  document.getElementById('res-meta').textContent=
+    `Meta: ${R(emg.target)} — faltam ${R(Math.max(0,emg.target-emg.current))}`;
   const hist=document.getElementById('res-history');
   hist.innerHTML=D.reservaHistory.length
     ? [...D.reservaHistory].reverse().map(h=>`
@@ -516,7 +523,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySele
 // ══════════════════════════════════════════
 function switchTab(tab) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+tab).classList.add('active');
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   if(tab==='semana')  renderSemana();
