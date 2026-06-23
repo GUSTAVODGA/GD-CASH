@@ -423,6 +423,9 @@ body{
   <div class="btn-plus-row">
     <button class="btn-plus" onclick="openFixedModal()">＋ Adicionar gasto fixo</button>
   <button class="btn-add-exp" style="background:var(--card2);color:var(--text2);margin-top:8px" onclick="openCatModal()">⚙ Gerenciar Categorias</button>
+  <button class="btn-add-exp" style="background:var(--card2);color:var(--text2);margin-top:8px" onclick="exportData()">⬇ Exportar dados (backup)</button>
+  <button class="btn-add-exp" style="background:var(--card2);color:var(--text2);margin-top:8px" onclick="document.getElementById('import-file-input').click()">⬆ Importar dados (backup)</button>
+  <input type="file" id="import-file-input" accept="application/json" style="display:none" onchange="importData(event)">
   </div>
 </div>
 
@@ -488,6 +491,34 @@ let D = (() => {
 })();
 
 function save() { try { localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch(e){} }
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(D, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `gdcash-backup-${todayStr()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importData(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      D = parsed;
+      save();
+      alert('Dados importados com sucesso!');
+      location.reload();
+    } catch(e) {
+      alert('Arquivo inválido. Selecione um backup exportado pelo app.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
 function uid()  { return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 
 // ══════════════════════════════════════════
