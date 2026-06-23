@@ -71,15 +71,6 @@ body{
 .s3-lbl{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
 .s3-val{font-size:14px;font-weight:800;line-height:1}
 .s3-val.g{color:var(--green)}.s3-val.r{color:var(--red)}.s3-val.p{color:var(--purple)}
-
-/* Saldo disponível */
-.saldo-row{
-  display:flex;align-items:center;justify-content:space-between;
-  background:var(--card2);border-radius:10px;padding:10px 12px;
-}
-.saldo-lbl{font-size:13px;color:var(--text2)}
-.saldo-right{display:flex;align-items:center;gap:8px}
-.saldo-val{font-size:18px;font-weight:800;color:var(--green)}
 .pencil-btn{background:none;border:none;font-size:15px;cursor:pointer;padding:2px}
 
 /* ── SECTION LABEL ── */
@@ -348,13 +339,6 @@ body{
       <div class="s3"><div class="s3-lbl">Gastos</div><div class="s3-val r" id="ws-exp">$ 0</div></div>
       <div class="s3"><div class="s3-lbl">Líquido</div><div class="s3-val p" id="ws-liq">$ 0</div></div>
     </div>
-    <div class="saldo-row">
-      <span class="saldo-lbl">Saldo atual</span>
-      <div class="saldo-right">
-        <span class="saldo-val" id="saldo-val">$ 0,00</span>
-        <button class="pencil-btn" onclick="openSaldoEdit()">✏️</button>
-      </div>
-    </div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div class="sec-lbl" style="margin-bottom:0">Receita por Plataforma</div>
@@ -443,17 +427,6 @@ body{
 </div>
 
 <!-- ════ MODALS ════ -->
-<div class="overlay" id="modal-saldo">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title">Saldo Atual</div>
-    <div class="fg"><label class="fl">Valor atual em caixa / carteira ($)</label>
-      <input class="fi" type="number" id="saldo-input" min="0" step="0.01" placeholder="0.00"></div>
-    <p style="font-size:12px;color:var(--text3);margin-bottom:12px;line-height:1.5">Este é o saldo real atual disponível. Ao alterar, o app mostrará exatamente o valor informado — sem somar receitas anteriores.</p>
-    <button class="btn-save" onclick="saveSaldo()">Salvar</button>
-  </div>
-</div>
-
 <div class="overlay" id="modal-res">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -506,7 +479,6 @@ function defaultData() {
     fixedExpenses: [],
     emergency: { target: 10000, current: 0 },
     reservaHistory: [],
-    saldoDisponivel: 0,
   };
 }
 
@@ -634,7 +606,6 @@ function renderSemana() {
   document.getElementById('ws-exp').textContent=R(exp);
   const liqEl=document.getElementById('ws-liq');
   liqEl.textContent=R(liq); liqEl.className='s3-val '+(liq>=0?'p':'r');
-  document.getElementById('saldo-val').textContent=R(calcSaldoAtual());
 
   // Platform cards
   document.getElementById('plat-cards').innerHTML=D.platforms.map(p=>`
@@ -848,7 +819,6 @@ function saveResMove(type) {
   const note=document.getElementById('rm-note').value.trim();
   if(!val||val<=0){alert('Informe um valor válido.');return;}
   D.emergency.current=type==='dep' ? D.emergency.current+val : Math.max(0,D.emergency.current-val);
-  D.saldoDisponivel=type==='dep' ? (D.saldoDisponivel||0)-val : (D.saldoDisponivel||0)+val;
   D.reservaHistory.push({id:uid(),type,amount:val,note,date:todayStr()});
   save(); closeOverlay('modal-res'); renderReserva();
 }
@@ -856,7 +826,6 @@ function deleteResHist(id) {
   const h=D.reservaHistory.find(h=>h.id===id);
   if(!h) return;
   D.emergency.current=h.type==='dep' ? Math.max(0,D.emergency.current-h.amount) : D.emergency.current+h.amount;
-  D.saldoDisponivel=h.type==='dep' ? (D.saldoDisponivel||0)+h.amount : (D.saldoDisponivel||0)-h.amount;
   D.reservaHistory=D.reservaHistory.filter(h=>h.id!==id);
   save(); renderReserva();
 }
@@ -904,30 +873,6 @@ function saveFixed() {
   if(id) { const idx=D.fixedExpenses.findIndex(f=>f.id===id); if(idx!==-1) D.fixedExpenses[idx]={...D.fixedExpenses[idx],name,amount,category,dueDay}; }
   else D.fixedExpenses.push({id:uid(),name,amount,category,dueDay});
   save(); closeOverlay('modal-fixed'); renderFixos();
-}
-
-// ══════════════════════════════════════════
-// SALDO
-// ══════════════════════════════════════════
-function calcSaldoAtual() {
-  const totalIncome = Object.values(D.dailyIncome).reduce((sum, dayInc) => {
-    return sum + D.platforms.reduce((s, p) => s + (dayInc[p.id] || 0), 0);
-  }, 0);
-  const totalExpenses = D.expenses.reduce((s, e) => s + e.amount, 0);
-  return (D.saldoDisponivel || 0) + totalIncome - totalExpenses;
-}
-function openSaldoEdit() { document.getElementById('saldo-input').value=D.saldoDisponivel||''; openOverlay('modal-saldo'); }
-function saveSaldo() {
-  const manualValue = parseFloat(document.getElementById('saldo-input').value) || 0;
-  // Back-calculate base so that calcSaldoAtual() == manualValue
-  const totalIncome = Object.values(D.dailyIncome).reduce((sum, dayInc) => {
-    return sum + D.platforms.reduce((s, p) => s + (dayInc[p.id] || 0), 0);
-  }, 0);
-  const totalExpenses = D.expenses.reduce((s, e) => s + e.amount, 0);
-  D.saldoDisponivel = manualValue - totalIncome + totalExpenses;
-  save();
-  closeOverlay('modal-saldo');
-  document.getElementById('saldo-val').textContent = R(calcSaldoAtual());
 }
 
 // ══════════════════════════════════════════
