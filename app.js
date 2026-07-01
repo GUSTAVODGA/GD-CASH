@@ -131,7 +131,7 @@ function getMonthWeeks(off=0) {
   const y=d.getFullYear(),m=d.getMonth();
   const last=new Date(y,m+1,0);
   const weeks=[]; let cur=getMonday(new Date(y,m,1));
-  while(cur.getMonth()===m && cur<=last) {
+  while(cur<=last) {
     const s=new Date(cur),e=new Date(cur); e.setDate(e.getDate()+6);
     weeks.push({start:s,end:e}); cur.setDate(cur.getDate()+7);
   }
@@ -325,7 +325,9 @@ function renderMes() {
     return {wI,wL:wI-wE};
   });
   const maxWI=Math.max(1,...weekSums.map(w=>w.wI));
-  document.getElementById('s2s-bars').innerHTML=weekSums.map((w,i)=>`
+  const totalI=weekSums.reduce((s,w)=>s+w.wI,0);
+  const totalL=weekSums.reduce((s,w)=>s+w.wL,0);
+  const weeksHTML=weekSums.map((w,i)=>`
     <div class="s2s-row">
       <div class="s2s-top">
         <span class="s2s-wlbl">Semana ${i+1}</span>
@@ -336,6 +338,15 @@ function renderMes() {
       </div>
       <div class="s2s-bar-wrap"><div class="s2s-bar-fill" style="width:${Math.min(100,(w.wI/maxWI)*100)}%"></div></div>
     </div>`).join('');
+  const totalHTML=`
+    <div class="s2s-total">
+      <span class="s2s-total-lbl">Total do mês</span>
+      <span class="s2s-vals">
+        <span class="v-green">${R(totalI)}</span>
+        <span class="${totalL>=0?'v-green':'v-red'}">${R(totalL)}</span>
+      </span>
+    </div>`;
+  document.getElementById('s2s-bars').innerHTML=weeksHTML+totalHTML;
 }
 function changeMonth(dir) { monthOffset+=dir; renderMes(); }
 
