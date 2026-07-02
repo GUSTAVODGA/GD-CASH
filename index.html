@@ -114,7 +114,7 @@
 <section class="page" id="page-mes">
   <div class="nav-row">
     <button class="nav-arrow" onclick="changeMonth(-1)">‹</button>
-    <div class="nav-title" id="month-lbl">Mês</div>
+    <div class="nav-title nav-title-pick" id="month-lbl" onclick="openMonthPicker()">Mês</div>
     <button class="nav-arrow" onclick="changeMonth(1)">›</button>
   </div>
 
@@ -245,6 +245,19 @@
       <button class="btn btn-secondary" onclick="addPlatform()">+ Nova fonte</button>
     </div>
     <button class="btn btn-secondary" onclick="closeOverlay('modal-plat')">Fechar</button>
+  </div>
+</div>
+
+<div class="overlay" id="modal-month-picker">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Selecionar Mês</div>
+    <div class="mp-year-row">
+      <button class="nav-arrow" onclick="shiftPickerYear(-1)">‹</button>
+      <span class="mp-year-lbl" id="mp-year-lbl"></span>
+      <button class="nav-arrow" onclick="shiftPickerYear(1)">›</button>
+    </div>
+    <div class="mp-month-grid" id="mp-month-grid"></div>
   </div>
 </div>
 

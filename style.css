@@ -250,6 +250,18 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 14px}
 .sheet-title{font-size:16px;font-weight:800;margin-bottom:14px}
 
+/* ── Month picker ── */
+.nav-title-pick{cursor:pointer;text-decoration:underline dotted var(--text3);text-underline-offset:3px}
+.mp-year-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.mp-year-lbl{font-size:18px;font-weight:800}
+.mp-month-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.mp-month-btn{
+  background:var(--surface3);border:none;border-radius:10px;padding:11px 4px;
+  font-size:14px;font-weight:600;color:var(--text2);cursor:pointer;transition:background .15s,color .15s;
+}
+.mp-month-btn:active{opacity:.75}
+.mp-month-btn.sel{background:linear-gradient(135deg,var(--gold),var(--orange));color:#000;font-weight:800}
+
 /* ── Settings rows (platforms/categories) ── */
 .set-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)}
 .set-row:last-child{border-bottom:none}

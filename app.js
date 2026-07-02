@@ -351,6 +351,41 @@ function renderMes() {
 function changeMonth(dir) { monthOffset+=dir; renderMes(); }
 
 // ══════════════════════════════════════════
+// MONTH PICKER
+// ══════════════════════════════════════════
+const MONTH_NAMES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+let pickerYear = new Date().getFullYear();
+
+function openMonthPicker() {
+  const now = new Date();
+  const cur = new Date(); cur.setMonth(cur.getMonth()+monthOffset,1);
+  pickerYear = cur.getFullYear();
+  renderPickerGrid(now.getFullYear(), now.getMonth());
+  openOverlay('modal-month-picker');
+}
+function shiftPickerYear(dir) {
+  pickerYear += dir;
+  const now = new Date();
+  renderPickerGrid(now.getFullYear(), now.getMonth());
+}
+function renderPickerGrid(nowY, nowM) {
+  document.getElementById('mp-year-lbl').textContent = pickerYear;
+  const now = new Date();
+  const cur = new Date(); cur.setMonth(cur.getMonth()+monthOffset,1);
+  const selY = cur.getFullYear(), selM = cur.getMonth();
+  document.getElementById('mp-month-grid').innerHTML = MONTH_NAMES.map((name,m)=>{
+    const isSel = pickerYear===selY && m===selM;
+    return `<button class="mp-month-btn${isSel?' sel':''}" onclick="pickMonth(${pickerYear},${m})">${name}</button>`;
+  }).join('');
+}
+function pickMonth(year, month) {
+  const now = new Date();
+  monthOffset = (year - now.getFullYear())*12 + (month - now.getMonth());
+  closeOverlay('modal-month-picker');
+  renderMes();
+}
+
+// ══════════════════════════════════════════
 // RENDER: RESERVA
 // ══════════════════════════════════════════
 function renderReserva() {
