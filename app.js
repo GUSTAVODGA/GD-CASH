@@ -428,7 +428,7 @@ function renderFixos() {
           </div>
           <div class="fixed-right">
             <span class="fixed-amt">${R(f.amount)}</span>
-            <button class="fixed-del" onclick="openFixedModal('${f.id}')">✏️</button>
+            <button class="fixed-del" onclick="openFixedModal('${f.id}')">···</button>
             <button class="fixed-del" onclick="deleteFixed('${f.id}')">✕</button>
           </div>
         </div>`).join('')
