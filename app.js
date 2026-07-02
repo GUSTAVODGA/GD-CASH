@@ -332,8 +332,14 @@ function renderMes() {
       <div class="s2s-top">
         <span class="s2s-wlbl">Semana ${i+1}</span>
         <span class="s2s-vals">
-          <span class="v-green">${w.wI>0?R(w.wI):'—'}</span>
-          <span class="${w.wL>=0?'v-green':'v-red'}">${w.wI>0?R(w.wL):'—'}</span>
+          <span class="s2s-val-pair">
+            <span class="s2s-val-lbl">Rec.</span>
+            <span class="v-green">${w.wI>0?R(w.wI):'—'}</span>
+          </span>
+          <span class="s2s-val-pair">
+            <span class="s2s-val-lbl">Líq.</span>
+            <span class="${w.wL>=0?'v-green':'v-red'}">${w.wI>0?R(w.wL):'—'}</span>
+          </span>
         </span>
       </div>
       <div class="s2s-bar-wrap"><div class="s2s-bar-fill" style="width:${Math.min(100,(w.wI/maxWI)*100)}%"></div></div>
@@ -342,8 +348,14 @@ function renderMes() {
     <div class="s2s-total">
       <span class="s2s-total-lbl">Total do mês</span>
       <span class="s2s-vals">
-        <span class="v-green">${R(totalI)}</span>
-        <span class="${totalL>=0?'v-green':'v-red'}">${R(totalL)}</span>
+        <span class="s2s-val-pair">
+          <span class="s2s-val-lbl">Rec.</span>
+          <span class="v-green">${R(totalI)}</span>
+        </span>
+        <span class="s2s-val-pair">
+          <span class="s2s-val-lbl">Líq.</span>
+          <span class="${totalL>=0?'v-green':'v-red'}">${R(totalL)}</span>
+        </span>
       </span>
     </div>`;
   document.getElementById('s2s-bars').innerHTML=weeksHTML+totalHTML;
