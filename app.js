@@ -567,46 +567,44 @@ function renderAvg5w() {
   const weeks = getCompletedWeeksWithData();
   if (weeks.length === 0) { el.innerHTML = ''; return; }
 
+  const isProvisional = weeks.length < 5;
   const avg = weeks.reduce((s,w)=>s+w.inc,0) / weeks.length;
   const goal = D.weeklyGoal || 0;
   const diff = goal > 0 ? avg - goal : null;
-  const isProvisional = weeks.length < 5;
 
-  let diffHTML = '';
-  let msgHTML = '';
-  if (diff === null) {
-    msgHTML = `<div class="avg5w-msg">Defina uma meta semanal para comparar.</div>`;
+  // Status line
+  let statusClass = 'neutral', statusTxt = '';
+  if (isProvisional) {
+    statusTxt = `Calculando… ${weeks.length} de 5 semanas`;
+    statusClass = 'neutral';
+  } else if (diff === null) {
+    statusTxt = 'Sem meta definida';
+    statusClass = 'neutral';
   } else if (Math.abs(diff) < 0.5) {
-    diffHTML = `<span class="avg5w-diff on">= Na meta</span>`;
-    msgHTML = `<div class="avg5w-msg">Sua média está dentro da meta semanal.</div>`;
+    statusTxt = 'Dentro da meta';
+    statusClass = 'on';
   } else if (diff > 0) {
-    diffHTML = `<span class="avg5w-diff above">▲ ${R(diff)} acima</span>`;
-    msgHTML = `<div class="avg5w-msg">Sua média está <b>${R(diff)}</b> acima da meta.</div>`;
+    statusTxt = `${R(diff)} acima da meta`;
+    statusClass = 'above';
   } else {
-    diffHTML = `<span class="avg5w-diff below">▼ ${R(Math.abs(diff))} abaixo</span>`;
-    msgHTML = `<div class="avg5w-msg">Sua média está <b>${R(Math.abs(diff))}</b> abaixo da meta.</div>`;
+    statusTxt = `${R(Math.abs(diff))} abaixo da meta`;
+    statusClass = 'below';
   }
 
-  const detailRows = weeks.map((w,i)=>`
+  const detailRows = weeks.map(w=>`
     <div class="avg5w-row">
       <span class="avg5w-row-lbl">${w.label}</span>
       <span class="avg5w-row-val">${R(w.inc)}</span>
     </div>`).join('');
 
   el.innerHTML = `
-    <div class="avg5w-card">
-      <div class="avg5w-top">
-        <span class="avg5w-title">Média das últimas ${weeks.length < 5 ? weeks.length : '5'} semanas</span>
-        <button class="avg5w-toggle" onclick="toggleAvg5wDetail()">${avg5wDetailOpen?'Ocultar':'Ver semanas'}</button>
+    <div class="avg5w-card" onclick="toggleAvg5wDetail()">
+      <div class="avg5w-main-row">
+        <span class="avg5w-title">Média ${isProvisional?'':'5 '}semanas</span>
+        <span class="avg5w-val">${isProvisional ? '—' : R(avg)}</span>
       </div>
-      <div class="avg5w-main">
-        <div class="avg5w-val">${R(avg)}</div>
-        ${goal>0?`<div class="avg5w-meta"><div class="avg5w-goal-lbl">Meta semanal</div><div class="avg5w-goal-val">${R(goal)}</div></div>`:''}
-      </div>
-      ${diffHTML}
-      ${msgHTML}
-      ${isProvisional?`<div class="avg5w-provisional">Média provisória baseada em ${weeks.length} semana${weeks.length!==1?'s':''} — dados insuficientes para 5 semanas completas.</div>`:''}
-      <div class="avg5w-detail" id="avg5w-detail" style="display:${avg5wDetailOpen?'':'none'}">
+      <div class="avg5w-status ${statusClass}">${statusTxt}</div>
+      <div class="avg5w-detail" style="display:${avg5wDetailOpen?'':'none'}">
         ${detailRows}
       </div>
     </div>`;
