@@ -274,6 +274,20 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .month-summary-text{font-size:13px;line-height:1.65;color:var(--text2)}
 .month-summary-text b{color:var(--text)}
 
+/* ── Weekly goal card ── */
+.week-goal-card{background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)}
+.wg-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.wg-lbl{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.wg-edit{background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:0 2px}
+.wg-vals{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.wg-current{font-size:18px;font-weight:800}
+.wg-target{font-size:13px;color:var(--text3)}
+.wg-bar-wrap{background:var(--surface3);border-radius:8px;height:7px;overflow:hidden;margin-bottom:6px}
+.wg-bar-fill{height:100%;border-radius:8px;background:linear-gradient(90deg,var(--gold),var(--orange));transition:width .4s}
+.wg-bar-fill.wg-done{background:linear-gradient(90deg,var(--green-d),var(--green))}
+.wg-foot{font-size:12px;color:var(--text2)}
+.wg-set-btn{width:100%;padding:10px;border-radius:10px;border:1px dashed var(--border);background:none;color:var(--text3);font-size:13px;cursor:pointer}
+
 /* ── Goals ── */
 .goal-card{background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;border:1px solid var(--border)}
 .goal-card.goal-done{border-color:var(--green-d);opacity:.8}

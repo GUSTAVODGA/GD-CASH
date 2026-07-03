@@ -47,6 +47,8 @@
   <div class="sec-title">Dias da semana</div>
   <div class="days-grid" id="days-grid"></div>
 
+  <div class="week-goal-card" id="week-goal-card"></div>
+
   <div class="card" style="margin-bottom:14px">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
       <div style="font-weight:700;font-size:14px" id="day-detail-date"></div>
@@ -254,6 +256,16 @@
       <button class="btn btn-secondary" onclick="addPlatform()">+ Nova fonte</button>
     </div>
     <button class="btn btn-secondary" onclick="closeOverlay('modal-plat')">Fechar</button>
+  </div>
+</div>
+
+<div class="overlay" id="modal-week-goal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Meta semanal de receita</div>
+    <div class="fg"><label class="fl">Quanto quer ganhar por semana ($)</label><input class="fi" type="number" id="wg-val" min="0" step="0.01" placeholder="0,00" inputmode="decimal"></div>
+    <button class="btn btn-primary" onclick="saveWeekGoal()">Salvar</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-week-goal')">Cancelar</button>
   </div>
 </div>
 

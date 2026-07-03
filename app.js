@@ -20,11 +20,12 @@ function defaultData() {
     emergency: { target: 10000, current: 0 },
     reservaHistory: [],
     goals: [],
+    weeklyGoal: 0,
   };
 }
 
 let D = (() => {
-  try { const s = localStorage.getItem('gdcash_v1'); if(s) { const p=JSON.parse(s); if(!p.goals) p.goals=[]; return p; } } catch(e){}
+  try { const s = localStorage.getItem('gdcash_v1'); if(s) { const p=JSON.parse(s); if(!p.goals) p.goals=[]; if(!p.weeklyGoal) p.weeklyGoal=0; return p; } } catch(e){}
   return defaultData();
 })();
 
@@ -147,6 +148,13 @@ function buildAlerts() {
   const curInc=sumWeekIncome(weekOffset), curExp=sumWeekExpenses(weekOffset), bal=curInc-curExp;
   const prevExp=sumWeekExpenses(weekOffset-1);
   if(curInc===0&&curExp===0){alerts.push({t:'info',icon:'📝',msg:'Nenhum dado esta semana. Comece lançando suas receitas!'});return alerts;}
+  if(D.weeklyGoal>0){
+    const wg=D.weeklyGoal, dates=weekDates(weekOffset), now=new Date(); now.setHours(0,0,0,0);
+    const daysLeft=dates.filter(d=>parseDate(d)>now).length;
+    const left=wg-curInc;
+    if(curInc>=wg) alerts.push({t:'ok',icon:'🎯',msg:`Meta da semana atingida! Você fez <b>${R(curInc)}</b> de <b>${R(wg)}</b>. 🎉`});
+    else if(daysLeft>0&&left>0) alerts.push({t:'info',icon:'🎯',msg:`Meta da semana: faltam <b>${R(left)}</b> em ${daysLeft} dia${daysLeft!==1?'s':''}.`});
+  }
   if(curInc>0&&bal<0) alerts.push({t:'bad',icon:'🔴',msg:`Saldo da semana <b>negativo</b> (${R(bal)}). Gastos acima das receitas.`});
   if(prevExp>0){const d=((curExp-prevExp)/prevExp)*100;
     if(d>25) alerts.push({t:'bad',icon:'📈',msg:`Gastos ${Math.round(d)}% acima da semana passada (+${R(curExp-prevExp)}).`});
@@ -228,6 +236,7 @@ function renderSemana() {
   }).join('');
 
   renderDayDetail();
+  renderWeekGoal();
 
   const alerts=buildAlerts();
   document.getElementById('alerts-box').innerHTML=alerts.map(a=>`
@@ -521,18 +530,69 @@ function saveQuickAdd() {
 }
 
 // ══════════════════════════════════════════
+// WEEKLY GOAL
+// ══════════════════════════════════════════
+function renderWeekGoal() {
+  const el = document.getElementById('week-goal-card');
+  if (!el) return;
+  const goal = D.weeklyGoal || 0;
+  if (!goal) {
+    el.innerHTML = `<button class="wg-set-btn" onclick="openWeekGoalModal()">+ Definir meta semanal de receita</button>`;
+    return;
+  }
+  const inc = sumWeekIncome(weekOffset);
+  const pct = Math.min(100, (inc/goal)*100);
+  const done = inc >= goal;
+  const dates = weekDates(weekOffset);
+  const now = new Date(); now.setHours(0,0,0,0);
+  const daysLeft = dates.filter(d => parseDate(d) > now).length;
+  let foot = '';
+  if (done) foot = 'Meta da semana atingida! 🎉';
+  else if (daysLeft === 0) foot = `Faltaram ${R(goal-inc)} pra bater a meta.`;
+  else foot = `Faltam <b>${R(goal-inc)}</b> em ${daysLeft} dia${daysLeft!==1?'s':''}`;
+
+  el.innerHTML = `
+    <div class="wg-top">
+      <span class="wg-lbl">Meta da semana</span>
+      <button class="wg-edit" onclick="openWeekGoalModal()">···</button>
+    </div>
+    <div class="wg-vals">
+      <span class="wg-current" style="color:${done?'var(--green)':'var(--text)'}">${R(inc)}</span>
+      <span class="wg-target">de ${R(goal)}</span>
+    </div>
+    <div class="wg-bar-wrap"><div class="wg-bar-fill${done?' wg-done':''}" style="width:${pct}%"></div></div>
+    <div class="wg-foot">${foot}</div>`;
+}
+
+function openWeekGoalModal() {
+  document.getElementById('wg-val').value = D.weeklyGoal || '';
+  openOverlay('modal-week-goal');
+}
+function saveWeekGoal() {
+  const val = parseFloat(document.getElementById('wg-val').value) || 0;
+  D.weeklyGoal = val;
+  save(); closeOverlay('modal-week-goal'); renderWeekGoal();
+}
+
+// ══════════════════════════════════════════
 // MONTH SUMMARY
 // ══════════════════════════════════════════
 function buildMonthSummary(off) {
   const inc = sumMonthIncome(off), exp = sumMonthExpenses(off), liq = inc - exp;
   if (inc === 0 && exp === 0) return null;
 
-  const prevInc = sumMonthIncome(off-1), prevExp = sumMonthExpenses(off-1), prevLiq = prevInc-prevExp;
+  const prevInc = sumMonthIncome(off-1), prevExp = sumMonthExpenses(off-1);
   const dates = monthDates(off);
   const now = new Date(); now.setHours(0,0,0,0);
   const isPast = off < 0;
 
-  // Top expense category
+  const d2 = new Date(); d2.setMonth(d2.getMonth()+off,1);
+  const daysInMonth = new Date(d2.getFullYear(),d2.getMonth()+1,0).getDate();
+  const dayOfMonth = Math.min(now.getDate(), daysInMonth);
+  const pctPassed = Math.round((dayOfMonth/daysInMonth)*100);
+  const daysWithData = dates.filter(dt => parseDate(dt)<=now && (sumDayIncome(dt)>0||getDayExpenses(dt).length>0)).length;
+  const hasEnoughData = isPast || daysWithData >= 7 || pctPassed >= 25;
+
   const catMap = {};
   D.expenses.filter(e=>dates.includes(e.date)).forEach(e=>{ catMap[e.category]=(catMap[e.category]||0)+e.amount; });
   const topCat = Object.entries(catMap).sort((a,b)=>b[1]-a[1])[0];
@@ -540,49 +600,41 @@ function buildMonthSummary(off) {
 
   const savingsRate = inc>0 ? Math.round((liq/inc)*100) : 0;
   const incChange = prevInc>0 ? Math.round(((inc-prevInc)/prevInc)*100) : null;
-
   const parts = [];
+
+  if (!isPast && !hasEnoughData) {
+    parts.push(`Mês começando — ${daysWithData} dia${daysWithData!==1?'s':''} registrado${daysWithData!==1?'s':''}. Saldo até agora: <b>${R(liq)}</b>. Continue registrando pra ter uma análise completa.`);
+    return parts[0];
+  }
 
   if (isPast) {
     if (liq>0 && incChange!==null && incChange>15)
       parts.push(`Mês excelente — receita <b>${incChange}% acima</b> do anterior e fechou com <b>${R(liq)}</b> positivo.`);
     else if (liq>0 && savingsRate>=25)
-      parts.push(`Boa disciplina: você guardou <b>${savingsRate}%</b> da receita esse mês. Continua assim.`);
+      parts.push(`Boa disciplina: você guardou <b>${savingsRate}%</b> da receita esse mês.`);
     else if (liq>0 && incChange!==null && incChange<-10)
-      parts.push(`Receita caiu <b>${Math.abs(incChange)}%</b> em relação ao anterior, mas o saldo ficou positivo em <b>${R(liq)}</b>.`);
+      parts.push(`Receita caiu <b>${Math.abs(incChange)}%</b>, mas o saldo fechou positivo em <b>${R(liq)}</b>.`);
     else if (liq>0)
       parts.push(`Mês fechado no azul: <b>${R(liq)}</b> de saldo positivo.`);
     else
       parts.push(`Mês pesado — gastos superaram a receita em <b>${R(Math.abs(liq))}</b>. Acontece, o importante é saber.`);
-
     if (topCat && topCatPct>=30)
       parts.push(`<b>${topCat[0]}</b> foi a maior despesa: ${topCatPct}% de tudo que saiu.`);
-
     if (liq<0)
       parts.push(`Fique de olho em <b>${topCat?topCat[0]:'seus maiores gastos'}</b> no próximo mês.`);
     else if (savingsRate<10)
       parts.push(`Que tal separar pelo menos 10% da receita pra reserva no próximo mês?`);
   } else {
-    const d=new Date(); d.setMonth(d.getMonth()+off,1);
-    const daysInMonth=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
-    const dayOfMonth=Math.min(now.getDate(),daysInMonth);
-    const pctPassed=Math.round((dayOfMonth/daysInMonth)*100);
-
     if (liq<0)
-      parts.push(`Atenção: os gastos já passaram a receita em <b>${R(Math.abs(liq))}</b>. Ainda dá tempo de equilibrar.`);
+      parts.push(`Atenção: gastos já passaram a receita em <b>${R(Math.abs(liq))}</b>. Ainda dá tempo de equilibrar.`);
     else if (incChange!==null && inc>=(prevInc*(pctPassed/100)*1.15))
-      parts.push(`Ritmo acima do esperado — você já está mais forte que no mesmo ponto do mês passado.`);
-    else if (inc===0)
-      parts.push(`Nenhuma receita registrada ainda. Comece lançando os ganhos de hoje.`);
+      parts.push(`Ritmo acima do esperado — mais forte que no mesmo ponto do mês passado.`);
     else
       parts.push(`<b>${pctPassed}%</b> do mês passou. Saldo atual: <b>${R(liq)}</b>.`);
-
-    if (topCat && topCatPct>=40 && exp>0)
+    if (topCat && topCatPct>=40)
       parts.push(`<b>${topCat[0]}</b> está pesando bastante: ${topCatPct}% dos gastos do mês.`);
-
     if (incChange!==null && incChange<-20 && pctPassed>40)
-      parts.push(`Receita <b>${Math.abs(incChange)}%</b> abaixo do mesmo ponto do mês passado. Vale acelerar.`);
-
+      parts.push(`Receita <b>${Math.abs(incChange)}%</b> abaixo do mesmo ponto do mês passado.`);
     const urgentGoal=(D.goals||[]).find(g=>{
       if(g.saved>=g.target) return false;
       const days=Math.round((parseDate(g.deadline)-now)/(1000*60*60*24));
@@ -594,7 +646,7 @@ function buildMonthSummary(off) {
       if(left>0) parts.push(`Meta <b>${urgentGoal.name}</b> em ${days} dias — faltam <b>${R(left)}</b>.`);
     }
   }
-  return parts.join(' ');
+  return parts.join(' ') || null;
 }
 
 // ══════════════════════════════════════════
