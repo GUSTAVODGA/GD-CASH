@@ -18,7 +18,6 @@
 
 <header class="topbar">
   <div class="logo"><span class="logo-mark"></span>GD CASH</div>
-  <button class="qa-btn" onclick="openQuickAdd()" title="Lançamento rápido">+</button>
 </header>
 
 <main>
@@ -255,23 +254,6 @@
       <button class="btn btn-secondary" onclick="addPlatform()">+ Nova fonte</button>
     </div>
     <button class="btn btn-secondary" onclick="closeOverlay('modal-plat')">Fechar</button>
-  </div>
-</div>
-
-<div class="overlay" id="modal-quickadd">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title">Lançamento rápido</div>
-    <div class="qa-type-row">
-      <button class="qa-type-btn active" id="qa-type-exp" onclick="setQaType('exp')">Gasto</button>
-      <button class="qa-type-btn" id="qa-type-inc" onclick="setQaType('inc')">Receita</button>
-    </div>
-    <div class="fg"><label class="fl">Valor ($)</label><input class="fi" type="number" id="qa-val" min="0" step="0.01" placeholder="0,00" inputmode="decimal"></div>
-    <div class="fg" id="qa-cat-wrap"><label class="fl">Categoria</label><select class="fi" id="qa-cat"></select></div>
-    <div class="fg" id="qa-plat-wrap" style="display:none"><label class="fl">Plataforma</label><select class="fi" id="qa-plat"></select></div>
-    <div class="fg"><label class="fl">Descrição (opcional)</label><input class="fi" type="text" id="qa-desc" placeholder="Ex: almoço, gasolina..."></div>
-    <div class="fg"><label class="fl">Data</label><input class="fi" type="date" id="qa-date"></div>
-    <button class="btn btn-primary" onclick="saveQuickAdd()">Confirmar</button>
   </div>
 </div>
 
