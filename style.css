@@ -252,6 +252,28 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 14px}
 .sheet-title{font-size:16px;font-weight:800;margin-bottom:14px}
 
+/* ── Quick-add button ── */
+.qa-btn{
+  margin-left:auto;width:34px;height:34px;border-radius:50%;border:none;cursor:pointer;
+  background:linear-gradient(135deg,var(--gold),var(--orange));
+  color:#000;font-size:22px;font-weight:400;line-height:1;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  box-shadow:0 0 12px rgba(255,184,0,.35);
+}
+.qa-type-row{display:flex;gap:8px;margin-bottom:14px}
+.qa-type-btn{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--surface3);font-weight:600;font-size:14px;color:var(--text2);cursor:pointer;transition:all .15s}
+.qa-type-btn.active{background:linear-gradient(135deg,var(--gold),var(--orange));color:#000;border-color:transparent}
+
+/* ── Month summary ── */
+.month-summary{
+  background:var(--surface2);border-radius:var(--radius-sm);
+  border-left:3px solid var(--gold);
+  padding:12px 14px;display:flex;gap:10px;align-items:flex-start;margin-bottom:14px;
+}
+.month-summary-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.month-summary-text{font-size:13px;line-height:1.65;color:var(--text2)}
+.month-summary-text b{color:var(--text)}
+
 /* ── Goals ── */
 .goal-card{background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;border:1px solid var(--border)}
 .goal-card.goal-done{border-color:var(--green-d);opacity:.8}

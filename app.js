@@ -310,6 +310,11 @@ function deleteExpense(id) { D.expenses=D.expenses.filter(e=>e.id!==id); save();
 // ══════════════════════════════════════════
 function renderMes() {
   document.getElementById('month-lbl').textContent=fmtMonthYear(monthOffset);
+  const summary=buildMonthSummary(monthOffset);
+  const sumEl=document.getElementById('month-summary');
+  const sumTxt=document.getElementById('month-summary-text');
+  if(summary){sumEl.style.display='';sumTxt.innerHTML=summary;}
+  else sumEl.style.display='none';
   const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp, resv=sumMonthReserva(monthOffset);
   document.getElementById('mes-inc').textContent=R(inc);
   document.getElementById('mes-exp').textContent=R(exp);
@@ -464,6 +469,134 @@ function saveResMove(type) {
   D.reservaHistory.push({id:uid(),type,amount:val,note,date:todayStr()});
   save(); closeOverlay('modal-res'); renderReserva();
 }
+// ══════════════════════════════════════════
+// QUICK ADD
+// ══════════════════════════════════════════
+let qaType = 'exp';
+
+function openQuickAdd() {
+  qaType = 'exp';
+  document.getElementById('qa-type-exp').classList.add('active');
+  document.getElementById('qa-type-inc').classList.remove('active');
+  document.getElementById('qa-cat-wrap').style.display = '';
+  document.getElementById('qa-plat-wrap').style.display = 'none';
+  document.getElementById('qa-val').value = '';
+  document.getElementById('qa-desc').value = '';
+  document.getElementById('qa-date').value = todayStr();
+  document.getElementById('qa-cat').innerHTML = D.expCats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  openOverlay('modal-quickadd');
+  setTimeout(()=>document.getElementById('qa-val').focus(), 300);
+}
+
+function setQaType(type) {
+  qaType = type;
+  document.getElementById('qa-type-exp').classList.toggle('active', type==='exp');
+  document.getElementById('qa-type-inc').classList.toggle('active', type==='inc');
+  document.getElementById('qa-cat-wrap').style.display = type==='exp' ? '' : 'none';
+  document.getElementById('qa-plat-wrap').style.display = type==='inc' ? '' : 'none';
+  if (type==='inc') {
+    document.getElementById('qa-plat').innerHTML = D.platforms.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  }
+}
+
+function saveQuickAdd() {
+  const val = parseFloat(document.getElementById('qa-val').value);
+  const date = document.getElementById('qa-date').value || todayStr();
+  const desc = document.getElementById('qa-desc').value.trim();
+  if (!val || val <= 0) { alert('Informe um valor válido.'); return; }
+  if (qaType === 'exp') {
+    const cat = document.getElementById('qa-cat').value;
+    D.expenses.push({ id:uid(), date, category:cat, amount:val, description:desc });
+  } else {
+    const pid = document.getElementById('qa-plat').value;
+    if (!D.dailyIncome[date]) D.dailyIncome[date] = {};
+    D.dailyIncome[date][pid] = (D.dailyIncome[date][pid]||0) + val;
+  }
+  save();
+  closeOverlay('modal-quickadd');
+  // refresh visible tab
+  const activeTab = document.querySelector('.page.active')?.id?.replace('page-','');
+  if (activeTab === 'semana') renderSemana();
+  else if (activeTab === 'mes') renderMes();
+}
+
+// ══════════════════════════════════════════
+// MONTH SUMMARY
+// ══════════════════════════════════════════
+function buildMonthSummary(off) {
+  const inc = sumMonthIncome(off), exp = sumMonthExpenses(off), liq = inc - exp;
+  if (inc === 0 && exp === 0) return null;
+
+  const prevInc = sumMonthIncome(off-1), prevExp = sumMonthExpenses(off-1), prevLiq = prevInc-prevExp;
+  const dates = monthDates(off);
+  const now = new Date(); now.setHours(0,0,0,0);
+  const isPast = off < 0;
+
+  // Top expense category
+  const catMap = {};
+  D.expenses.filter(e=>dates.includes(e.date)).forEach(e=>{ catMap[e.category]=(catMap[e.category]||0)+e.amount; });
+  const topCat = Object.entries(catMap).sort((a,b)=>b[1]-a[1])[0];
+  const topCatPct = topCat && exp>0 ? Math.round((topCat[1]/exp)*100) : 0;
+
+  const savingsRate = inc>0 ? Math.round((liq/inc)*100) : 0;
+  const incChange = prevInc>0 ? Math.round(((inc-prevInc)/prevInc)*100) : null;
+
+  const parts = [];
+
+  if (isPast) {
+    if (liq>0 && incChange!==null && incChange>15)
+      parts.push(`Mês excelente — receita <b>${incChange}% acima</b> do anterior e fechou com <b>${R(liq)}</b> positivo.`);
+    else if (liq>0 && savingsRate>=25)
+      parts.push(`Boa disciplina: você guardou <b>${savingsRate}%</b> da receita esse mês. Continua assim.`);
+    else if (liq>0 && incChange!==null && incChange<-10)
+      parts.push(`Receita caiu <b>${Math.abs(incChange)}%</b> em relação ao anterior, mas o saldo ficou positivo em <b>${R(liq)}</b>.`);
+    else if (liq>0)
+      parts.push(`Mês fechado no azul: <b>${R(liq)}</b> de saldo positivo.`);
+    else
+      parts.push(`Mês pesado — gastos superaram a receita em <b>${R(Math.abs(liq))}</b>. Acontece, o importante é saber.`);
+
+    if (topCat && topCatPct>=30)
+      parts.push(`<b>${topCat[0]}</b> foi a maior despesa: ${topCatPct}% de tudo que saiu.`);
+
+    if (liq<0)
+      parts.push(`Fique de olho em <b>${topCat?topCat[0]:'seus maiores gastos'}</b> no próximo mês.`);
+    else if (savingsRate<10)
+      parts.push(`Que tal separar pelo menos 10% da receita pra reserva no próximo mês?`);
+  } else {
+    const d=new Date(); d.setMonth(d.getMonth()+off,1);
+    const daysInMonth=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+    const dayOfMonth=Math.min(now.getDate(),daysInMonth);
+    const pctPassed=Math.round((dayOfMonth/daysInMonth)*100);
+
+    if (liq<0)
+      parts.push(`Atenção: os gastos já passaram a receita em <b>${R(Math.abs(liq))}</b>. Ainda dá tempo de equilibrar.`);
+    else if (incChange!==null && inc>=(prevInc*(pctPassed/100)*1.15))
+      parts.push(`Ritmo acima do esperado — você já está mais forte que no mesmo ponto do mês passado.`);
+    else if (inc===0)
+      parts.push(`Nenhuma receita registrada ainda. Comece lançando os ganhos de hoje.`);
+    else
+      parts.push(`<b>${pctPassed}%</b> do mês passou. Saldo atual: <b>${R(liq)}</b>.`);
+
+    if (topCat && topCatPct>=40 && exp>0)
+      parts.push(`<b>${topCat[0]}</b> está pesando bastante: ${topCatPct}% dos gastos do mês.`);
+
+    if (incChange!==null && incChange<-20 && pctPassed>40)
+      parts.push(`Receita <b>${Math.abs(incChange)}%</b> abaixo do mesmo ponto do mês passado. Vale acelerar.`);
+
+    const urgentGoal=(D.goals||[]).find(g=>{
+      if(g.saved>=g.target) return false;
+      const days=Math.round((parseDate(g.deadline)-now)/(1000*60*60*24));
+      return days>=0&&days<=60;
+    });
+    if(urgentGoal){
+      const left=Math.max(0,urgentGoal.target-urgentGoal.saved);
+      const days=Math.round((parseDate(urgentGoal.deadline)-now)/(1000*60*60*24));
+      if(left>0) parts.push(`Meta <b>${urgentGoal.name}</b> em ${days} dias — faltam <b>${R(left)}</b>.`);
+    }
+  }
+  return parts.join(' ');
+}
+
 // ══════════════════════════════════════════
 // GOALS (METAS)
 // ══════════════════════════════════════════
