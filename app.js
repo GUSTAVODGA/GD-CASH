@@ -1,4 +1,101 @@
 // ══════════════════════════════════════════
+// FIREBASE — config (preenchido após setup)
+// ══════════════════════════════════════════
+const CLOUD_ENABLED = false; // muda para true após configurar Firebase
+
+const firebaseConfig = {
+  apiKey: "COLE_AQUI",
+  authDomain: "COLE_AQUI",
+  projectId: "COLE_AQUI",
+  storageBucket: "COLE_AQUI",
+  messagingSenderId: "COLE_AQUI",
+  appId: "COLE_AQUI"
+};
+
+let auth, db, currentUser = null;
+
+function initFirebase() {
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db   = firebase.firestore();
+
+  // Handle redirect result (iOS PWA fallback)
+  auth.getRedirectResult().catch(() => {});
+
+  auth.onAuthStateChanged(async user => {
+    const loginScreen = document.getElementById('login-screen');
+    const avatarBtn   = document.getElementById('user-avatar-btn');
+    const avatarImg   = document.getElementById('user-avatar-img');
+    if (user) {
+      currentUser = user;
+      loginScreen.style.display = 'none';
+      avatarBtn.style.display   = '';
+      avatarImg.src = user.photoURL || '';
+      await loadFromCloud();
+      renderSemana();
+      checkGoalNotifications();
+    } else {
+      currentUser = null;
+      loginScreen.style.display = 'flex';
+      avatarBtn.style.display   = 'none';
+    }
+  });
+}
+
+function signInWithGoogle() {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithPopup(provider).catch(err => {
+    if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
+      auth.signInWithRedirect(provider);
+    } else {
+      alert('Erro ao entrar: ' + err.message);
+    }
+  });
+}
+
+function confirmSignOut() {
+  if (confirm('Sair da sua conta?')) auth.signOut();
+}
+
+async function loadFromCloud() {
+  try {
+    const doc = await db.collection('users').doc(currentUser.uid).collection('data').doc('main').get();
+    if (doc.exists) {
+      D = { ...defaultData(), ...doc.data() };
+      if (!D.goals) D.goals = [];
+      if (!D.weeklyGoal) D.weeklyGoal = 0;
+      localStorage.setItem('gdcash_v1', JSON.stringify(D));
+    } else {
+      // Primeiro login — oferece migrar dados locais existentes
+      const local = localStorage.getItem('gdcash_v1');
+      if (local) {
+        try {
+          const parsed = JSON.parse(local);
+          if (Object.keys(parsed.dailyIncome || {}).length > 0) {
+            if (confirm('Encontramos dados salvos neste dispositivo. Deseja importar para a nuvem?')) {
+              D = parsed;
+              await saveToCloud();
+            }
+          }
+        } catch(e) {}
+      }
+    }
+  } catch(e) {
+    console.error('Erro ao carregar da nuvem:', e);
+    try { const l = localStorage.getItem('gdcash_v1'); if(l) D = JSON.parse(l); } catch(e2) {}
+  }
+}
+
+async function saveToCloud() {
+  if (!currentUser || !db) return;
+  try {
+    await db.collection('users').doc(currentUser.uid).collection('data').doc('main').set(D);
+  } catch(e) {
+    console.error('Erro ao salvar na nuvem:', e);
+  }
+}
+
+// ══════════════════════════════════════════
 // DATA & STORE
 // ══════════════════════════════════════════
 const WEEK_DAYS = ['SEG','TER','QUA','QUI','SEX','SÁB','DOM'];
@@ -29,7 +126,10 @@ let D = (() => {
   return defaultData();
 })();
 
-function save() { try { localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch(e){} }
+function save() {
+  try { localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch(e){}
+  if (CLOUD_ENABLED) saveToCloud();
+}
 
 function exportData() {
   const blob = new Blob([JSON.stringify(D, null, 2)], {type:'application/json'});
@@ -1008,5 +1108,9 @@ function switchTab(tab) {
 // ══════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════
-renderSemana();
-checkGoalNotifications();
+if (CLOUD_ENABLED) {
+  initFirebase(); // renders app after auth
+} else {
+  renderSemana();
+  checkGoalNotifications();
+}
