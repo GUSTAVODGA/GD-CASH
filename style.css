@@ -252,6 +252,27 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 14px}
 .sheet-title{font-size:16px;font-weight:800;margin-bottom:14px}
 
+/* ── Goals ── */
+.goal-card{background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;border:1px solid var(--border)}
+.goal-card.goal-done{border-color:var(--green-d);opacity:.8}
+.goal-card.goal-urgent{border-color:var(--red)}
+.goal-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.goal-emoji{font-size:26px;flex-shrink:0;line-height:1}
+.goal-info{flex:1;min-width:0}
+.goal-name{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.goal-meta{font-size:12px;color:var(--text2);margin-top:2px}
+.goal-urgent-txt{color:var(--red);font-weight:700}
+.goal-done-txt{color:var(--green);font-weight:700}
+.goal-btns{display:flex;gap:4px;flex-shrink:0}
+.goal-bar-wrap{background:var(--surface3);border-radius:8px;height:8px;overflow:hidden;margin-bottom:8px}
+.goal-bar-fill{height:100%;background:linear-gradient(90deg,var(--gold),var(--orange));border-radius:8px;transition:width .4s}
+.goal-bar-fill.goal-bar-done{background:linear-gradient(90deg,var(--green-d),var(--green))}
+.goal-footer{display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:10px}
+.goal-saved-txt{color:var(--text2)}
+.goal-pct-txt{font-weight:800;color:var(--gold)}
+.goal-left-txt{color:var(--text3)}
+.goal-add-btn{padding:8px 12px;font-size:13px;margin-top:0}
+
 /* ── Month picker ── */
 .nav-title-pick{cursor:pointer;text-decoration:underline dotted var(--text3);text-underline-offset:3px}
 .mp-year-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}

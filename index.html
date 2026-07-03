@@ -108,6 +108,10 @@
 
   <div class="sec-title">Histórico</div>
   <div class="card"><div id="res-history"></div></div>
+
+  <div class="sec-title" style="margin-top:8px">Minhas Metas</div>
+  <div id="goals-list"></div>
+  <button class="btn btn-secondary" style="margin-bottom:14px" onclick="openGoalModal()">+ Nova meta</button>
 </section>
 
 <!-- ════ MÊS ════ -->
@@ -245,6 +249,39 @@
       <button class="btn btn-secondary" onclick="addPlatform()">+ Nova fonte</button>
     </div>
     <button class="btn btn-secondary" onclick="closeOverlay('modal-plat')">Fechar</button>
+  </div>
+</div>
+
+<div class="overlay" id="modal-goal">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="goal-modal-title">Nova Meta</div>
+    <input type="hidden" id="goal-edit-id">
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <div class="fg" style="flex:0 0 72px">
+        <label class="fl">Emoji</label>
+        <input class="fi" type="text" id="goal-emoji" placeholder="🎯" maxlength="2" style="text-align:center;font-size:22px;padding:8px 4px">
+      </div>
+      <div class="fg" style="flex:1">
+        <label class="fl">Nome da meta</label>
+        <input class="fi" type="text" id="goal-name" placeholder="Ex: Viagem NY, Carro...">
+      </div>
+    </div>
+    <div class="fg"><label class="fl">Valor-alvo ($)</label><input class="fi" type="number" id="goal-target" min="0" step="0.01" placeholder="0,00"></div>
+    <div class="fg"><label class="fl">Já guardei ($)</label><input class="fi" type="number" id="goal-saved-inp" min="0" step="0.01" placeholder="0,00"></div>
+    <div class="fg"><label class="fl">Prazo</label><input class="fi" type="date" id="goal-deadline"></div>
+    <div class="fg"><label class="fl">Observação (opcional)</label><input class="fi" type="text" id="goal-note" placeholder="..."></div>
+    <button class="btn btn-primary" onclick="saveGoal()">Salvar</button>
+  </div>
+</div>
+
+<div class="overlay" id="modal-goal-dep">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="goal-dep-title">Adicionar à meta</div>
+    <input type="hidden" id="goal-dep-id">
+    <div class="fg"><label class="fl">Valor ($)</label><input class="fi" type="number" id="goal-dep-val" min="0" step="0.01" placeholder="0,00"></div>
+    <button class="btn btn-primary" onclick="saveGoalDep()">Confirmar</button>
   </div>
 </div>
 

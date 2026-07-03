@@ -19,11 +19,12 @@ function defaultData() {
     fixedExpenses: [],
     emergency: { target: 10000, current: 0 },
     reservaHistory: [],
+    goals: [],
   };
 }
 
 let D = (() => {
-  try { const s = localStorage.getItem('gdcash_v1'); if(s) return JSON.parse(s); } catch(e){}
+  try { const s = localStorage.getItem('gdcash_v1'); if(s) { const p=JSON.parse(s); if(!p.goals) p.goals=[]; return p; } } catch(e){}
   return defaultData();
 })();
 
@@ -154,6 +155,16 @@ function buildAlerts() {
   if(curInc===0&&curExp>0) alerts.push({t:'warn',icon:'💡',msg:'Há gastos mas nenhuma receita registrada. Lembre de lançar seus ganhos!'});
   if(D.emergency.target>0&&(D.emergency.current/D.emergency.target)<0.3)
     alerts.push({t:'warn',icon:'🛡️',msg:`Reserva em ${Math.round(D.emergency.current/D.emergency.target*100)}% da meta.`});
+  const today=new Date(); today.setHours(0,0,0,0);
+  (D.goals||[]).forEach(g=>{
+    if(g.saved>=g.target) return;
+    const dl=parseDate(g.deadline), daysLeft=Math.round((dl-today)/(1000*60*60*24));
+    if(daysLeft<0||daysLeft>60) return;
+    const pct=g.target>0?Math.round((g.saved/g.target)*100):0;
+    const left=R(g.target-g.saved);
+    if(daysLeft<=7) alerts.push({t:'bad',icon:g.emoji||'🎯',msg:`<b>${g.name}</b>: prazo em ${daysLeft===0?'hoje!':daysLeft+' dia'+(daysLeft!==1?'s':'')+' !'} Faltam <b>${left}</b> (${pct}% completo).`});
+    else alerts.push({t:'warn',icon:g.emoji||'🎯',msg:`<b>${g.name}</b>: ${daysLeft} dias restantes. Faltam ${left} (${pct}% completo).`});
+  });
   return alerts;
 }
 
@@ -424,6 +435,7 @@ function renderReserva() {
           <button class="res-hist-del" onclick="deleteResHist('${h.id}')">✕</button>
         </div>`).join('')
     : '<div class="empty-state">Nenhuma movimentação ainda</div>';
+  renderGoals();
 }
 
 function openResModal(type) {
@@ -452,6 +464,138 @@ function saveResMove(type) {
   D.reservaHistory.push({id:uid(),type,amount:val,note,date:todayStr()});
   save(); closeOverlay('modal-res'); renderReserva();
 }
+// ══════════════════════════════════════════
+// GOALS (METAS)
+// ══════════════════════════════════════════
+function renderGoals() {
+  const el = document.getElementById('goals-list');
+  if (!el) return;
+  if (!D.goals || !D.goals.length) {
+    el.innerHTML = '<div class="card"><div class="empty-state">Nenhuma meta ainda</div></div>';
+    return;
+  }
+  const today = new Date(); today.setHours(0,0,0,0);
+  el.innerHTML = D.goals.map(g => {
+    const pct = g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0;
+    const left = Math.max(0, g.target - g.saved);
+    const dl = parseDate(g.deadline);
+    const daysLeft = Math.round((dl - today) / (1000*60*60*24));
+    const done = g.saved >= g.target;
+    const statusTxt = done ? 'Meta atingida! 🎉'
+      : daysLeft < 0 ? 'Prazo encerrado'
+      : daysLeft === 0 ? 'Hoje é o prazo!'
+      : `${daysLeft} dia${daysLeft !== 1 ? 's' : ''} restantes`;
+    const statusClass = done ? 'goal-done-txt' : daysLeft >= 0 && daysLeft <= 7 ? 'goal-urgent-txt' : '';
+    const cardClass = done ? ' goal-done' : (!done && daysLeft >= 0 && daysLeft <= 7) ? ' goal-urgent' : '';
+    return `
+      <div class="goal-card${cardClass}">
+        <div class="goal-header">
+          <span class="goal-emoji">${g.emoji||'🎯'}</span>
+          <div class="goal-info">
+            <div class="goal-name">${g.name}</div>
+            <div class="goal-meta">${fmtShort(g.deadline)} · <span class="${statusClass}">${statusTxt}</span></div>
+          </div>
+          <div class="goal-btns">
+            <button class="fixed-del" onclick="openGoalModal('${g.id}')">···</button>
+            <button class="fixed-del" onclick="deleteGoal('${g.id}')">✕</button>
+          </div>
+        </div>
+        <div class="goal-bar-wrap">
+          <div class="goal-bar-fill${done?' goal-bar-done':''}" style="width:${pct}%"></div>
+        </div>
+        <div class="goal-footer">
+          <span class="goal-saved-txt">${R(g.saved)} guardados</span>
+          <span class="goal-pct-txt">${Math.round(pct)}%</span>
+          <span class="goal-left-txt">${done ? '' : 'Faltam '+R(left)}</span>
+        </div>
+        ${!done ? `<button class="btn btn-secondary goal-add-btn" onclick="openAddToGoal('${g.id}')">+ Adicionar valor</button>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function openGoalModal(id) {
+  const g = id ? D.goals.find(g => g.id === id) : null;
+  document.getElementById('goal-modal-title').textContent = g ? 'Editar Meta' : 'Nova Meta';
+  document.getElementById('goal-edit-id').value = id || '';
+  document.getElementById('goal-emoji').value = g?.emoji || '';
+  document.getElementById('goal-name').value = g?.name || '';
+  document.getElementById('goal-target').value = g?.target || '';
+  document.getElementById('goal-saved-inp').value = g?.saved || '';
+  document.getElementById('goal-deadline').value = g?.deadline || '';
+  document.getElementById('goal-note').value = g?.note || '';
+  openOverlay('modal-goal');
+}
+
+function saveGoal() {
+  const id = document.getElementById('goal-edit-id').value;
+  const name = document.getElementById('goal-name').value.trim();
+  const emoji = document.getElementById('goal-emoji').value.trim() || '🎯';
+  const target = parseFloat(document.getElementById('goal-target').value) || 0;
+  const saved = parseFloat(document.getElementById('goal-saved-inp').value) || 0;
+  const deadline = document.getElementById('goal-deadline').value;
+  const note = document.getElementById('goal-note').value.trim();
+  if (!name || !target || !deadline) { alert('Preencha nome, valor e prazo.'); return; }
+  if (id) {
+    const idx = D.goals.findIndex(g => g.id === id);
+    if (idx !== -1) D.goals[idx] = { ...D.goals[idx], name, emoji, target, saved, deadline, note };
+  } else {
+    D.goals.push({ id: uid(), name, emoji, target, saved, deadline, note, lastNotif: '' });
+    requestNotifPermission();
+  }
+  save(); closeOverlay('modal-goal'); renderGoals();
+}
+
+function deleteGoal(id) {
+  if (!confirm('Excluir esta meta?')) return;
+  D.goals = D.goals.filter(g => g.id !== id);
+  save(); renderGoals();
+}
+
+function openAddToGoal(id) {
+  const g = D.goals.find(g => g.id === id);
+  if (!g) return;
+  document.getElementById('goal-dep-title').textContent = `${g.emoji||'🎯'} ${g.name}`;
+  document.getElementById('goal-dep-id').value = id;
+  document.getElementById('goal-dep-val').value = '';
+  openOverlay('modal-goal-dep');
+}
+
+function saveGoalDep() {
+  const id = document.getElementById('goal-dep-id').value;
+  const val = parseFloat(document.getElementById('goal-dep-val').value) || 0;
+  if (!val || val <= 0) { alert('Informe um valor válido.'); return; }
+  const g = D.goals.find(g => g.id === id);
+  if (!g) return;
+  g.saved = (g.saved || 0) + val;
+  save(); closeOverlay('modal-goal-dep'); renderGoals();
+}
+
+// ── Notificações ──
+async function requestNotifPermission() {
+  if (!('Notification' in window) || Notification.permission !== 'default') return;
+  await Notification.requestPermission();
+}
+
+function checkGoalNotifications() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!D.goals || !D.goals.length) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  let changed = false;
+  D.goals.forEach(g => {
+    if (g.saved >= g.target || g.lastNotif === todayStr()) return;
+    const dl = parseDate(g.deadline);
+    const daysLeft = Math.round((dl - today) / (1000*60*60*24));
+    if (daysLeft < 0 || daysLeft > 30) return;
+    const body = daysLeft === 0
+      ? `Hoje é o prazo! Faltam ${R(Math.max(0, g.target - g.saved))}`
+      : `Faltam ${daysLeft} dia${daysLeft !== 1 ? 's' : ''} — ainda precisa de ${R(Math.max(0, g.target - g.saved))}`;
+    new Notification(`${g.emoji||'🎯'} ${g.name}`, { body, icon: '/GD-CASH/icon-192.png' });
+    g.lastNotif = todayStr();
+    changed = true;
+  });
+  if (changed) save();
+}
+
 function deleteResHist(id) {
   const h=D.reservaHistory.find(h=>h.id===id);
   if(!h) return;
@@ -594,3 +738,4 @@ function switchTab(tab) {
 // INIT
 // ══════════════════════════════════════════
 renderSemana();
+checkGoalNotifications();
