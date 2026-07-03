@@ -274,6 +274,27 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .month-summary-text{font-size:13px;line-height:1.65;color:var(--text2)}
 .month-summary-text b{color:var(--text)}
 
+/* ── Avg 5 weeks card ── */
+.avg5w-card{background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;border:1px solid var(--border)}
+.avg5w-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.avg5w-title{font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+.avg5w-toggle{background:none;border:none;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;padding:0}
+.avg5w-main{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:10px}
+.avg5w-val{font-size:22px;font-weight:800}
+.avg5w-meta{text-align:right}
+.avg5w-goal-lbl{font-size:11px;color:var(--text3)}
+.avg5w-goal-val{font-size:14px;font-weight:700;color:var(--text2)}
+.avg5w-diff{display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:700;padding:3px 8px;border-radius:20px;margin-bottom:8px}
+.avg5w-diff.above{background:rgba(0,230,160,.12);color:var(--green)}
+.avg5w-diff.below{background:rgba(255,77,106,.12);color:var(--red)}
+.avg5w-diff.on{background:rgba(255,184,0,.12);color:var(--gold)}
+.avg5w-msg{font-size:13px;color:var(--text2);margin-bottom:10px}
+.avg5w-provisional{font-size:11px;color:var(--text3);font-style:italic;margin-bottom:6px}
+.avg5w-detail{border-top:1px solid var(--border);padding-top:10px;margin-top:2px}
+.avg5w-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:13px}
+.avg5w-row-lbl{color:var(--text2)}
+.avg5w-row-val{font-weight:700}
+
 /* ── Weekly goal card ── */
 .week-goal-card{background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;border:1px solid var(--border)}
 .wg-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}

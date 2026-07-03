@@ -245,6 +245,7 @@ function renderSemana() {
 
   renderDayDetail();
   renderWeekGoal();
+  renderAvg5w();
 
   const alerts=buildAlerts();
   document.getElementById('alerts-box').innerHTML=alerts.map(a=>`
@@ -538,6 +539,85 @@ function saveQuickAdd() {
 }
 
 // ══════════════════════════════════════════
+// AVG LAST 5 WEEKS
+// ══════════════════════════════════════════
+function getCompletedWeeksWithData(maxWeeks=5, lookbackLimit=20) {
+  const results = [];
+  const now = new Date(); now.setHours(0,0,0,0);
+  let lookback = 1;
+  while (results.length < maxWeeks && lookback <= lookbackLimit) {
+    const off = -lookback;
+    // Only include weeks that have fully ended (sunday of that week < today)
+    const dates = weekDates(off);
+    const weekEnd = parseDate(dates[6]); weekEnd.setHours(23,59,59);
+    if (weekEnd >= now) { lookback++; continue; }
+    const inc = sumWeekIncome(off);
+    if (inc > 0) results.push({ off, inc, label: `${fmtShort(dates[0])} – ${fmtShort(dates[6])}` });
+    lookback++;
+  }
+  return results;
+}
+
+let avg5wDetailOpen = false;
+
+function renderAvg5w() {
+  const el = document.getElementById('avg5w-card');
+  if (!el) return;
+
+  const weeks = getCompletedWeeksWithData();
+  if (weeks.length === 0) { el.innerHTML = ''; return; }
+
+  const avg = weeks.reduce((s,w)=>s+w.inc,0) / weeks.length;
+  const goal = D.weeklyGoal || 0;
+  const diff = goal > 0 ? avg - goal : null;
+  const isProvisional = weeks.length < 5;
+
+  let diffHTML = '';
+  let msgHTML = '';
+  if (diff === null) {
+    msgHTML = `<div class="avg5w-msg">Defina uma meta semanal para comparar.</div>`;
+  } else if (Math.abs(diff) < 0.5) {
+    diffHTML = `<span class="avg5w-diff on">= Na meta</span>`;
+    msgHTML = `<div class="avg5w-msg">Sua média está dentro da meta semanal.</div>`;
+  } else if (diff > 0) {
+    diffHTML = `<span class="avg5w-diff above">▲ ${R(diff)} acima</span>`;
+    msgHTML = `<div class="avg5w-msg">Sua média está <b>${R(diff)}</b> acima da meta.</div>`;
+  } else {
+    diffHTML = `<span class="avg5w-diff below">▼ ${R(Math.abs(diff))} abaixo</span>`;
+    msgHTML = `<div class="avg5w-msg">Sua média está <b>${R(Math.abs(diff))}</b> abaixo da meta.</div>`;
+  }
+
+  const detailRows = weeks.map((w,i)=>`
+    <div class="avg5w-row">
+      <span class="avg5w-row-lbl">${w.label}</span>
+      <span class="avg5w-row-val">${R(w.inc)}</span>
+    </div>`).join('');
+
+  el.innerHTML = `
+    <div class="avg5w-card">
+      <div class="avg5w-top">
+        <span class="avg5w-title">Média das últimas ${weeks.length < 5 ? weeks.length : '5'} semanas</span>
+        <button class="avg5w-toggle" onclick="toggleAvg5wDetail()">${avg5wDetailOpen?'Ocultar':'Ver semanas'}</button>
+      </div>
+      <div class="avg5w-main">
+        <div class="avg5w-val">${R(avg)}</div>
+        ${goal>0?`<div class="avg5w-meta"><div class="avg5w-goal-lbl">Meta semanal</div><div class="avg5w-goal-val">${R(goal)}</div></div>`:''}
+      </div>
+      ${diffHTML}
+      ${msgHTML}
+      ${isProvisional?`<div class="avg5w-provisional">Média provisória baseada em ${weeks.length} semana${weeks.length!==1?'s':''} — dados insuficientes para 5 semanas completas.</div>`:''}
+      <div class="avg5w-detail" id="avg5w-detail" style="display:${avg5wDetailOpen?'':'none'}">
+        ${detailRows}
+      </div>
+    </div>`;
+}
+
+function toggleAvg5wDetail() {
+  avg5wDetailOpen = !avg5wDetailOpen;
+  renderAvg5w();
+}
+
+// ══════════════════════════════════════════
 // WEEKLY GOAL
 // ══════════════════════════════════════════
 function renderWeekGoal() {
@@ -579,7 +659,7 @@ function openWeekGoalModal() {
 function saveWeekGoal() {
   const val = parseFloat(document.getElementById('wg-val').value) || 0;
   D.weeklyGoal = val;
-  save(); closeOverlay('modal-week-goal'); renderWeekGoal();
+  save(); closeOverlay('modal-week-goal'); renderWeekGoal(); renderAvg5w();
 }
 
 // ══════════════════════════════════════════
