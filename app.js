@@ -39,6 +39,7 @@ function exportData() {
   a.download = `gdcash-backup-${todayStr()}.json`;
   a.click();
   URL.revokeObjectURL(url);
+  localStorage.setItem('gdcash_last_backup', todayStr());
 }
 function importData(event) {
   const file = event.target.files[0];
@@ -147,6 +148,13 @@ function buildAlerts() {
   const alerts=[];
   const curInc=sumWeekIncome(weekOffset), curExp=sumWeekExpenses(weekOffset), bal=curInc-curExp;
   const prevExp=sumWeekExpenses(weekOffset-1);
+  const lastBackup = localStorage.getItem('gdcash_last_backup');
+  if (!lastBackup) {
+    localStorage.setItem('gdcash_last_backup', todayStr());
+  } else {
+    const daysSince = Math.round((new Date()-parseDate(lastBackup))/(1000*60*60*24));
+    if (daysSince >= 30) alerts.push({t:'warn',icon:'💾',msg:`Faz <b>${daysSince} dias</b> sem backup. <u style="cursor:pointer" onclick="exportData()">Toque aqui pra salvar agora</u> e não perder seus dados.`});
+  }
   if(curInc===0&&curExp===0){alerts.push({t:'info',icon:'📝',msg:'Nenhum dado esta semana. Comece lançando suas receitas!'});return alerts;}
   if(D.weeklyGoal>0){
     const wg=D.weeklyGoal, dates=weekDates(weekOffset), now=new Date(); now.setHours(0,0,0,0);
