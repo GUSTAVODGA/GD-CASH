@@ -1101,8 +1101,59 @@ function switchTab(tab) {
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   if(tab==='semana')  renderSemana();
   if(tab==='mes')     renderMes();
-  if(tab==='reserva') renderReserva();
-  if(tab==='fixos')   renderFixos();
+  if(tab==='reserva')   renderReserva();
+  if(tab==='fixos')     renderFixos();
+  if(tab==='conversor') loadConversorRates();
+}
+
+// ══════════════════════════════════════════
+// CONVERSOR DE MOEDAS
+// ══════════════════════════════════════════
+let convRates = null;
+let convRatesLoaded = false;
+
+async function loadConversorRates() {
+  if (convRatesLoaded) { convertCurrency(); return; }
+  const rateEl   = document.getElementById('conv-rate');
+  const updatedEl= document.getElementById('conv-updated');
+  if (rateEl) rateEl.textContent = 'Buscando cotação...';
+  try {
+    const res  = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/brl.json');
+    const data = await res.json();
+    convRates = { ...data.brl, brl: 1 };
+    convRatesLoaded = true;
+    if (updatedEl) updatedEl.textContent = 'Cotação do dia: ' + data.date;
+    convertCurrency();
+  } catch {
+    if (rateEl) rateEl.textContent = 'Sem conexão. Verifique a internet.';
+  }
+}
+
+function convertCurrency() {
+  if (!convRates) return;
+  const amount = parseFloat(document.getElementById('conv-amount').value) || 0;
+  const from   = document.getElementById('conv-from').value;
+  const to     = document.getElementById('conv-to').value;
+
+  // convRates[x] = how many x per 1 BRL
+  const inBRL  = amount / convRates[from];
+  const result = inBRL  * convRates[to];
+  const rate   = convRates[to] / convRates[from];
+
+  const SYMBOLS = { brl: 'R$', usd: 'US$', eur: '€', gbp: '£' };
+  const fmt = (v, cur) => `${SYMBOLS[cur]} ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  document.getElementById('conv-result').textContent = amount > 0 ? fmt(result, to) : '—';
+  document.getElementById('conv-rate').textContent   = `1 ${from.toUpperCase()} = ${fmt(rate, to)}`;
+}
+
+function swapCurrencies() {
+  const fromEl = document.getElementById('conv-from');
+  const toEl   = document.getElementById('conv-to');
+  const tmp    = fromEl.value;
+  fromEl.value = toEl.value;
+  toEl.value   = tmp;
+  convertCurrency();
 }
 
 // ══════════════════════════════════════════

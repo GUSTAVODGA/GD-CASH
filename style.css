@@ -294,6 +294,27 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .s2s-total{display:flex;justify-content:space-between;align-items:center;padding:12px 0 2px;border-top:1px solid rgba(255,255,255,0.06);margin-top:4px}
 .s2s-total-lbl{font-size:13px;font-weight:800;color:var(--text)}
 
+/* ── Conversor ── */
+.conv-card{display:flex;flex-direction:column;gap:14px}
+.conv-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.conv-field{display:flex;flex-direction:column;gap:6px}
+.conv-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
+.conv-input{font-size:22px;font-weight:700;letter-spacing:-.5px}
+.conv-select{font-size:14px;font-weight:600}
+.conv-swap-btn{
+  align-self:center;background:rgba(255,184,0,.12);border:1px solid rgba(255,184,0,.2);
+  border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  color:var(--gold);cursor:pointer;transition:background .2s;
+}
+.conv-swap-btn:active{background:rgba(255,184,0,.25)}
+.conv-result-box{
+  background:rgba(255,184,0,.06);border:1px solid rgba(255,184,0,.15);
+  border-radius:12px;padding:16px;text-align:center;
+}
+.conv-result{font-size:32px;font-weight:800;color:var(--gold);letter-spacing:-.5px}
+.conv-rate{font-size:12px;color:var(--text3);margin-top:4px}
+.conv-updated{font-size:11px;color:var(--text3);text-align:center;opacity:.6}
+
 /* ── Ajustes ── */
 .settings-list{display:flex;flex-direction:column;padding:2px 14px}
 .settings-row{
