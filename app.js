@@ -14,6 +14,22 @@ const firebaseConfig = {
 
 let auth, db, currentUser = null;
 
+// ── Moeda ──
+const CURRENCIES = ['R$', 'US$', '€', '£'];
+let currSym = localStorage.getItem('gdcash_currency') || 'R$';
+
+function cycleCurrency() {
+  const idx = CURRENCIES.indexOf(currSym);
+  currSym = CURRENCIES[(idx + 1) % CURRENCIES.length];
+  localStorage.setItem('gdcash_currency', currSym);
+  document.getElementById('curr-chip').textContent = currSym;
+  const active = document.querySelector('.page.active')?.id?.replace('page-', '');
+  if (active === 'semana')  renderSemana();
+  else if (active === 'mes')     renderMes();
+  else if (active === 'reserva') renderReserva();
+  else if (active === 'fixos')   renderFixos();
+}
+
 function initFirebase() {
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
@@ -32,6 +48,7 @@ function initFirebase() {
       avatarBtn.style.display   = '';
       avatarImg.src = user.photoURL || '';
       await loadFromCloud();
+      document.getElementById('curr-chip').textContent = currSym;
       renderSemana();
       checkGoalNotifications();
     } else {
@@ -182,7 +199,7 @@ function fmtMonthYear(off) {
 function R(v) {
   const n = v||0;
   const sign = n<0 ? '−' : '';
-  return sign+'$ '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return sign+currSym+' '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
 // ══════════════════════════════════════════

@@ -86,7 +86,14 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
   border-bottom:1px solid rgba(255,255,255,0.06);
   display:flex;align-items:center;padding:14px 18px;
 }
-.logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px}
+.logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px;flex:1}
+.curr-chip{
+  background:rgba(255,184,0,.1);border:1px solid rgba(255,184,0,.25);
+  border-radius:20px;padding:5px 12px;
+  font-size:13px;font-weight:700;color:var(--gold);
+  cursor:pointer;transition:background .15s;white-space:nowrap;margin-right:10px;
+}
+.curr-chip:active{background:rgba(255,184,0,.25)}
 .logo-mark{
   width:9px;height:9px;border-radius:50%;
   background:linear-gradient(135deg,var(--gold),var(--orange));
