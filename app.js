@@ -1,15 +1,15 @@
 // ══════════════════════════════════════════
 // FIREBASE — config (preenchido após setup)
 // ══════════════════════════════════════════
-const CLOUD_ENABLED = false; // muda para true após configurar Firebase
+const CLOUD_ENABLED = true;
 
 const firebaseConfig = {
-  apiKey: "COLE_AQUI",
-  authDomain: "COLE_AQUI",
-  projectId: "COLE_AQUI",
-  storageBucket: "COLE_AQUI",
-  messagingSenderId: "COLE_AQUI",
-  appId: "COLE_AQUI"
+  apiKey: "AIzaSyCXtq2Y5S8Lb4JboxXP19DM7OGtTiNUn5s",
+  authDomain: "gd-cash-45999.firebaseapp.com",
+  projectId: "gd-cash-45999",
+  storageBucket: "gd-cash-45999.firebasestorage.app",
+  messagingSenderId: "935225376421",
+  appId: "1:935225376421:web:75db9d4134f44177c3174c"
 };
 
 let auth, db, currentUser = null;
