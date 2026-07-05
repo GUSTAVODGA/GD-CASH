@@ -212,6 +212,27 @@ function R(v) {
   return sign+currSym+' '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
+function animCount(el, finalVal, duration=550) {
+  if (!el) return;
+  const start = performance.now();
+  const neg = finalVal < 0;
+  const abs = Math.abs(finalVal);
+  const frame = (now) => {
+    const p = Math.min((now - start) / duration, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    const cur = abs * ease * (neg ? -1 : 1);
+    el.textContent = R(cur);
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      el.textContent = R(finalVal);
+      el.classList.remove('num-pop');
+      void el.offsetWidth;
+      el.classList.add('num-pop');
+    }
+  };
+  requestAnimationFrame(frame);
+}
+
 // ══════════════════════════════════════════
 // WEEK STATE
 // ══════════════════════════════════════════
@@ -338,14 +359,19 @@ function renderDonut(svgId, legendId, items) {
     return;
   }
   const r=48, cx=60, cy=60, circ=2*Math.PI*r;
-  let offset=0, paths='';
-  items.forEach(it=>{
+  let offset=0, paths='', finalDash=[];
+  items.forEach((it,idx)=>{
     const len=(it.value/total)*circ;
+    finalDash.push(`${len} ${circ-len}`);
     paths+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="16"
-      stroke-dasharray="${len} ${circ-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`;
+      stroke-dasharray="0 ${circ}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"
+      style="transition:stroke-dasharray .6s cubic-bezier(.35,.07,.24,.95) ${idx*0.07}s"/>`;
     offset+=len;
   });
   svg.innerHTML = paths;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    svg.querySelectorAll('circle').forEach((c,i)=>c.setAttribute('stroke-dasharray',finalDash[i]));
+  }));
   legend.innerHTML = items.map(it=>`
     <div class="legend-item">
       <span class="legend-dot" style="background:${it.color}"></span>
@@ -361,7 +387,7 @@ function renderBigDonut(svgId, pillsId, totalElId, items) {
   const totEl  = document.getElementById(totalElId);
   const total  = items.reduce((s,i)=>s+i.value,0);
 
-  if(totEl) totEl.textContent = total>0 ? R(total) : '—';
+  if(totEl) { if(total>0) animCount(totEl,total,600); else totEl.textContent='—'; }
 
   if(!total) {
     svg.innerHTML = `<circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="22"/>`;
@@ -371,15 +397,19 @@ function renderBigDonut(svgId, pillsId, totalElId, items) {
 
   const r=80, cx=100, cy=100, gap=3;
   const circ=2*Math.PI*r;
-  let offset=0, paths='';
-  items.forEach(it=>{
+  let offset=0, paths='', finalDash=[];
+  items.forEach((it,idx)=>{
     const len=Math.max(0,(it.value/total)*circ - gap);
+    finalDash.push(`${len} ${circ-len}`);
     paths+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="22"
-      stroke-dasharray="${len} ${circ-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"
-      stroke-linecap="round"/>`;
+      stroke-dasharray="0 ${circ}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"
+      stroke-linecap="round" style="transition:stroke-dasharray .65s cubic-bezier(.35,.07,.24,.95) ${idx*0.07}s"/>`;
     offset+=(it.value/total)*circ;
   });
   svg.innerHTML = paths;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    svg.querySelectorAll('circle').forEach((c,i)=>c.setAttribute('stroke-dasharray',finalDash[i]));
+  }));
 
   pills.innerHTML = items.map(it=>`
     <div class="cat-pill" style="border-color:${it.color}20;background:${it.color}12">
@@ -396,9 +426,9 @@ function renderSemana() {
   const dates=weekDates(weekOffset);
   document.getElementById('week-lbl').innerHTML=`Semana <b>${fmtShort(dates[0])} – ${fmtShort(dates[6])}</b>`;
   const inc=sumWeekIncome(weekOffset), exp=sumWeekExpenses(weekOffset), liq=inc-exp;
-  document.getElementById('ws-inc').textContent=R(inc);
-  document.getElementById('ws-exp').textContent=R(exp);
-  document.getElementById('ws-liq').textContent=R(liq);
+  animCount(document.getElementById('ws-inc'), inc);
+  animCount(document.getElementById('ws-exp'), exp);
+  animCount(document.getElementById('ws-liq'), liq, 650);
   document.getElementById('hero-semana').className='hero-card '+(liq>=0?'pos':'neg');
 
   document.getElementById('plat-cards').innerHTML=D.platforms.map(p=>`
@@ -572,10 +602,10 @@ function renderMes() {
   if(summary){sumEl.style.display='';sumTxt.innerHTML=summary;}
   else sumEl.style.display='none';
   const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp, resv=sumMonthReserva(monthOffset);
-  document.getElementById('mes-inc').textContent=R(inc);
-  document.getElementById('mes-exp').textContent=R(exp);
-  document.getElementById('mes-liq').textContent=R(liq);
-  document.getElementById('mes-resv').textContent=R(resv);
+  animCount(document.getElementById('mes-inc'), inc);
+  animCount(document.getElementById('mes-exp'), exp);
+  animCount(document.getElementById('mes-liq'), liq, 650);
+  animCount(document.getElementById('mes-resv'), resv);
   document.getElementById('hero-mes').className='hero-card '+(liq>=0?'pos':'neg');
 
   const dates=monthDates(monthOffset);
@@ -1235,13 +1265,20 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySele
 function switchTab(tab) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
-  document.getElementById('page-'+tab).classList.add('active');
+  const page = document.getElementById('page-'+tab);
+  page.classList.add('active');
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
-  if(tab==='semana')  renderSemana();
-  if(tab==='mes')     renderMes();
+  if(tab==='semana')    renderSemana();
+  if(tab==='mes')       renderMes();
   if(tab==='reserva')   renderReserva();
   if(tab==='fixos')     renderFixos();
   if(tab==='conversor') loadConversorRates();
+  // stagger cards
+  page.classList.add('tab-fresh');
+  page.querySelectorAll('.card,.hero-card').forEach((el,i)=>{
+    el.style.setProperty('--sd', (i*0.055)+'s');
+  });
+  setTimeout(()=>page.classList.remove('tab-fresh'), 900);
 }
 
 // ══════════════════════════════════════════
