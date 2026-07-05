@@ -60,8 +60,9 @@ function initFirebase() {
   });
 }
 
-function signInWithGoogle() {
+function signInWithGoogle(forceSelect = false) {
   const provider = new firebase.auth.GoogleAuthProvider();
+  if (forceSelect) provider.setCustomParameters({ prompt: 'select_account' });
   auth.signInWithPopup(provider).catch(err => {
     if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
       auth.signInWithRedirect(provider);
@@ -72,7 +73,96 @@ function signInWithGoogle() {
 }
 
 function confirmSignOut() {
-  if (confirm('Sair da sua conta?')) auth.signOut();
+  const action = confirm('O que deseja fazer?\n\nOK = Sair da conta\nCancelar = Ficar logado');
+  if (action) auth.signOut();
+}
+
+function switchAccount() {
+  auth.signOut().then(() => signInWithGoogle(true));
+}
+
+function openAccountMenu() {
+  const email = currentUser?.email || currentUser?.displayName || 'Conta Google';
+  document.getElementById('account-email').textContent = email;
+  openOverlay('modal-account');
+}
+
+// ══════════════════════════════════════════
+// TAB HELP (? por aba)
+// ══════════════════════════════════════════
+const TAB_HELP = {
+  semana: {
+    icon: '📅',
+    title: 'Aba Semana',
+    text: 'Lance seus ganhos e gastos diários aqui. Toque em um dia para registrar valores por plataforma. Use as setas ‹ › para navegar entre semanas.',
+  },
+  reserva: {
+    icon: '🛡️',
+    title: 'Reserva & Metas',
+    text: 'Aqui fica sua reserva de emergência — deposite aos poucos e acompanhe a meta. Abaixo você cria metas com prazo e valor, como viagens ou compras.',
+  },
+  mes: {
+    icon: '📊',
+    title: 'Aba Mês',
+    text: 'Visão completa do mês: líquido, gráfico de gastos por categoria, receita por plataforma e histórico dos últimos 6 meses. Toque no mês para navegar.',
+  },
+  fixos: {
+    icon: '🔁',
+    title: 'Gastos Fixos',
+    text: 'Cadastre contas que se repetem todo mês — aluguel, internet, planos, assinaturas. Ficam separados dos gastos do dia a dia para você ter o custo fixo sempre visível.',
+  },
+  conversor: {
+    icon: '💱',
+    title: 'Conversor de Moedas',
+    text: 'Converta entre Real, Dólar, Euro e Libra com cotação atualizada automaticamente. Útil para precificar serviços ou comparar preços em outras moedas.',
+  },
+  ajustes: {
+    icon: '⚙️',
+    title: 'Ajustes',
+    text: 'Configure suas fontes de receita, categorias de gastos e limites de orçamento mensal por categoria. Também aqui você faz backup e restaura seus dados.',
+  },
+};
+
+function showTabHelp(tab) {
+  const help = TAB_HELP[tab];
+  if (!help) return;
+  const page = document.getElementById('page-' + tab);
+  if (!page) return;
+
+  // Remove existing card
+  page.querySelector('.tab-help-card')?.remove();
+
+  const card = document.createElement('div');
+  card.className = 'tab-help-card';
+  card.innerHTML = `
+    <span class="thc-icon">${help.icon}</span>
+    <div class="thc-body">
+      <div class="thc-title">${help.title}</div>
+      <div class="thc-text">${help.text}</div>
+    </div>
+    <button class="thc-close" onclick="dismissTabHelp('${tab}')">✕</button>`;
+
+  // Insert after nav-row/page-header-row, or at top
+  const navRow = page.querySelector('.nav-row, .page-header-row');
+  if (navRow) navRow.after(card);
+  else page.insertBefore(card, page.firstChild);
+
+  // Animate in
+  requestAnimationFrame(() => card.classList.add('thc-visible'));
+  localStorage.setItem('gdcash_help_' + tab, '1');
+}
+
+function dismissTabHelp(tab) {
+  const card = document.getElementById('page-' + tab)?.querySelector('.tab-help-card');
+  if (!card) return;
+  card.classList.remove('thc-visible');
+  setTimeout(() => card.remove(), 260);
+}
+
+function checkFirstVisit(tab) {
+  if (!localStorage.getItem('gdcash_help_' + tab)) {
+    setTimeout(() => showTabHelp(tab), 350);
+  }
 }
 
 async function loadFromCloud() {
@@ -1279,6 +1369,7 @@ function switchTab(tab) {
   if(tab==='fixos')     renderFixos();
   if(tab==='conversor') loadConversorRates();
   if(tab==='ajustes')   renderBudgetSettings();
+  checkFirstVisit(tab);
   // stagger cards
   page.classList.add('tab-fresh');
   page.querySelectorAll('.card,.hero-card').forEach((el,i)=>{

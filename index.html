@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -90,7 +90,7 @@
 <header class="topbar">
   <div class="logo"><span class="logo-mark"></span>GD CASH</div>
   <button class="curr-chip" id="curr-chip" onclick="cycleCurrency()" title="Mudar moeda"></button>
-  <button class="user-avatar-btn" id="user-avatar-btn" style="display:none" onclick="confirmSignOut()">
+  <button class="user-avatar-btn" id="user-avatar-btn" style="display:none" onclick="openAccountMenu()">
     <img id="user-avatar-img" src="" alt="" class="user-avatar-img">
   </button>
 </header>
@@ -103,6 +103,7 @@
     <button class="nav-arrow" onclick="changeWeek(-1)">‹</button>
     <div class="nav-title" id="week-lbl">Semana</div>
     <button class="nav-arrow" onclick="changeWeek(1)">›</button>
+    <button class="tab-help-btn" onclick="showTabHelp('semana')">?</button>
   </div>
 
   <div class="hero-card" id="hero-semana">
@@ -182,6 +183,10 @@
 
 <!-- ════ RESERVA ════ -->
 <section class="page" id="page-reserva">
+  <div class="page-header-row">
+    <span class="page-header-title">Reserva &amp; Metas</span>
+    <button class="tab-help-btn" onclick="showTabHelp('reserva')">?</button>
+  </div>
   <div class="card res-hero">
     <div class="res-ring-wrap">
       <svg viewBox="0 0 160 160">
@@ -223,6 +228,7 @@
     <button class="nav-arrow" onclick="changeMonth(-1)">‹</button>
     <div class="nav-title nav-title-pick" id="month-lbl" onclick="openMonthPicker()">Mês</div>
     <button class="nav-arrow" onclick="changeMonth(1)">›</button>
+    <button class="tab-help-btn" onclick="showTabHelp('mes')">?</button>
   </div>
 
   <div class="month-summary" id="month-summary" style="display:none">
@@ -288,6 +294,10 @@
 
 <!-- ════ FIXOS ════ -->
 <section class="page" id="page-fixos">
+  <div class="page-header-row">
+    <span class="page-header-title">Gastos Fixos</span>
+    <button class="tab-help-btn" onclick="showTabHelp('fixos')">?</button>
+  </div>
   <div class="card fixed-total-card">
     <div class="fixed-total-lbl">Total fixos / mês</div>
     <div class="fixed-total-val" id="fixed-total">$ 0,00</div>
@@ -300,7 +310,10 @@
 
 <!-- ════ CONVERSOR ════ -->
 <section class="page" id="page-conversor">
-  <div class="sec-title">Conversor de moedas</div>
+  <div class="page-header-row">
+    <span class="page-header-title">Conversor de Moedas</span>
+    <button class="tab-help-btn" onclick="showTabHelp('conversor')">?</button>
+  </div>
   <div class="card conv-card">
     <div class="conv-row">
       <div class="conv-field">
@@ -344,6 +357,10 @@
 
 <!-- ════ AJUSTES ════ -->
 <section class="page" id="page-ajustes">
+  <div class="page-header-row">
+    <span class="page-header-title">Ajustes</span>
+    <button class="tab-help-btn" onclick="showTabHelp('ajustes')">?</button>
+  </div>
   <div class="sec-title">Personalização</div>
   <div class="card settings-list">
     <button class="settings-row" onclick="openCatModal()"><span>Gerenciar categorias de gastos</span><span class="chev">›</span></button>
@@ -494,6 +511,16 @@
   </div>
 </div>
 
+<div class="overlay" id="modal-account">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Conta</div>
+    <div id="account-email" style="font-size:13px;color:var(--text2);margin-bottom:18px"></div>
+    <button class="btn btn-secondary" style="margin-bottom:10px" onclick="switchAccount()">Trocar conta Google</button>
+    <button class="btn btn-secondary" style="color:#ff5a72;border-color:rgba(255,90,114,.2)" onclick="auth.signOut();closeOverlay('modal-account')">Sair da conta</button>
+  </div>
+</div>
+
 <div class="overlay" id="modal-budget">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -511,7 +538,7 @@
   </div>
 </div>
 
-<script src="app.js?v=8"></script>
+<script src="app.js?v=9"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
