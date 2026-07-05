@@ -301,6 +301,32 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .s2s-total{display:flex;justify-content:space-between;align-items:center;padding:12px 0 2px;border-top:1px solid rgba(255,255,255,0.06);margin-top:4px}
 .s2s-total-lbl{font-size:13px;font-weight:800;color:var(--text)}
 
+/* ── Serviços detalhados ── */
+.iitems-section{margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.06)}
+.iitems-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.iitems-title{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text3)}
+.iitems-add-btn{
+  background:rgba(255,184,0,.12);border:1px solid rgba(255,184,0,.25);
+  border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;
+  color:var(--gold);cursor:pointer;
+}
+.iitem-form{background:rgba(255,255,255,.03);border-radius:12px;padding:12px;margin-bottom:10px}
+.iitem{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.05)}
+.iitem:last-child{border-bottom:none}
+.iitem-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.iitem-status.paid{background:#00dc82}
+.iitem-status.pending{background:#ffb800}
+.iitem-info{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
+.iitem-note{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.iitem-plat{font-size:11px;font-weight:600}
+.iitem-amt{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap}
+.iitem-empty{font-size:12px;color:var(--text3);text-align:center;padding:10px 0}
+.iitem-pending-total{
+  font-size:12px;font-weight:700;color:#ffb800;
+  background:rgba(255,184,0,.08);border-radius:8px;
+  padding:7px 10px;margin-top:8px;text-align:center;
+}
+
 /* ── Conversor ── */
 .conv-card{display:flex;flex-direction:column;gap:14px}
 .conv-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}

@@ -135,11 +135,21 @@ function defaultData() {
     reservaHistory: [],
     goals: [],
     weeklyGoal: 0,
+    incomeItems: [],
   };
 }
 
 let D = (() => {
-  try { const s = localStorage.getItem('gdcash_v1'); if(s) { const p=JSON.parse(s); if(!p.goals) p.goals=[]; if(!p.weeklyGoal) p.weeklyGoal=0; return p; } } catch(e){}
+  try {
+    const s = localStorage.getItem('gdcash_v1');
+    if(s) {
+      const p=JSON.parse(s);
+      if(!p.goals)       p.goals=[];
+      if(!p.weeklyGoal)  p.weeklyGoal=0;
+      if(!p.incomeItems) p.incomeItems=[];
+      return p;
+    }
+  } catch(e){}
   return defaultData();
 })();
 
@@ -221,8 +231,20 @@ function changeWeek(dir) { weekOffset+=dir; selDayIdx=0; renderSemana(); }
 // ══════════════════════════════════════════
 function getDayIncome(date)       { return D.dailyIncome[date]||{}; }
 function setDayIncome(date,pid,v) { if(!D.dailyIncome[date])D.dailyIncome[date]={}; D.dailyIncome[date][pid]=parseFloat(v)||0; save(); }
-function sumDayIncome(date)       { const i=getDayIncome(date); return D.platforms.reduce((s,p)=>s+(i[p.id]||0),0); }
-function sumPlatWeek(pid,off=0)   { return weekDates(off).reduce((s,d)=>{const i=getDayIncome(d);return s+(i[pid]||0);},0); }
+function paidItemsForDate(date)   { return (D.incomeItems||[]).filter(it=>it.date===date&&it.status==='paid'); }
+function sumDayIncome(date)       {
+  const i=getDayIncome(date);
+  const fromQuick=D.platforms.reduce((s,p)=>s+(i[p.id]||0),0);
+  const fromItems=paidItemsForDate(date).reduce((s,it)=>s+it.amount,0);
+  return fromQuick+fromItems;
+}
+function sumPlatWeek(pid,off=0)   {
+  return weekDates(off).reduce((s,d)=>{
+    const i=getDayIncome(d);
+    const fromItems=(D.incomeItems||[]).filter(it=>it.date===d&&it.platformId===pid&&it.status==='paid').reduce((a,it)=>a+it.amount,0);
+    return s+(i[pid]||0)+fromItems;
+  },0);
+}
 function sumWeekIncome(off=0)     { return D.platforms.reduce((s,p)=>s+sumPlatWeek(p.id,off),0); }
 function sumWeekExpenses(off=0)   { const dates=weekDates(off); return D.expenses.filter(e=>dates.includes(e.date)).reduce((s,e)=>s+e.amount,0); }
 function getDayExpenses(date)     { return D.expenses.filter(e=>e.date===date); }
@@ -241,7 +263,14 @@ function sumMonthIncome(off=0) {
   return D.platforms.reduce((s,p)=>s+dates.reduce((ss,d)=>{const i=getDayIncome(d);return ss+(i[p.id]||0);},0),0);
 }
 function sumMonthExpenses(off=0) { const dates=monthDates(off); return D.expenses.filter(e=>dates.includes(e.date)).reduce((s,e)=>s+e.amount,0); }
-function sumMonthPlat(pid,off=0) { const dates=monthDates(off); return dates.reduce((s,d)=>{const i=getDayIncome(d);return s+(i[pid]||0);},0); }
+function sumMonthPlat(pid,off=0) {
+  const dates=monthDates(off);
+  return dates.reduce((s,d)=>{
+    const i=getDayIncome(d);
+    const fromItems=(D.incomeItems||[]).filter(it=>it.date===d&&it.platformId===pid&&it.status==='paid').reduce((a,it)=>a+it.amount,0);
+    return s+(i[pid]||0)+fromItems;
+  },0);
+}
 function sumMonthReserva(off=0) {
   const dates=new Set(monthDates(off));
   return D.reservaHistory.filter(h=>dates.has(h.date)).reduce((s,h)=>s+(h.type==='dep'?h.amount:-h.amount),0);
@@ -407,6 +436,8 @@ function renderDayDetail() {
       <button class="exp-del" onclick="deleteExpense('${e.id}')">✕</button>
     </div>`).join('');
 
+  renderIncomeItems(date);
+
   const dayInc=sumDayIncome(date), dayExp=sumDayExpenses(date), dayBal=dayInc-dayExp;
   const rv=document.getElementById('result-val');
   rv.textContent=R(dayBal); rv.className='result-val '+(dayBal>=0?'pos':'neg');
@@ -414,6 +445,67 @@ function renderDayDetail() {
   const addSec=document.getElementById('add-exp-section');
   addSec.style.opacity=isOff?'0.4':'1';
   addSec.style.pointerEvents=isOff?'none':'auto';
+}
+
+function renderIncomeItems(date) {
+  const items = (D.incomeItems||[]).filter(it=>it.date===date);
+  const paid    = items.filter(it=>it.status==='paid');
+  const pending = items.filter(it=>it.status==='pending');
+  const platMap = Object.fromEntries(D.platforms.map(p=>[p.id,p]));
+
+  const pendingTotal = pending.reduce((s,it)=>s+it.amount,0);
+
+  const itemRow = it => `
+    <div class="iitem">
+      <span class="iitem-status ${it.status==='paid'?'paid':'pending'}"></span>
+      <div class="iitem-info">
+        <span class="iitem-note">${it.note||platMap[it.platformId]?.name||'Receita'}</span>
+        <span class="iitem-plat" style="color:${platMap[it.platformId]?.color||'#888'}">${platMap[it.platformId]?.name||''}</span>
+      </div>
+      <span class="iitem-amt">${R(it.amount)}</span>
+      <button class="exp-del" onclick="deleteIncomeItem('${it.id}')">✕</button>
+    </div>`;
+
+  document.getElementById('income-items-list').innerHTML =
+    [...paid,...pending].map(itemRow).join('') ||
+    '<div class="iitem-empty">Nenhum serviço detalhado ainda</div>';
+
+  const pendEl = document.getElementById('income-pending-total');
+  if(pendingTotal>0){
+    pendEl.style.display='';
+    pendEl.textContent=`A receber: ${R(pendingTotal)}`;
+  } else {
+    pendEl.style.display='none';
+  }
+}
+
+function addIncomeItem() {
+  const date = selDate();
+  const pid  = document.getElementById('ii-plat').value;
+  const amt  = parseFloat(document.getElementById('ii-amt').value);
+  const note = document.getElementById('ii-note').value.trim();
+  const status = document.getElementById('ii-status').value;
+  if(!amt||amt<=0){ alert('Informe um valor.'); return; }
+  if(!D.incomeItems) D.incomeItems=[];
+  D.incomeItems.push({id:uid(),date,platformId:pid,amount:amt,note,status});
+  document.getElementById('ii-amt').value='';
+  document.getElementById('ii-note').value='';
+  document.getElementById('income-add-form').style.display='none';
+  save(); renderSemana();
+}
+
+function deleteIncomeItem(id) {
+  D.incomeItems=(D.incomeItems||[]).filter(it=>it.id!==id);
+  save(); renderSemana();
+}
+
+function toggleIncomeForm() {
+  const f=document.getElementById('income-add-form');
+  f.style.display = f.style.display==='none'?'':'none';
+  if(f.style.display!=='none'){
+    const sel=document.getElementById('ii-plat');
+    sel.innerHTML=D.platforms.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
+  }
 }
 
 function toggleFolga() {
