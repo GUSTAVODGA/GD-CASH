@@ -1338,6 +1338,203 @@ function swapCurrencies() {
 }
 
 // ══════════════════════════════════════════
+// DEMO MODE
+// ══════════════════════════════════════════
+let DEMO_MODE = false;
+let _realD = null;
+
+function buildDemoData() {
+  const w = weekDates(0);
+  const prev = weekDates(-1);
+  const now = new Date();
+  const m = (off) => {
+    const d = new Date(now.getFullYear(), now.getMonth() + off, 1);
+    const days = [];
+    const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    for (let i = 1; i <= last; i++) {
+      const dd = new Date(d.getFullYear(), d.getMonth(), i);
+      days.push(dateStr(dd));
+    }
+    return days;
+  };
+
+  const inc = {};
+  // Esta semana
+  inc[w[0]] = { d1: 185, d2: 90 };
+  inc[w[1]] = { d1: 210, d2: 140 };
+  inc[w[2]] = { d1: 170, d3: 500 };
+  inc[w[3]] = { d1: 195, d2: 75 };
+  inc[w[4]] = { d1: 240, d2: 60 };
+  // Semana passada
+  inc[prev[0]] = { d1: 160, d2: 95 };
+  inc[prev[1]] = { d1: 230 };
+  inc[prev[2]] = { d1: 175, d3: 350 };
+  inc[prev[3]] = { d1: 200, d2: 110 };
+  inc[prev[4]] = { d1: 185 };
+  inc[prev[5]] = { d1: 90 };
+
+  // Meses anteriores
+  const mkInc = (days, base) => {
+    days.forEach((d, i) => {
+      if (i % 7 === 6) return;
+      const r = base + (Math.sin(i * 1.7) * base * 0.3);
+      if (r > 50) inc[d] = { d1: Math.round(r * 0.6), d2: Math.round(r * 0.25), d3: i % 14 === 0 ? Math.round(r * 0.5) : 0 };
+    });
+  };
+  mkInc(m(-1), 200); mkInc(m(-2), 185); mkInc(m(-3), 215); mkInc(m(-4), 170); mkInc(m(-5), 195);
+
+  const exps = [];
+  const addExp = (date, cat, amt, desc) => exps.push({ id: uid(), date, category: cat, amount: amt, description: desc });
+  // Esta semana
+  addExp(w[0], 'Gasolina', 85, 'Shell');
+  addExp(w[1], 'Alimentação', 38, 'Almoço');
+  addExp(w[2], 'Gasolina', 95, 'Posto BR');
+  addExp(w[3], 'Serviços', 19.90, 'Spotify');
+  addExp(w[4], 'Alimentação', 55, 'Mercado');
+  // Semana passada
+  addExp(prev[1], 'Gasolina', 90, 'Ipiranga');
+  addExp(prev[2], 'Lazer', 65, 'Cinema');
+  addExp(prev[3], 'Alimentação', 42, 'iFood');
+  addExp(prev[4], 'Saúde', 80, 'Farmácia');
+  // Meses anteriores
+  const addMonthExp = (days) => {
+    addExp(days[3],  'Gasolina',    320, 'Abastecimento');
+    addExp(days[5],  'Moradia',     900, 'Aluguel');
+    addExp(days[8],  'Alimentação', 280, 'Supermercado');
+    addExp(days[10], 'Serviços',     89.90, 'Internet');
+    addExp(days[12], 'Lazer',        120, 'Sair com amigos');
+    addExp(days[15], 'Gasolina',     90, 'Gasolina');
+    addExp(days[18], 'Saúde',        150, 'Consulta');
+    addExp(days[20], 'Alimentação',   95, 'Restaurante');
+    addExp(days[22], 'Transporte',    48, 'Uber');
+  };
+  addMonthExp(m(-1)); addMonthExp(m(-2)); addMonthExp(m(-3)); addMonthExp(m(-4)); addMonthExp(m(-5));
+
+  return {
+    platforms: [
+      { id:'d1', name:'Uber Eats',  color:'#00e6a0' },
+      { id:'d2', name:'iFood',      color:'#ffb800' },
+      { id:'d3', name:'Freelance',  color:'#3ec6ff' },
+    ],
+    dailyIncome: inc,
+    daysOff: [w[5], w[6]],
+    expenses: exps,
+    expCats: ['Gasolina','Alimentação','Moradia','Saúde','Lazer','Transporte','Serviços','Outros'],
+    fixedExpenses: [
+      { id:'fx1', name:'Aluguel',  amount:900,  category:'Moradia',   day:5  },
+      { id:'fx2', name:'Internet', amount:89.90, category:'Serviços', day:10 },
+      { id:'fx3', name:'Seguro moto', amount:120, category:'Serviços', day:15 },
+    ],
+    emergency: { target:10000, current:3200 },
+    reservaHistory: [
+      { id:'rh1', type:'dep', amount:500, note:'Salário extra',  date: prev[0] },
+      { id:'rh2', type:'dep', amount:300, note:'Freela',          date: w[0]   },
+    ],
+    goals: [
+      { id:'gd1', name:'iPhone 16 Pro', emoji:'📱', target:8000, saved:2400, deadline:'2026-12-31', note:'', lastNotif:'' },
+      { id:'gd2', name:'Viagem praia',   emoji:'🏖️', target:3000, saved:1200, deadline:'2026-10-15', note:'', lastNotif:'' },
+    ],
+    weeklyGoal: 1500,
+    catBudgets: { 'Gasolina': 400, 'Alimentação': 300 },
+    incomeItems: [],
+  };
+}
+
+function startDemo() {
+  DEMO_MODE = true;
+  _realD = D;
+  D = buildDemoData();
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('demo-banner').style.display = 'flex';
+  document.getElementById('curr-chip').textContent = currSym;
+  renderSemana();
+  switchTab('semana');
+  setTimeout(startTour, 500);
+}
+
+function exitDemo() {
+  DEMO_MODE = false;
+  D = _realD || defaultData();
+  document.getElementById('demo-banner').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  closeTour();
+}
+
+// ── Tour ──
+const TOUR_STEPS = [
+  { tab:'semana',  anchor:'hero-semana',   title:'Semana em destaque', text:'O líquido da semana — quanto sobrou depois dos gastos. Verde é lucro, vermelho é prejuízo.' },
+  { tab:'semana',  anchor:'days-grid',     title:'Dias da semana',     text:'Toque em qualquer dia para lançar ganhos e gastos. Pontinho laranja = dia com dados registrados.' },
+  { tab:'mes',     anchor:'big-donut-card',title:'Gastos por categoria',text:'No mês você vê exatamente onde o dinheiro foi — o gráfico de rosca mostra cada categoria.' },
+  { tab:'mes',     anchor:'trends-chart',  title:'Histórico 6 meses',  text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês.' },
+  { tab:'reserva', anchor:'res-ring-wrap', title:'Reserva de emergência',text:'Deposite aos poucos e acompanhe quanto falta para a sua meta de reserva.'},
+  { tab:'reserva', anchor:'goals-list',    title:'Suas metas',          text:'Defina metas com prazo e valor — iPhone, viagem, o que for. O app acompanha o progresso.', last:true },
+];
+let tourStep = 0;
+
+function startTour() {
+  tourStep = 0;
+  showTourStep();
+}
+
+function showTourStep() {
+  const s = TOUR_STEPS[tourStep];
+  const overlay = document.getElementById('tour-overlay');
+  const card    = document.getElementById('tour-card');
+  overlay.style.display = 'block';
+
+  document.getElementById('tour-step-lbl').textContent = `${tourStep+1} / ${TOUR_STEPS.length}`;
+  document.getElementById('tour-title').textContent = s.title;
+  document.getElementById('tour-text').textContent  = s.text;
+  document.getElementById('tour-next').textContent  = s.last ? 'Começar de verdade →' : 'Próximo';
+
+  // Switch tab if needed
+  if (s.tab) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.getElementById('page-'+s.tab).classList.add('active');
+    document.querySelector(`[data-tab="${s.tab}"]`)?.classList.add('active');
+    if (s.tab==='semana')  renderSemana();
+    if (s.tab==='mes')     renderMes();
+    if (s.tab==='reserva') renderReserva();
+  }
+
+  // Highlight anchor element
+  const spot = document.getElementById('tour-spotlight');
+  setTimeout(() => {
+    const anchor = s.anchor ? document.getElementById(s.anchor) || document.querySelector('.'+s.anchor) : null;
+    if (anchor) {
+      const rect = anchor.getBoundingClientRect();
+      const pad = 8;
+      spot.style.cssText = `
+        display:block;top:${rect.top + window.scrollY - pad}px;left:${rect.left - pad}px;
+        width:${rect.width + pad*2}px;height:${rect.height + pad*2}px;
+      `;
+      // Scroll anchor into view
+      anchor.scrollIntoView({ behavior:'smooth', block:'center' });
+    } else {
+      spot.style.display = 'none';
+    }
+    // Animate card in
+    card.classList.remove('tour-anim'); void card.offsetWidth; card.classList.add('tour-anim');
+  }, 300);
+}
+
+function nextTourStep() {
+  if (tourStep >= TOUR_STEPS.length - 1) {
+    closeTour();
+    exitDemo();
+    return;
+  }
+  tourStep++;
+  showTourStep();
+}
+
+function closeTour() {
+  document.getElementById('tour-overlay').style.display = 'none';
+  document.getElementById('tour-spotlight').style.display = 'none';
+}
+
+// ══════════════════════════════════════════
 // ONBOARDING
 // ══════════════════════════════════════════
 const OB_STEPS = [
