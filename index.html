@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -71,6 +71,36 @@
 <div id="demo-banner" class="demo-banner" style="display:none">
   <span>🎬 Modo demo</span>
   <button onclick="exitDemo()">Sair</button>
+</div>
+
+<!-- ════ INSTALL BANNER (iOS Safari only) ════ -->
+<div id="install-banner" class="install-banner" style="display:none">
+  <button class="install-close" onclick="dismissInstallBanner()">✕</button>
+  <div class="install-banner-top">
+    <div class="install-banner-badge">GD</div>
+    <div>
+      <div class="install-banner-title">Adicione à tela de início</div>
+      <div class="install-banner-sub">Use o GD CASH como app nativo!</div>
+    </div>
+  </div>
+  <div class="install-steps">
+    <div class="install-step">
+      <div class="install-step-ico">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+      </div>
+      <span>Compartilhar</span>
+    </div>
+    <span class="install-step-arr">›</span>
+    <div class="install-step">
+      <div class="install-step-ico install-step-ico-plus">+</div>
+      <span>Tela de início</span>
+    </div>
+    <span class="install-step-arr">›</span>
+    <div class="install-step">
+      <div class="install-step-ico install-step-ico-ok">✓</div>
+      <span>Adicionar</span>
+    </div>
+  </div>
 </div>
 
 <!-- ════ TOUR ════ -->
@@ -377,6 +407,47 @@
     <button class="settings-row" onclick="document.getElementById('import-file-input').click()"><span>Importar dados (backup)</span><span class="chev">›</span></button>
     <input type="file" id="import-file-input" accept="application/json" style="display:none" onchange="importData(event)">
   </div>
+
+  <div class="sec-title" id="install-guide-section" style="display:none">Instalar como app</div>
+  <div class="card install-guide-card" id="install-guide-card" style="display:none">
+    <div class="ig-header">
+      <span class="ig-header-icon">📲</span>
+      <div>
+        <div class="ig-title">Adicionar à tela de início</div>
+        <div class="ig-sub">Acesse o GD CASH direto do iPhone, sem abrir o Safari</div>
+      </div>
+    </div>
+    <div class="ig-steps">
+      <div class="ig-step">
+        <div class="ig-step-num">1</div>
+        <div class="ig-step-body">
+          <div class="ig-step-title">Abra no Safari</div>
+          <div class="ig-step-text">O app precisa estar aberto no Safari do iPhone (não no Chrome ou outro navegador)</div>
+        </div>
+      </div>
+      <div class="ig-step">
+        <div class="ig-step-num">2</div>
+        <div class="ig-step-body">
+          <div class="ig-step-title">Toque em Compartilhar <svg style="vertical-align:middle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></div>
+          <div class="ig-step-text">Ícone no centro da barra inferior do Safari</div>
+        </div>
+      </div>
+      <div class="ig-step">
+        <div class="ig-step-num">3</div>
+        <div class="ig-step-body">
+          <div class="ig-step-title">Toque em "Adicionar à Tela de Início"</div>
+          <div class="ig-step-text">Role a lista de opções para baixo até encontrar</div>
+        </div>
+      </div>
+      <div class="ig-step">
+        <div class="ig-step-num">4</div>
+        <div class="ig-step-body">
+          <div class="ig-step-title">Toque em "Adicionar" no canto superior</div>
+          <div class="ig-step-text">Pronto! O ícone do GD CASH aparece na sua tela inicial</div>
+        </div>
+      </div>
+    </div>
+  </div>
 </section>
 
 </main>
@@ -563,7 +634,7 @@
   </div>
 </div>
 
-<script src="app.js?v=10"></script>
+<script src="app.js?v=11"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

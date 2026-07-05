@@ -52,6 +52,7 @@ function initFirebase() {
       renderSemana();
       checkGoalNotifications();
       checkOnboarding();
+      checkInstallBanner();
     } else {
       currentUser = null;
       loginScreen.style.display = 'flex';
@@ -88,6 +89,37 @@ function openAccountMenu() {
   avatar.src = currentUser?.photoURL || '';
   avatar.style.display = currentUser?.photoURL ? '' : 'none';
   openOverlay('modal-account');
+}
+
+// ══════════════════════════════════════════
+// INSTALL BANNER (iOS Safari only)
+// ══════════════════════════════════════════
+function checkInstallBanner() {
+  const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isSafari = /safari/i.test(navigator.userAgent) && !/chrome|crios|fxios/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone === true;
+  const dismissed = localStorage.getItem('gdcash_install_dismissed');
+  if (isIOS && isSafari && !isStandalone && !dismissed) {
+    const el = document.getElementById('install-banner');
+    if (el) { el.style.display = ''; }
+  }
+  // Show Ajustes install guide if not standalone
+  if (!isStandalone) {
+    const sec = document.getElementById('install-guide-section');
+    const card = document.getElementById('install-guide-card');
+    if (sec) sec.style.display = '';
+    if (card) card.style.display = '';
+  }
+}
+
+function dismissInstallBanner() {
+  localStorage.setItem('gdcash_install_dismissed', '1');
+  const el = document.getElementById('install-banner');
+  if (!el) return;
+  el.style.transition = 'opacity .25s, transform .25s';
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(16px)';
+  setTimeout(() => { el.style.display = 'none'; }, 280);
 }
 
 // ══════════════════════════════════════════
