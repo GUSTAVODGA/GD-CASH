@@ -99,16 +99,17 @@ function checkInstallBanner() {
   const isSafari = /safari/i.test(navigator.userAgent) && !/chrome|crios|fxios/i.test(navigator.userAgent);
   const isStandalone = window.navigator.standalone === true;
   const dismissed = localStorage.getItem('gdcash_install_dismissed');
+  // Floating banner: only iOS Safari, not installed, not dismissed
   if (isIOS && isSafari && !isStandalone && !dismissed) {
     const el = document.getElementById('install-banner');
-    if (el) { el.style.display = ''; }
+    if (el) el.style.display = '';
   }
-  // Show Ajustes install guide if not standalone
-  if (!isStandalone) {
+  // Ajustes guide: hide only when already running as installed PWA
+  if (isStandalone) {
     const sec = document.getElementById('install-guide-section');
     const card = document.getElementById('install-guide-card');
-    if (sec) sec.style.display = '';
-    if (card) card.style.display = '';
+    if (sec) sec.style.display = 'none';
+    if (card) card.style.display = 'none';
   }
 }
 
