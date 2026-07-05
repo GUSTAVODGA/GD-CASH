@@ -82,8 +82,11 @@ function switchAccount() {
 }
 
 function openAccountMenu() {
-  const email = currentUser?.email || currentUser?.displayName || 'Conta Google';
-  document.getElementById('account-email').textContent = email;
+  document.getElementById('acct-name').textContent  = currentUser?.displayName || 'Usuário';
+  document.getElementById('acct-email').textContent = currentUser?.email || '';
+  const avatar = document.getElementById('acct-avatar');
+  avatar.src = currentUser?.photoURL || '';
+  avatar.style.display = currentUser?.photoURL ? '' : 'none';
   openOverlay('modal-account');
 }
 

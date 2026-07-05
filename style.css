@@ -541,14 +541,15 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .page-header-title{font-size:14px;font-weight:800;letter-spacing:-.2px}
 
 .tab-help-btn{
-  width:24px;height:24px;border-radius:50%;
-  background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);
-  color:var(--text3);font-size:12px;font-weight:800;cursor:pointer;
+  width:26px;height:26px;border-radius:50%;
+  background:rgba(255,184,0,.1);border:1.5px solid rgba(255,184,0,.35);
+  color:var(--gold);font-size:13px;font-weight:900;cursor:pointer;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  transition:background .15s,color .15s,transform .1s;
+  transition:background .15s,transform .1s;
+  font-family:-apple-system,sans-serif;letter-spacing:0;line-height:1;
 }
-.tab-help-btn:active{transform:scale(.88);background:rgba(255,184,0,.15);color:var(--gold)}
-.nav-row .tab-help-btn{margin-left:4px}
+.tab-help-btn:active{transform:scale(.88);background:rgba(255,184,0,.25)}
+.nav-row .tab-help-btn{margin-left:6px}
 
 .tab-help-card{
   display:flex;align-items:flex-start;gap:12px;
@@ -567,6 +568,35 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
   background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;
   padding:2px 4px;flex-shrink:0;align-self:flex-start;
 }
+
+/* ── Account modal ── */
+.acct-profile{
+  display:flex;align-items:center;gap:14px;
+  padding:4px 0 20px;border-bottom:1px solid rgba(255,255,255,0.07);margin-bottom:14px;
+}
+.acct-avatar{
+  width:52px;height:52px;border-radius:50%;
+  border:2px solid rgba(255,184,0,.35);object-fit:cover;flex-shrink:0;
+}
+.acct-name{font-size:16px;font-weight:800;margin-bottom:3px}
+.acct-email{font-size:12.5px;color:var(--text3)}
+.acct-actions{display:flex;flex-direction:column;gap:8px;margin-bottom:6px}
+.acct-btn{
+  display:flex;align-items:center;gap:12px;width:100%;padding:14px;
+  background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;color:var(--text);font-size:14.5px;font-weight:600;cursor:pointer;
+  text-align:left;transition:background .15s,transform .1s;
+}
+.acct-btn:active{transform:scale(.98);background:rgba(255,255,255,.09)}
+.acct-btn-icon{
+  width:32px;height:32px;border-radius:9px;
+  background:rgba(255,255,255,0.07);display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;color:var(--text2);
+}
+.acct-btn span:nth-child(2){flex:1}
+.acct-btn-chev{color:var(--text3);font-size:16px}
+.acct-btn-danger{color:#ff5a72}
+.acct-btn-danger .acct-btn-icon{background:rgba(255,90,114,.1);color:#ff5a72}
 
 /* ══════════════════════════════════════════
    DEMO MODE
