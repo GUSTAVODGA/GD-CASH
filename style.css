@@ -531,3 +531,70 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 @media (min-width:600px){
   .topbar{padding:14px 24px}
 }
+
+/* ══════════════════════════════════════════
+   ONBOARDING
+   ══════════════════════════════════════════ */
+.ob-overlay{
+  position:fixed;inset:0;z-index:300;background:var(--bg);
+  display:flex;align-items:flex-end;justify-content:center;padding:0 16px 28px;
+}
+.ob-card{
+  width:100%;max-width:400px;position:relative;
+  background:rgba(20,24,36,.95);
+  backdrop-filter:blur(32px);-webkit-backdrop-filter:blur(32px);
+  border:1px solid rgba(255,255,255,0.09);border-radius:28px;
+  padding:48px 28px 28px;text-align:center;
+}
+@keyframes ob-in{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.ob-card.ob-anim{animation:ob-in .28s cubic-bezier(.22,.68,0,1.2) both}
+.ob-icon{font-size:52px;margin-bottom:18px;display:block}
+.ob-title{font-size:20px;font-weight:800;margin-bottom:10px;letter-spacing:-.3px}
+.ob-text{font-size:14px;color:var(--text2);line-height:1.65;margin-bottom:24px}
+.ob-dots{display:flex;justify-content:center;gap:7px;margin-bottom:24px}
+.ob-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.15);transition:all .2s}
+.ob-dot.active{width:22px;border-radius:4px;background:var(--gold)}
+.ob-skip{
+  position:absolute;top:18px;right:20px;
+  background:none;border:none;color:var(--text3);font-size:13px;font-weight:600;cursor:pointer;
+}
+
+/* ══════════════════════════════════════════
+   TRENDS CHART
+   ══════════════════════════════════════════ */
+.trends-legend{
+  display:flex;align-items:center;gap:14px;justify-content:center;
+  margin-top:12px;font-size:12px;color:var(--text2);font-weight:600;
+}
+.trends-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* ══════════════════════════════════════════
+   SHARE BUTTON
+   ══════════════════════════════════════════ */
+.share-month-btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;margin-top:14px;padding:13px;border-radius:14px;border:1px solid rgba(255,255,255,0.1);
+  background:rgba(255,255,255,0.04);color:var(--text2);font-size:14px;font-weight:700;cursor:pointer;
+  transition:background .15s,transform .1s;
+}
+.share-month-btn:active{background:rgba(255,255,255,0.09);transform:scale(.97)}
+
+/* ══════════════════════════════════════════
+   BUDGET BARS
+   ══════════════════════════════════════════ */
+.bud-row{padding:12px 0;border-bottom:1px solid rgba(255,255,255,0.06);position:relative}
+.bud-row:last-child{border-bottom:none}
+.bud-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.bud-cat{font-size:13px;font-weight:700;color:var(--text)}
+.bud-vals{font-size:12.5px}
+.bud-limit{color:var(--text3)}
+.bud-bar-wrap{background:rgba(255,255,255,0.06);border-radius:8px;height:7px;overflow:hidden}
+.bud-bar-fill{height:100%;border-radius:8px;transition:width .6s cubic-bezier(.35,.07,.24,.95)}
+.bud-over{font-size:11px;color:#ff4d6a;margin-top:5px;font-weight:600}
+.bud-del{
+  position:absolute;top:12px;right:0;
+  background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:2px 4px;
+}

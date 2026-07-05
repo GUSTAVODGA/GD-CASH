@@ -51,6 +51,7 @@ function initFirebase() {
       document.getElementById('curr-chip').textContent = currSym;
       renderSemana();
       checkGoalNotifications();
+      checkOnboarding();
     } else {
       currentUser = null;
       loginScreen.style.display = 'flex';
@@ -136,6 +137,7 @@ function defaultData() {
     goals: [],
     weeklyGoal: 0,
     incomeItems: [],
+    catBudgets: {},
   };
 }
 
@@ -147,6 +149,7 @@ let D = (() => {
       if(!p.goals)       p.goals=[];
       if(!p.weeklyGoal)  p.weeklyGoal=0;
       if(!p.incomeItems) p.incomeItems=[];
+      if(!p.catBudgets)  p.catBudgets={};
       return p;
     }
   } catch(e){}
@@ -661,6 +664,8 @@ function renderMes() {
       </span>
     </div>`;
   document.getElementById('s2s-bars').innerHTML=weeksHTML+totalHTML;
+  renderTrendsChart();
+  renderCatBudgets();
 }
 function changeMonth(dir) { monthOffset+=dir; renderMes(); }
 
@@ -1273,6 +1278,7 @@ function switchTab(tab) {
   if(tab==='reserva')   renderReserva();
   if(tab==='fixos')     renderFixos();
   if(tab==='conversor') loadConversorRates();
+  if(tab==='ajustes')   renderBudgetSettings();
   // stagger cards
   page.classList.add('tab-fresh');
   page.querySelectorAll('.card,.hero-card').forEach((el,i)=>{
@@ -1329,6 +1335,270 @@ function swapCurrencies() {
   fromEl.value = toEl.value;
   toEl.value   = tmp;
   convertCurrency();
+}
+
+// ══════════════════════════════════════════
+// ONBOARDING
+// ══════════════════════════════════════════
+const OB_STEPS = [
+  { icon:'💰', title:'Bem-vindo ao GD CASH', text:'Seu controle financeiro pessoal. Simples, bonito e gratuito para sempre.', cta:'Próximo' },
+  { icon:'📥', title:'Lance seus ganhos', text:'Na aba Semana, registre o quanto ganhou em cada fonte — delivery, freela, cliente, o que for.', cta:'Próximo' },
+  { icon:'🎯', title:'Acompanhe e cresça', text:'Veja gastos por categoria, monte sua reserva de emergência e defina metas. Tudo em um lugar.', cta:'Começar agora' },
+];
+let obStep = 0;
+
+function checkOnboarding() {
+  if (!localStorage.getItem('gdcash_onboarded')) {
+    obStep = 0;
+    renderObStep();
+    document.getElementById('onboarding').style.display = 'flex';
+  }
+}
+
+function renderObStep() {
+  const s = OB_STEPS[obStep];
+  document.getElementById('ob-icon').textContent = s.icon;
+  document.getElementById('ob-title').textContent = s.title;
+  document.getElementById('ob-text').textContent  = s.text;
+  document.getElementById('ob-cta').textContent   = s.cta;
+  document.getElementById('ob-dots').innerHTML = OB_STEPS.map((_,i) =>
+    `<div class="ob-dot${i===obStep?' active':''}"></div>`).join('');
+  const card = document.getElementById('ob-card');
+  card.classList.remove('ob-anim'); void card.offsetWidth; card.classList.add('ob-anim');
+}
+
+function nextOnboardStep() {
+  obStep++;
+  if (obStep >= OB_STEPS.length) { finishOnboarding(); return; }
+  renderObStep();
+}
+
+function finishOnboarding() {
+  localStorage.setItem('gdcash_onboarded','1');
+  const el = document.getElementById('onboarding');
+  el.style.opacity = '0';
+  el.style.transition = 'opacity .3s';
+  setTimeout(() => { el.style.display = 'none'; el.style.opacity = ''; el.style.transition = ''; }, 320);
+}
+
+// ══════════════════════════════════════════
+// TRENDS CHART (últimos 6 meses)
+// ══════════════════════════════════════════
+function renderTrendsChart() {
+  const container = document.getElementById('trends-chart');
+  if (!container) return;
+  const now = new Date();
+  const months = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const off = (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
+    months.push({ label: MONTH_NAMES[d.getMonth()], inc: sumMonthIncome(off), exp: sumMonthExpenses(off) });
+  }
+  const maxVal = Math.max(1, ...months.flatMap(m => [m.inc, m.exp]));
+  const bW = 18, gap = 5, gW = bW * 2 + gap, gGap = 14;
+  const totalW = months.length * (gW + gGap) - gGap;
+  const chartH = 110, labelH = 20, H = chartH + labelH;
+  let bars = '';
+  months.forEach((m, i) => {
+    const x = i * (gW + gGap);
+    const ih = m.inc > 0 ? Math.max(4, (m.inc / maxVal) * chartH) : 4;
+    const eh = m.exp > 0 ? Math.max(4, (m.exp / maxVal) * chartH) : 4;
+    const cx = x + gW / 2;
+    const hasData = m.inc > 0 || m.exp > 0;
+    bars += `
+      <rect x="${x}" y="${chartH - ih}" width="${bW}" height="${ih}" rx="5"
+        fill="#00e6a0" opacity="${m.inc > 0 ? 1 : 0.15}"
+        style="transition:height .5s ${i*0.06}s,y .5s ${i*0.06}s"/>
+      <rect x="${x + bW + gap}" y="${chartH - eh}" width="${bW}" height="${eh}" rx="5"
+        fill="#ff4d6a" opacity="${m.exp > 0 ? 1 : 0.15}"
+        style="transition:height .5s ${i*0.06}s,y .5s ${i*0.06}s"/>
+      <text x="${cx}" y="${H - 3}" text-anchor="middle"
+        fill="${hasData ? 'rgba(245,246,248,.55)' : 'rgba(245,246,248,.2)'}"
+        font-size="9.5" font-family="-apple-system,sans-serif" font-weight="700">${m.label}</text>
+    `;
+  });
+  container.innerHTML = `
+    <svg viewBox="0 0 ${totalW} ${H}" style="width:100%;overflow:visible;display:block">${bars}</svg>
+    <div class="trends-legend">
+      <span class="trends-dot" style="background:#00e6a0"></span><span>Receita</span>
+      <span class="trends-dot" style="background:#ff4d6a"></span><span>Gastos</span>
+    </div>`;
+}
+
+// ══════════════════════════════════════════
+// COMPARTILHAR RESUMO MENSAL
+// ══════════════════════════════════════════
+function shareMonthReport() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080; canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+  const inc = sumMonthIncome(monthOffset), exp = sumMonthExpenses(monthOffset), liq = inc - exp;
+  const mLabel = fmtMonthYear(monthOffset);
+
+  // BG
+  ctx.fillStyle = '#07080d'; ctx.fillRect(0, 0, 1080, 1080);
+  const grad = ctx.createRadialGradient(540, 0, 0, 540, 0, 700);
+  grad.addColorStop(0, 'rgba(255,184,0,0.13)'); grad.addColorStop(1, 'rgba(255,184,0,0)');
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, 1080, 1080);
+
+  // Badge GD
+  ctx.beginPath();
+  const bx=80, by=80, bw=110, bh=110, br=26;
+  ctx.moveTo(bx+br,by); ctx.lineTo(bx+bw-br,by); ctx.arcTo(bx+bw,by,bx+bw,by+br,br);
+  ctx.lineTo(bx+bw,by+bh-br); ctx.arcTo(bx+bw,by+bh,bx+bw-br,by+bh,br);
+  ctx.lineTo(bx+br,by+bh); ctx.arcTo(bx,by+bh,bx,by+bh-br,br);
+  ctx.lineTo(bx,by+br); ctx.arcTo(bx,by,bx+br,by,br); ctx.closePath();
+  const bg = ctx.createLinearGradient(80,80,190,190);
+  bg.addColorStop(0,'#ffd633'); bg.addColorStop(1,'#e09400');
+  ctx.fillStyle=bg; ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.font='bold 50px system-ui,sans-serif';
+  ctx.textAlign='center'; ctx.fillText('GD',135,150);
+
+  // CASH
+  ctx.fillStyle='#f5f6f8'; ctx.font='bold 56px system-ui,sans-serif';
+  ctx.textAlign='left'; ctx.fillText('CASH',212,151);
+
+  // Month
+  ctx.fillStyle='rgba(245,246,248,0.38)'; ctx.font='500 30px system-ui,sans-serif';
+  ctx.fillText(mLabel,80,240);
+
+  // Main value
+  ctx.fillStyle = liq>=0 ? '#00e6a0' : '#ff4d6a';
+  ctx.font = 'bold 100px system-ui,sans-serif';
+  ctx.fillText(R(liq), 80, 390);
+  ctx.fillStyle='rgba(245,246,248,0.4)'; ctx.font='500 28px system-ui,sans-serif';
+  ctx.fillText('Líquido do mês',80,435);
+
+  // Divider
+  ctx.fillStyle='rgba(255,255,255,0.07)'; ctx.fillRect(80,470,920,1);
+
+  // Inc / Exp
+  ctx.fillStyle='#00e6a0'; ctx.font='bold 48px system-ui,sans-serif';
+  ctx.fillText('↑ '+R(inc),80,548);
+  ctx.fillStyle='rgba(245,246,248,0.35)'; ctx.font='500 24px system-ui,sans-serif';
+  ctx.fillText('Receita',80,583);
+
+  ctx.fillStyle='#ff4d6a'; ctx.font='bold 48px system-ui,sans-serif';
+  ctx.fillText('↓ '+R(exp),580,548);
+  ctx.fillStyle='rgba(245,246,248,0.35)'; ctx.font='500 24px system-ui,sans-serif';
+  ctx.fillText('Gastos',580,583);
+
+  // Top cats
+  const dates = monthDates(monthOffset);
+  const catMap = {};
+  D.expenses.filter(e=>dates.includes(e.date)).forEach(e=>{catMap[e.category]=(catMap[e.category]||0)+e.amount;});
+  const topCats = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  if (topCats.length) {
+    ctx.fillStyle='rgba(255,255,255,0.07)'; ctx.fillRect(80,618,920,1);
+    ctx.fillStyle='rgba(245,246,248,0.35)'; ctx.font='500 24px system-ui,sans-serif';
+    ctx.fillText('Top categorias',80,664);
+    topCats.forEach(([cat,val],i) => {
+      ctx.fillStyle = PALETTE[i];
+      ctx.font = 'bold 36px system-ui,sans-serif';
+      ctx.fillText(`${cat}  ${R(val)}`, 80, 714+i*60);
+    });
+  }
+
+  // Footer
+  ctx.fillStyle='rgba(245,246,248,0.18)'; ctx.font='500 24px system-ui,sans-serif';
+  ctx.fillText('GD CASH · gustavodga.github.io/GD-CASH/',80,1042);
+
+  canvas.toBlob(blob => {
+    const file = new File([blob],'gdcash-resumo.png',{type:'image/png'});
+    if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
+      navigator.share({files:[file], title:`GD CASH — ${mLabel}`}).catch(()=>{});
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download=`gdcash-${mLabel}.png`; a.click();
+      URL.revokeObjectURL(url);
+    }
+  }, 'image/png');
+}
+
+// ══════════════════════════════════════════
+// ORÇAMENTO POR CATEGORIA
+// ══════════════════════════════════════════
+function renderCatBudgets() {
+  const el = document.getElementById('cat-budget-bars');
+  if (!el) return;
+  const budgets = D.catBudgets || {};
+  const hasBudgets = Object.keys(budgets).length > 0;
+  const section = document.getElementById('cat-budget-section');
+
+  if (!hasBudgets) {
+    if (section) section.style.display = 'none';
+    return;
+  }
+  if (section) section.style.display = '';
+
+  const dates = monthDates(monthOffset);
+  const catMap = {};
+  D.expenses.filter(e=>dates.includes(e.date)).forEach(e=>{catMap[e.category]=(catMap[e.category]||0)+e.amount;});
+
+  el.innerHTML = Object.entries(budgets).map(([cat, limit]) => {
+    const spent = catMap[cat] || 0;
+    const pct = Math.min(100, (spent / limit) * 100);
+    const over = spent > limit;
+    const color = over ? '#ff4d6a' : pct > 75 ? '#ffb800' : '#00e6a0';
+    return `
+      <div class="bud-row">
+        <div class="bud-top">
+          <span class="bud-cat">${cat}</span>
+          <span class="bud-vals">
+            <span style="color:${color};font-weight:700">${R(spent)}</span>
+            <span class="bud-limit"> / ${R(limit)}</span>
+          </span>
+        </div>
+        <div class="bud-bar-wrap">
+          <div class="bud-bar-fill" style="width:${pct}%;background:${color};box-shadow:0 0 8px ${color}66"></div>
+        </div>
+        ${over ? `<div class="bud-over">⚠️ Limite ultrapassado em ${R(spent-limit)}</div>` : ''}
+        <button class="bud-del" onclick="deleteCatBudget('${cat}')">✕</button>
+      </div>`;
+  }).join('');
+}
+
+function renderBudgetSettings() {
+  const el = document.getElementById('budget-settings-list');
+  if (!el) return;
+  const budgets = D.catBudgets || {};
+  if (!Object.keys(budgets).length) {
+    el.innerHTML = '<div class="empty-state" style="padding:14px 0">Nenhum limite definido ainda</div>';
+    return;
+  }
+  el.innerHTML = Object.entries(budgets).map(([cat, limit]) =>
+    `<div class="settings-row">
+       <span>${cat}</span>
+       <span style="display:flex;align-items:center;gap:10px">
+         <span style="color:var(--gold);font-weight:700">${R(limit)}</span>
+         <button onclick="deleteCatBudget('${cat}')" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:0">✕</button>
+       </span>
+     </div>`).join('');
+}
+
+function openBudgetModal() {
+  const sel = document.getElementById('budget-cat-sel');
+  sel.innerHTML = D.expCats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  document.getElementById('budget-limit-val').value = '';
+  openOverlay('modal-budget');
+}
+
+function saveCatBudget() {
+  const cat = document.getElementById('budget-cat-sel').value;
+  const limit = parseFloat(document.getElementById('budget-limit-val').value);
+  if (!limit || limit <= 0) { alert('Informe um valor válido.'); return; }
+  if (!D.catBudgets) D.catBudgets = {};
+  D.catBudgets[cat] = limit;
+  save();
+  closeOverlay('modal-budget');
+  renderBudgetSettings();
+}
+
+function deleteCatBudget(cat) {
+  delete D.catBudgets[cat];
+  save();
+  renderBudgetSettings();
+  renderCatBudgets();
 }
 
 // ══════════════════════════════════════════
