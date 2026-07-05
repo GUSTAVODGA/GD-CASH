@@ -149,7 +149,12 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
   position:relative;overflow:hidden;
   box-shadow:0 24px 64px rgba(0,0,0,.55),0 0 50px rgba(0,230,160,.07);
 }
-.hero-card.neg{--c1:var(--red-d);--c2:var(--orange);box-shadow:0 24px 64px rgba(0,0,0,.55),0 0 50px rgba(255,77,106,.09)}
+.hero-card.neg{
+  background:rgba(16,17,24,0.9);
+  border:1px solid rgba(255,77,106,.18);
+  box-shadow:0 24px 64px rgba(0,0,0,.55);
+}
+.hero-card.neg .hero-val{color:#ff5a72}
 .hero-lbl{font-size:11.5px;font-weight:700;opacity:.85;text-transform:uppercase;letter-spacing:.06em}
 .hero-val{font-size:32px;font-weight:800;margin:6px 0 14px;letter-spacing:-.5px}
 .hero-chips{display:flex;gap:8px;flex-wrap:wrap}
@@ -237,11 +242,17 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .btn-folga.on{background:linear-gradient(135deg,var(--gold),var(--orange));color:#1a0f00;border-color:transparent}
 
 /* ── Alerts ── */
-.alerts-box{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
-.alert-item{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;font-size:12.5px;line-height:1.4}
-.a-bad{background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.15);color:#ffb1bd}
-.a-warn{background:rgba(255,184,0,.1);border:1px solid rgba(255,184,0,.15);color:#ffdb8a}
-.a-ok{background:rgba(0,230,160,.1);border:1px solid rgba(0,230,160,.15);color:#9bf3d4}
+.alerts-box{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.alert-item{
+  display:flex;gap:8px;align-items:center;
+  padding:7px 10px;border-radius:8px;
+  font-size:12px;line-height:1.3;
+  background:rgba(255,255,255,.03);
+  border-left:2px solid transparent;
+}
+.a-bad{border-left-color:#ff5a72;color:var(--text2)}
+.a-warn{border-left-color:#ffb800;color:var(--text2)}
+.a-ok{border-left-color:#00dc82;color:var(--text2)}
 .a-info{background:rgba(62,198,255,.1);border:1px solid rgba(62,198,255,.15);color:#aee6ff}
 
 /* ── Reserva ── */
