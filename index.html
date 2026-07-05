@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=3">
+<link rel="stylesheet" href="style.css?v=4">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -206,19 +206,25 @@
     </div>
   </div>
 
+  <!-- Gastos por categoria — grande -->
+  <div class="sec-title">Gastos por categoria</div>
+  <div class="card big-donut-card">
+    <div class="big-donut-wrap">
+      <svg class="big-donut-svg" id="cat-donut" viewBox="0 0 200 200"></svg>
+      <div class="big-donut-center" id="cat-donut-center">
+        <div class="bdc-val" id="cat-donut-total">—</div>
+        <div class="bdc-lbl">total gasto</div>
+      </div>
+    </div>
+    <div class="cat-pills" id="cat-legend"></div>
+  </div>
+
+  <!-- Receita por plataforma -->
   <div class="sec-title">Receita por plataforma</div>
   <div class="card donut-card">
     <div class="donut-row">
       <svg class="donut-svg" id="plat-donut" viewBox="0 0 120 120"></svg>
       <div class="legend" id="plat-legend"></div>
-    </div>
-  </div>
-
-  <div class="sec-title">Gastos por categoria</div>
-  <div class="card donut-card">
-    <div class="donut-row">
-      <svg class="donut-svg" id="cat-donut" viewBox="0 0 120 120"></svg>
-      <div class="legend" id="cat-legend"></div>
     </div>
   </div>
 
@@ -430,6 +436,6 @@
   </div>
 </div>
 
-<script src="app.js?v=3"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>

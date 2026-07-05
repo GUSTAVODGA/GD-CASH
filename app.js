@@ -355,6 +355,40 @@ function renderDonut(svgId, legendId, items) {
     </div>`).join('');
 }
 
+function renderBigDonut(svgId, pillsId, totalElId, items) {
+  const svg    = document.getElementById(svgId);
+  const pills  = document.getElementById(pillsId);
+  const totEl  = document.getElementById(totalElId);
+  const total  = items.reduce((s,i)=>s+i.value,0);
+
+  if(totEl) totEl.textContent = total>0 ? R(total) : '—';
+
+  if(!total) {
+    svg.innerHTML = `<circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="22"/>`;
+    pills.innerHTML = '<div class="empty-state">Nenhum gasto no mês</div>';
+    return;
+  }
+
+  const r=80, cx=100, cy=100, gap=3;
+  const circ=2*Math.PI*r;
+  let offset=0, paths='';
+  items.forEach(it=>{
+    const len=Math.max(0,(it.value/total)*circ - gap);
+    paths+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="22"
+      stroke-dasharray="${len} ${circ-len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"
+      stroke-linecap="round"/>`;
+    offset+=(it.value/total)*circ;
+  });
+  svg.innerHTML = paths;
+
+  pills.innerHTML = items.map(it=>`
+    <div class="cat-pill" style="border-color:${it.color}20;background:${it.color}12">
+      <span class="cat-pill-dot" style="background:${it.color}"></span>
+      <span class="cat-pill-name">${it.label}</span>
+      <span class="cat-pill-val" style="color:${it.color}">${R(it.value)}</span>
+    </div>`).join('');
+}
+
 // ══════════════════════════════════════════
 // RENDER: SEMANA
 // ══════════════════════════════════════════
@@ -544,15 +578,15 @@ function renderMes() {
   document.getElementById('mes-resv').textContent=R(resv);
   document.getElementById('hero-mes').className='hero-card '+(liq>=0?'pos':'neg');
 
-  const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:p.color})).filter(i=>i.value>0);
-  renderDonut('plat-donut','plat-legend',platItems);
-
   const dates=monthDates(monthOffset);
   const mExps=D.expenses.filter(e=>dates.includes(e.date));
   const catMap={};
   mExps.forEach(e=>{ catMap[e.category]=(catMap[e.category]||0)+e.amount; });
   const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,color:PALETTE[i%PALETTE.length]}));
-  renderDonut('cat-donut','cat-legend',catItems);
+  renderBigDonut('cat-donut','cat-legend','cat-donut-total',catItems);
+
+  const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:p.color})).filter(i=>i.value>0);
+  renderDonut('plat-donut','plat-legend',platItems);
 
   const weeks=getMonthWeeks(monthOffset);
   const weekSums=weeks.map(w=>{
