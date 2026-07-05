@@ -386,12 +386,6 @@ function renderSemana() {
 
   renderDayDetail();
   renderWeekGoal();
-  renderAvg5w();
-
-  const alerts=buildAlerts();
-  document.getElementById('alerts-box').innerHTML=alerts.map(a=>`
-    <div class="alert-item a-${a.t}"><span>${a.icon}</span><span>${a.msg}</span></div>`).join('');
-
   populateExpCatSel();
 }
 
