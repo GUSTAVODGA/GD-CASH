@@ -231,21 +231,21 @@ function changeWeek(dir) { weekOffset+=dir; selDayIdx=0; renderSemana(); }
 // ══════════════════════════════════════════
 function getDayIncome(date)       { return D.dailyIncome[date]||{}; }
 function setDayIncome(date,pid,v) { if(!D.dailyIncome[date])D.dailyIncome[date]={}; D.dailyIncome[date][pid]=parseFloat(v)||0; save(); }
-function paidItemsForDate(date)   { return (D.incomeItems||[]).filter(it=>it.date===date&&it.status==='paid'); }
-function sumDayIncome(date)       {
-  const i=getDayIncome(date);
-  const fromQuick=D.platforms.reduce((s,p)=>s+(i[p.id]||0),0);
-  const fromItems=paidItemsForDate(date).reduce((s,it)=>s+it.amount,0);
-  return fromQuick+fromItems;
+// Receita paga de uma plataforma num dia (itens têm prioridade sobre input manual)
+function getDayPlatIncome(date, pid) {
+  const items = (D.incomeItems||[]).filter(it=>it.date===date&&it.platformId===pid);
+  if(items.length>0) return items.filter(it=>it.status==='paid').reduce((s,it)=>s+it.amount,0);
+  return getDayIncome(date)[pid]||0;
 }
-function sumPlatWeek(pid,off=0)   {
-  return weekDates(off).reduce((s,d)=>{
-    const i=getDayIncome(d);
-    const fromItems=(D.incomeItems||[]).filter(it=>it.date===d&&it.platformId===pid&&it.status==='paid').reduce((a,it)=>a+it.amount,0);
-    return s+(i[pid]||0)+fromItems;
-  },0);
+// Total de todos os itens (pagos+pendentes) de uma plataforma num dia — para exibição
+function getDayPlatDisplay(date, pid) {
+  const items = (D.incomeItems||[]).filter(it=>it.date===date&&it.platformId===pid);
+  if(items.length>0) return items.reduce((s,it)=>s+it.amount,0);
+  return getDayIncome(date)[pid]||0;
 }
-function sumWeekIncome(off=0)     { return D.platforms.reduce((s,p)=>s+sumPlatWeek(p.id,off),0); }
+function sumDayIncome(date)   { return D.platforms.reduce((s,p)=>s+getDayPlatIncome(date,p.id),0); }
+function sumPlatWeek(pid,off=0) { return weekDates(off).reduce((s,d)=>s+getDayPlatIncome(d,pid),0); }
+function sumWeekIncome(off=0) { return D.platforms.reduce((s,p)=>s+sumPlatWeek(p.id,off),0); }
 function sumWeekExpenses(off=0)   { const dates=weekDates(off); return D.expenses.filter(e=>dates.includes(e.date)).reduce((s,e)=>s+e.amount,0); }
 function getDayExpenses(date)     { return D.expenses.filter(e=>e.date===date); }
 function sumDayExpenses(date)     { return getDayExpenses(date).reduce((s,e)=>s+e.amount,0); }
@@ -264,12 +264,7 @@ function sumMonthIncome(off=0) {
 }
 function sumMonthExpenses(off=0) { const dates=monthDates(off); return D.expenses.filter(e=>dates.includes(e.date)).reduce((s,e)=>s+e.amount,0); }
 function sumMonthPlat(pid,off=0) {
-  const dates=monthDates(off);
-  return dates.reduce((s,d)=>{
-    const i=getDayIncome(d);
-    const fromItems=(D.incomeItems||[]).filter(it=>it.date===d&&it.platformId===pid&&it.status==='paid').reduce((a,it)=>a+it.amount,0);
-    return s+(i[pid]||0)+fromItems;
-  },0);
+  return monthDates(off).reduce((s,d)=>s+getDayPlatIncome(d,pid),0);
 }
 function sumMonthReserva(off=0) {
   const dates=new Set(monthDates(off));
@@ -413,14 +408,20 @@ function renderDayDetail() {
   const cols=Math.min(D.platforms.length,3);
   const grid=document.getElementById('inc-inputs-grid');
   grid.style.gridTemplateColumns=`repeat(${cols},1fr)`;
-  grid.innerHTML=D.platforms.map(p=>`
+  grid.innerHTML=D.platforms.map(p=>{
+    const hasItems=(D.incomeItems||[]).some(it=>it.date===date&&it.platformId===p.id);
+    const displayVal=getDayPlatDisplay(date,p.id);
+    const val=displayVal>0?displayVal:'';
+    return `
     <div class="inc-inp-wrap">
       <div class="inc-inp-lbl" style="color:${p.color}">${p.name}</div>
       <input class="inc-inp" type="number" min="0" step="0.01" placeholder="0.00"
-        value="${inc[p.id]||''}"
-        onchange="setDayIncome('${date}','${p.id}',this.value);renderDayDetail()"
-        ${isOff?'disabled':''}>
-    </div>`).join('');
+        value="${val}"
+        ${hasItems?'readonly title="Total calculado pelos serviços detalhados"':'onchange="setDayIncome(\''+date+'\',\''+p.id+'\',this.value);renderDayDetail()"'}
+        ${hasItems||isOff?'style="opacity:.55;pointer-events:'+(hasItems?'none':'auto')+'"':''}
+        ${isOff&&!hasItems?'disabled':''}>
+    </div>`;
+  }).join('');
 
   const exps=getDayExpenses(date);
   const emEl=document.getElementById('exp-empty-msg');
