@@ -74,11 +74,6 @@ function signInWithGoogle(forceSelect = false) {
   });
 }
 
-function confirmSignOut() {
-  const action = confirm('O que deseja fazer?\n\nOK = Sair da conta\nCancelar = Ficar logado');
-  if (action) auth.signOut();
-}
-
 function switchAccount() {
   auth.signOut().then(() => signInWithGoogle(true));
 }
@@ -202,6 +197,7 @@ function dismissTabHelp(tab) {
 }
 
 function checkFirstVisit(tab) {
+  if (DEMO_MODE) return;
   if (!localStorage.getItem('gdcash_help_' + tab)) {
     setTimeout(() => showTabHelp(tab), 350);
   }
@@ -399,12 +395,21 @@ function closeFabMenu() {
 function fabAction(type) {
   closeFabMenu();
   setTimeout(() => {
-    if (type === 'reserva') { openResModal('dep'); return; }
+    const goToDay = () => {
+      openDayDetail(selDayIdx);
+      if (type === 'expense') {
+        setTimeout(() => {
+          const sheet = document.querySelector('#modal-day-detail .sheet');
+          const expSec = document.getElementById('add-exp-section');
+          if (sheet && expSec) sheet.scrollTop = expSec.offsetTop - 20;
+        }, 400);
+      }
+    };
     if (!document.getElementById('page-semana')?.classList.contains('active')) {
       switchTab('semana');
-      setTimeout(() => openDayDetail(selDayIdx), 350);
+      setTimeout(goToDay, 350);
     } else {
-      openDayDetail(selDayIdx);
+      goToDay();
     }
   }, 250);
 }
@@ -579,8 +584,7 @@ function monthDates(off=0) {
   return Array.from({length:days},(_,i)=>`${y}-${String(m+1).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`);
 }
 function sumMonthIncome(off=0) {
-  const dates=monthDates(off);
-  return D.platforms.reduce((s,p)=>s+dates.reduce((ss,d)=>{const i=getDayIncome(d);return ss+(i[p.id]||0);},0),0);
+  return monthDates(off).reduce((s,d)=>s+D.platforms.reduce((ss,p)=>ss+getDayPlatIncome(d,p.id),0),0);
 }
 function sumMonthExpenses(off=0) { const dates=monthDates(off); return D.expenses.filter(e=>dates.includes(e.date)).reduce((s,e)=>s+e.amount,0); }
 function sumMonthPlat(pid,off=0) {
@@ -600,49 +604,6 @@ function getMonthWeeks(off=0) {
     weeks.push({start:s,end:e}); cur.setDate(cur.getDate()+7);
   }
   return weeks;
-}
-
-// ══════════════════════════════════════════
-// ALERTS
-// ══════════════════════════════════════════
-function buildAlerts() {
-  const alerts=[];
-  const curInc=sumWeekIncome(weekOffset), curExp=sumWeekExpenses(weekOffset), bal=curInc-curExp;
-  const prevExp=sumWeekExpenses(weekOffset-1);
-  const lastBackup = localStorage.getItem('gdcash_last_backup');
-  if (!lastBackup) {
-    localStorage.setItem('gdcash_last_backup', todayStr());
-  } else {
-    const daysSince = Math.round((new Date()-parseDate(lastBackup))/(1000*60*60*24));
-    if (daysSince >= 30) alerts.push({t:'warn',icon:'💾',msg:`Faz <b>${daysSince} dias</b> sem backup. <u style="cursor:pointer" onclick="exportData()">Toque aqui pra salvar agora</u> e não perder seus dados.`});
-  }
-  if(curInc===0&&curExp===0){alerts.push({t:'info',icon:'📝',msg:'Nenhum dado esta semana. Comece lançando suas receitas!'});return alerts;}
-  if(D.weeklyGoal>0){
-    const wg=D.weeklyGoal, dates=weekDates(weekOffset), now=new Date(); now.setHours(0,0,0,0);
-    const daysLeft=dates.filter(d=>parseDate(d)>now).length;
-    const left=wg-curInc;
-    if(curInc>=wg) alerts.push({t:'ok',icon:'🎯',msg:`Meta da semana atingida! Você fez <b>${R(curInc)}</b> de <b>${R(wg)}</b>. 🎉`});
-    else if(daysLeft>0&&left>0) alerts.push({t:'info',icon:'🎯',msg:`Meta da semana: faltam <b>${R(left)}</b> em ${daysLeft} dia${daysLeft!==1?'s':''}.`});
-  }
-  if(curInc>0&&bal<0) alerts.push({t:'bad',icon:'🔴',msg:`Saldo da semana <b>negativo</b> (${R(bal)}). Gastos acima das receitas.`});
-  if(prevExp>0){const d=((curExp-prevExp)/prevExp)*100;
-    if(d>25) alerts.push({t:'bad',icon:'📈',msg:`Gastos ${Math.round(d)}% acima da semana passada (+${R(curExp-prevExp)}).`});
-    else if(d<-15&&curExp>0) alerts.push({t:'ok',icon:'📉',msg:`Você gastou ${Math.round(Math.abs(d))}% menos que na semana passada. 👏`});
-  }
-  if(curInc===0&&curExp>0) alerts.push({t:'warn',icon:'💡',msg:'Há gastos mas nenhuma receita registrada. Lembre de lançar seus ganhos!'});
-  if(D.emergency.target>0&&(D.emergency.current/D.emergency.target)<0.3)
-    alerts.push({t:'warn',icon:'🛡️',msg:`Reserva em ${Math.round(D.emergency.current/D.emergency.target*100)}% da meta.`});
-  const today=new Date(); today.setHours(0,0,0,0);
-  (D.goals||[]).forEach(g=>{
-    if(g.saved>=g.target) return;
-    const dl=parseDate(g.deadline), daysLeft=Math.round((dl-today)/(1000*60*60*24));
-    if(daysLeft<0||daysLeft>60) return;
-    const pct=g.target>0?Math.round((g.saved/g.target)*100):0;
-    const left=R(g.target-g.saved);
-    if(daysLeft<=7) alerts.push({t:'bad',icon:g.emoji||'🎯',msg:`<b>${g.name}</b>: prazo em ${daysLeft===0?'hoje!':daysLeft+' dia'+(daysLeft!==1?'s':'')+' !'} Faltam <b>${left}</b> (${pct}% completo).`});
-    else alerts.push({t:'warn',icon:g.emoji||'🎯',msg:`<b>${g.name}</b>: ${daysLeft} dias restantes. Faltam ${left} (${pct}% completo).`});
-  });
-  return alerts;
 }
 
 // ══════════════════════════════════════════
@@ -749,8 +710,6 @@ function renderSemana() {
 
   renderWeekGoal();
 }
-
-function selectDay(idx) { selDayIdx=idx; renderSemana(); }
 
 function renderDayDetail() {
   const date=selDate(), isOff=D.daysOff.includes(date);
@@ -1055,134 +1014,6 @@ function saveResMove(type) {
   save(); closeOverlay('modal-res'); renderReserva();
 }
 // ══════════════════════════════════════════
-// QUICK ADD
-// ══════════════════════════════════════════
-let qaType = 'exp';
-
-function openQuickAdd() {
-  qaType = 'exp';
-  document.getElementById('qa-type-exp').classList.add('active');
-  document.getElementById('qa-type-inc').classList.remove('active');
-  document.getElementById('qa-cat-wrap').style.display = '';
-  document.getElementById('qa-plat-wrap').style.display = 'none';
-  document.getElementById('qa-val').value = '';
-  document.getElementById('qa-desc').value = '';
-  document.getElementById('qa-date').value = todayStr();
-  document.getElementById('qa-cat').innerHTML = D.expCats.map(c=>`<option value="${c}">${c}</option>`).join('');
-  openOverlay('modal-quickadd');
-  setTimeout(()=>document.getElementById('qa-val').focus(), 300);
-}
-
-function setQaType(type) {
-  qaType = type;
-  document.getElementById('qa-type-exp').classList.toggle('active', type==='exp');
-  document.getElementById('qa-type-inc').classList.toggle('active', type==='inc');
-  document.getElementById('qa-cat-wrap').style.display = type==='exp' ? '' : 'none';
-  document.getElementById('qa-plat-wrap').style.display = type==='inc' ? '' : 'none';
-  if (type==='inc') {
-    document.getElementById('qa-plat').innerHTML = D.platforms.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
-  }
-}
-
-function saveQuickAdd() {
-  const val = parseFloat(document.getElementById('qa-val').value);
-  const date = document.getElementById('qa-date').value || todayStr();
-  const desc = document.getElementById('qa-desc').value.trim();
-  if (!val || val <= 0) { alert('Informe um valor válido.'); return; }
-  if (qaType === 'exp') {
-    const cat = document.getElementById('qa-cat').value;
-    D.expenses.push({ id:uid(), date, category:cat, amount:val, description:desc });
-  } else {
-    const pid = document.getElementById('qa-plat').value;
-    if (!D.dailyIncome[date]) D.dailyIncome[date] = {};
-    D.dailyIncome[date][pid] = (D.dailyIncome[date][pid]||0) + val;
-  }
-  save();
-  closeOverlay('modal-quickadd');
-  // refresh visible tab
-  const activeTab = document.querySelector('.page.active')?.id?.replace('page-','');
-  if (activeTab === 'semana') renderSemana();
-  else if (activeTab === 'mes') renderMes();
-}
-
-// ══════════════════════════════════════════
-// AVG LAST 5 WEEKS
-// ══════════════════════════════════════════
-function getCompletedWeeksWithData(maxWeeks=5, lookbackLimit=20) {
-  const results = [];
-  const now = new Date(); now.setHours(0,0,0,0);
-  let lookback = 1;
-  while (results.length < maxWeeks && lookback <= lookbackLimit) {
-    const off = -lookback;
-    // Only include weeks that have fully ended (sunday of that week < today)
-    const dates = weekDates(off);
-    const weekEnd = parseDate(dates[6]); weekEnd.setHours(23,59,59);
-    if (weekEnd >= now) { lookback++; continue; }
-    const inc = sumWeekIncome(off);
-    if (inc > 0) results.push({ off, inc, label: `${fmtShort(dates[0])} – ${fmtShort(dates[6])}` });
-    lookback++;
-  }
-  return results;
-}
-
-let avg5wDetailOpen = false;
-
-function renderAvg5w() {
-  const el = document.getElementById('avg5w-card');
-  if (!el) return;
-
-  const weeks = getCompletedWeeksWithData();
-  if (weeks.length === 0) { el.innerHTML = ''; return; }
-
-  const isProvisional = weeks.length < 5;
-  const avg = weeks.reduce((s,w)=>s+w.inc,0) / weeks.length;
-  const goal = D.weeklyGoal || 0;
-  const diff = goal > 0 ? avg - goal : null;
-
-  // Status line
-  let statusClass = 'neutral', statusTxt = '';
-  if (isProvisional) {
-    statusTxt = `Calculando… ${weeks.length} de 5 semanas`;
-    statusClass = 'neutral';
-  } else if (diff === null) {
-    statusTxt = 'Sem meta definida';
-    statusClass = 'neutral';
-  } else if (Math.abs(diff) < 0.5) {
-    statusTxt = 'Dentro da meta';
-    statusClass = 'on';
-  } else if (diff > 0) {
-    statusTxt = `${R(diff)} acima da meta`;
-    statusClass = 'above';
-  } else {
-    statusTxt = `${R(Math.abs(diff))} abaixo da meta`;
-    statusClass = 'below';
-  }
-
-  const detailRows = weeks.map(w=>`
-    <div class="avg5w-row">
-      <span class="avg5w-row-lbl">${w.label}</span>
-      <span class="avg5w-row-val">${R(w.inc)}</span>
-    </div>`).join('');
-
-  el.innerHTML = `
-    <div class="avg5w-card" onclick="toggleAvg5wDetail()">
-      <div class="avg5w-main-row">
-        <span class="avg5w-title">Média ${isProvisional?'':'5 '}semanas</span>
-        <span class="avg5w-val">${isProvisional ? '—' : R(avg)}</span>
-      </div>
-      <div class="avg5w-status ${statusClass}">${statusTxt}</div>
-      <div class="avg5w-detail" style="display:${avg5wDetailOpen?'':'none'}">
-        ${detailRows}
-      </div>
-    </div>`;
-}
-
-function toggleAvg5wDetail() {
-  avg5wDetailOpen = !avg5wDetailOpen;
-  renderAvg5w();
-}
-
-// ══════════════════════════════════════════
 // WEEKLY GOAL
 // ══════════════════════════════════════════
 function renderWeekGoal() {
@@ -1224,7 +1055,7 @@ function openWeekGoalModal() {
 function saveWeekGoal() {
   const val = parseFloat(document.getElementById('wg-val').value) || 0;
   D.weeklyGoal = val;
-  save(); closeOverlay('modal-week-goal'); renderWeekGoal(); renderAvg5w();
+  save(); closeOverlay('modal-week-goal'); renderWeekGoal();
 }
 
 // ══════════════════════════════════════════
@@ -1664,9 +1495,9 @@ function buildDemoData() {
   // Esta semana
   inc[w[0]] = { d1: 185, d2: 90 };
   inc[w[1]] = { d1: 210, d2: 140 };
-  inc[w[2]] = { d1: 170, d3: 500 };
+  inc[w[2]] = { d1: 170 };           // d3 coberto por incomeItems
   inc[w[3]] = { d1: 195, d2: 75 };
-  inc[w[4]] = { d1: 240, d2: 60 };
+  inc[w[4]] = { d1: 240 };           // d2 coberto por incomeItems
   // Semana passada
   inc[prev[0]] = { d1: 160, d2: 95 };
   inc[prev[1]] = { d1: 230 };
@@ -1723,9 +1554,9 @@ function buildDemoData() {
     expenses: exps,
     expCats: ['Gasolina','Alimentação','Moradia','Saúde','Lazer','Transporte','Serviços','Outros'],
     fixedExpenses: [
-      { id:'fx1', name:'Aluguel',  amount:900,  category:'Moradia',   day:5  },
-      { id:'fx2', name:'Internet', amount:89.90, category:'Serviços', day:10 },
-      { id:'fx3', name:'Seguro moto', amount:120, category:'Serviços', day:15 },
+      { id:'fx1', name:'Aluguel',     amount:900,   category:'Moradia',   dueDay:5  },
+      { id:'fx2', name:'Internet',    amount:89.90, category:'Serviços',  dueDay:10 },
+      { id:'fx3', name:'Seguro moto', amount:120,   category:'Serviços',  dueDay:15 },
     ],
     emergency: { target:10000, current:3200 },
     reservaHistory: [
@@ -1738,7 +1569,12 @@ function buildDemoData() {
     ],
     weeklyGoal: 1500,
     catBudgets: { 'Gasolina': 400, 'Alimentação': 300 },
-    incomeItems: [],
+    incomeItems: [
+      { id:'ii1', date:w[2], platformId:'d3', amount:350, note:'Site cliente — sinal',    status:'paid'    },
+      { id:'ii2', date:w[2], platformId:'d3', amount:150, note:'Site cliente — restante', status:'pending' },
+      { id:'ii3', date:w[4], platformId:'d2', amount:35,  note:'Almoço Zona Norte',       status:'paid'    },
+      { id:'ii4', date:w[4], platformId:'d2', amount:25,  note:'Lanche tarde',             status:'paid'    },
+    ],
   };
 }
 
@@ -1746,17 +1582,22 @@ function startDemo() {
   DEMO_MODE = true;
   _realD = D;
   D = buildDemoData();
+  weekOffset = 0;
+  monthOffset = 0;
+  selDayIdx = (() => { const d=new Date().getDay(); return d===0?6:d-1; })();
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('demo-banner').style.display = 'flex';
   document.getElementById('curr-chip').textContent = currSym;
-  renderSemana();
-  switchTab('semana');
-  setTimeout(startTour, 500);
+  switchTab('inicio');
+  setTimeout(startTour, 600);
 }
 
 function exitDemo() {
   DEMO_MODE = false;
   D = _realD || defaultData();
+  weekOffset = 0;
+  monthOffset = 0;
+  selDayIdx = (() => { const d=new Date().getDay(); return d===0?6:d-1; })();
   document.getElementById('demo-banner').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   closeTour();
@@ -1764,12 +1605,12 @@ function exitDemo() {
 
 // ── Tour ──
 const TOUR_STEPS = [
-  { tab:'semana',  anchor:'hero-semana',   title:'Semana em destaque', text:'O líquido da semana — quanto sobrou depois dos gastos. Verde é lucro, vermelho é prejuízo.' },
-  { tab:'semana',  anchor:'days-grid',     title:'Dias da semana',     text:'Toque em qualquer dia para lançar ganhos e gastos. Pontinho laranja = dia com dados registrados.' },
-  { tab:'mes',     anchor:'big-donut-card',title:'Gastos por categoria',text:'No mês você vê exatamente onde o dinheiro foi — o gráfico de rosca mostra cada categoria.' },
-  { tab:'mes',     anchor:'trends-chart',  title:'Histórico 6 meses',  text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês.' },
-  { tab:'reserva', anchor:'res-ring-wrap', title:'Reserva de emergência',text:'Deposite aos poucos e acompanhe quanto falta para a sua meta de reserva.'},
-  { tab:'reserva', anchor:'goals-list',    title:'Suas metas',          text:'Defina metas com prazo e valor — iPhone, viagem, o que for. O app acompanha o progresso.', last:true },
+  { tab:'inicio',  anchor:'hero-inicio',    title:'Tela Início',            text:'Resumo da semana, reserva e movimentações recentes. É aqui que você começa o dia no GD CASH.' },
+  { tab:'semana',  anchor:'days-grid',      title:'Dias da semana',          text:'Toque em qualquer dia para lançar ganhos e gastos. Pontinho laranja = dia com dados registrados.' },
+  { tab:'mes',     anchor:'big-donut-card', title:'Gastos por categoria',    text:'No mês você vê exatamente onde o dinheiro foi — o gráfico de rosca mostra cada categoria.' },
+  { tab:'mes',     anchor:'trends-chart',   title:'Histórico 6 meses',       text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês.' },
+  { tab:'reserva', anchor:'res-ring-wrap',  title:'Reserva de emergência',   text:'Deposite aos poucos e acompanhe quanto falta para a sua meta de reserva.' },
+  { tab:'reserva', anchor:'goals-list',     title:'Suas metas',              text:'Defina metas com prazo e valor — iPhone, viagem, o que for. O app acompanha o progresso.', last:true },
 ];
 let tourStep = 0;
 
@@ -1789,34 +1630,22 @@ function showTourStep() {
   document.getElementById('tour-text').textContent  = s.text;
   document.getElementById('tour-next').textContent  = s.last ? 'Começar de verdade →' : 'Próximo';
 
-  // Switch tab if needed
-  if (s.tab) {
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
-    document.getElementById('page-'+s.tab).classList.add('active');
-    document.querySelector(`[data-tab="${s.tab}"]`)?.classList.add('active');
-    if (s.tab==='semana')  renderSemana();
-    if (s.tab==='mes')     renderMes();
-    if (s.tab==='reserva') renderReserva();
-  }
+  if (s.tab) switchTab(s.tab);
 
-  // Highlight anchor element
   const spot = document.getElementById('tour-spotlight');
   setTimeout(() => {
     const anchor = s.anchor ? document.getElementById(s.anchor) || document.querySelector('.'+s.anchor) : null;
     if (anchor) {
-      const rect = anchor.getBoundingClientRect();
-      const pad = 8;
-      spot.style.cssText = `
-        display:block;top:${rect.top + window.scrollY - pad}px;left:${rect.left - pad}px;
-        width:${rect.width + pad*2}px;height:${rect.height + pad*2}px;
-      `;
-      // Scroll anchor into view
       anchor.scrollIntoView({ behavior:'smooth', block:'center' });
+      // Wait for scroll to settle before measuring position
+      setTimeout(() => {
+        const rect = anchor.getBoundingClientRect();
+        const pad = 8;
+        spot.style.cssText = `display:block;top:${rect.top - pad}px;left:${rect.left - pad}px;width:${rect.width + pad*2}px;height:${rect.height + pad*2}px;`;
+      }, 320);
     } else {
       spot.style.display = 'none';
     }
-    // Animate card in
     card.classList.remove('tour-anim'); void card.offsetWidth; card.classList.add('tour-anim');
   }, 300);
 }
