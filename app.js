@@ -24,10 +24,11 @@ function cycleCurrency() {
   localStorage.setItem('gdcash_currency', currSym);
   document.getElementById('curr-chip').textContent = currSym;
   const active = document.querySelector('.page.active')?.id?.replace('page-', '');
-  if (active === 'inicio')  renderInicio();
-  else if (active === 'semana')  renderSemana();
+  if (active === 'inicio')       { renderInicio(); renderInicioCards(); }
+  else if (active === 'semana')  { renderSemana(); renderDayAccordion(); }
   else if (active === 'mes')     renderMes();
   else if (active === 'reserva') renderReserva();
+  else if (active === 'metas')   renderGoals();
   else if (active === 'fixos')   renderFixos();
 }
 
@@ -54,7 +55,6 @@ function initFirebase() {
       initTheme();
       initSettingsExtras();
       checkNotifPrompt();
-      renderInicioCards();
       // FAB só na aba Semana
       const fab = document.getElementById('global-fab');
       if (fab) fab.style.display = 'none';
@@ -136,6 +136,11 @@ const TAB_HELP = {
     icon: '🏠',
     title: 'Tela Início',
     text: 'Resumo da semana, movimentações recentes e reserva num só lugar. Use o botão + para lançar receita ou gasto sem sair da tela.',
+  },
+  metas: {
+    icon: '🎯',
+    title: 'Minhas Metas',
+    text: 'Defina metas com prazo e valor — iPhone, viagem, o que for. Acompanhe o progresso e adicione valor conforme vai guardando.',
   },
   semana: {
     icon: '📅',
@@ -1240,7 +1245,7 @@ function saveGoal() {
     if (idx !== -1) D.goals[idx] = { ...D.goals[idx], name, emoji, target, saved, deadline, note };
   } else {
     D.goals.push({ id: uid(), name, emoji, target, saved, deadline, note, lastNotif: '' });
-    requestNotifPermission();
+    maybePromptNotif();
   }
   save(); closeOverlay('modal-goal'); renderGoals();
 }
@@ -1271,9 +1276,11 @@ function saveGoalDep() {
 }
 
 // ── Notificações ──
-async function requestNotifPermission() {
-  if (!('Notification' in window) || Notification.permission !== 'default') return;
-  await Notification.requestPermission();
+function maybePromptNotif() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission !== 'default') return;
+  if (localStorage.getItem('gdcash_notif_dismissed')) return;
+  setTimeout(() => openOverlay('modal-notif-perm'), 500);
 }
 
 function checkGoalNotifications() {
@@ -1425,6 +1432,7 @@ new MutationObserver((mutations) => {
   for (const m of mutations) {
     if (m.attributeName === 'class' && !m.target.classList.contains('open')) {
       refreshAfterDayEdit();
+      renderDayAccordion();
     }
   }
 }).observe(document.getElementById('modal-day-detail'), { attributes: true });
@@ -1441,7 +1449,6 @@ function switchTab(tab) {
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   // Highlight "Mais" button for secondary tabs
   const moreTabs = ['fixos','conversor','ajustes','lembretes'];
-  document.querySelector('.nav-more-btn')?.classList.toggle('active', moreTabs.includes(tab));
   if(tab==='inicio')    { renderInicio(); renderInicioCards(); }
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
@@ -1655,8 +1662,8 @@ function exitDemo() {
 
 // ── Tour ──
 const TOUR_STEPS = [
-  { tab:'inicio',  anchor:'hero-inicio',    title:'Tela Início',            text:'Resumo da semana, reserva e movimentações recentes. É aqui que você começa o dia no GD CASH.' },
-  { tab:'semana',  anchor:'days-grid',      title:'Dias da semana',          text:'Toque em qualquer dia para lançar ganhos e gastos. Pontinho laranja = dia com dados registrados.' },
+  { tab:'inicio',  anchor:'car-inner',       title:'Tela Início',            text:'Resumo da semana, reserva e movimentações recentes. É aqui que você começa o dia no GD CASH.' },
+  { tab:'semana',  anchor:'days-accordion',  title:'Dias da semana',          text:'Veja e edite os lançamentos de cada dia. Toque em um dia para expandir. Use o + para adicionar receita ou gasto.' },
   { tab:'mes',     anchor:'big-donut-card', title:'Gastos por categoria',    text:'No mês você vê exatamente onde o dinheiro foi — o gráfico de rosca mostra cada categoria.' },
   { tab:'mes',     anchor:'trends-chart',   title:'Histórico 6 meses',       text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês.' },
   { tab:'reserva', anchor:'res-ring-wrap',  title:'Reserva de emergência',   text:'Deposite aos poucos e acompanhe quanto falta para a sua meta de reserva.' },
@@ -2041,7 +2048,7 @@ function saveLembrete() {
     if (idx !== -1) D.reminders[idx] = { ...D.reminders[idx], name, date, notifDaysBefore, repeat };
   } else {
     D.reminders.push({ id: uid(), name, date, notifDaysBefore, repeat, lastNotif: '' });
-    requestNotifPermission();
+    maybePromptNotif();
   }
   save(); closeOverlay('modal-lembrete'); renderLembretes();
 }
@@ -2114,10 +2121,15 @@ function exportCalendar() {
   });
   const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//GD CASH//PT\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events}END:VCALENDAR`;
   const blob = new Blob([ics], {type:'text/calendar'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='gdcash-vencimentos.ics';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  const file = new File([blob], 'gdcash-vencimentos.ics', {type:'text/calendar'});
+  if (navigator.canShare && navigator.canShare({files:[file]})) {
+    navigator.share({ files:[file], title:'GD Cash — Vencimentos' }).catch(()=>{});
+  } else {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='gdcash-vencimentos.ics';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }
 }
 
 function emailMonthReport() {
@@ -2303,7 +2315,7 @@ function renderInicioCards() {
   // Update logo greeting with real name
   const nome = currentUser?.displayName?.split(' ')[0] || 'você';
   const greet = document.getElementById('logo-greeting');
-  if (greet) greet.innerHTML = 'Olá, <b>' + nome + '</b>';
+  if (greet) { greet.textContent = 'Olá, '; const b = document.createElement('b'); b.textContent = nome; greet.appendChild(b); }
 }
 
 // ══════════════════════════════════════════
@@ -2368,9 +2380,9 @@ function renderDayAccordion() {
       </button>
     </div>`;
 
-    const emptyMsg = `<div style="padding:12px 14px;font-size:12px;color:var(--tx3);border-top:1px solid var(--border)">Nenhum lançamento. Use o <b>+</b> para adicionar.</div>`;
+    const emptyMsg = `<div style="padding:12px 14px;font-size:12px;color:var(--tx3)">Nenhum lançamento ainda.</div>`;
 
-    return `<div class="dacc${isToday&&hasData?' open':''}" id="dacc-${i}">
+    return `<div class="dacc${isToday?' open':''}" id="dacc-${i}">
       <div class="dacc-head" onclick="toggleDacc(${i})">
         <div class="dacc-dot ${hasData?'dacc-dot-active':'dacc-dot-empty'}"></div>
         <div class="dacc-info">
@@ -2382,7 +2394,7 @@ function renderDayAccordion() {
           <div class="dacc-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
         </div>
       </div>
-      <div class="dacc-body">${hasData ? platItems + expItems + editFooter : emptyMsg}</div>
+      <div class="dacc-body">${hasData ? platItems + expItems : emptyMsg}${editFooter}</div>
     </div>`;
   }).join('');
 }
@@ -2473,7 +2485,15 @@ function qaConfirm() {
   if (qaType === 'rec') {
     const pid = document.getElementById('qa-plat-sel')?.value;
     if (pid) {
-      setDayIncome(date, pid, amt);
+      const hasItems = (D.incomeItems||[]).some(it => it.date===date && it.platformId===pid);
+      if (hasItems) {
+        if (!D.incomeItems) D.incomeItems = [];
+        D.incomeItems.push({ id: uid(), date, platformId: pid, amount: amt, description: desc || 'Receita', status: 'paid' });
+        save();
+      } else {
+        const existing = getDayIncome(date)[pid] || 0;
+        setDayIncome(date, pid, existing + amt);
+      }
     }
   } else {
     const cat = document.getElementById('qa-cat-sel')?.value || (D.expCats[0] || 'Outros');
