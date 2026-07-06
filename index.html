@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -505,13 +505,23 @@
 
 <!-- Detalhe do dia (bottom sheet) -->
 <div class="overlay" id="modal-day-detail">
-  <div class="sheet" style="max-height:92vh">
+  <div class="sheet sheet-day" style="max-height:92vh">
     <div class="sheet-handle"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div style="font-weight:700;font-size:15px" id="day-detail-date"></div>
-      <button class="btn-folga" id="btn-folga" onclick="toggleFolga()">Marcar folga</button>
+
+    <!-- Header -->
+    <div class="dd-header">
+      <div id="day-detail-date" class="dd-date"></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn-folga" id="btn-folga" onclick="toggleFolga()">Marcar folga</button>
+        <button class="dd-close" onclick="closeOverlay('modal-day-detail')">Concluir</button>
+      </div>
     </div>
+
+    <!-- Receita -->
+    <div class="dd-section-lbl">Receita</div>
     <div class="inc-inputs-grid" id="inc-inputs-grid"></div>
+
+    <!-- Serviços detalhados -->
     <div class="iitems-section">
       <div class="iitems-header">
         <span class="iitems-title">Serviços detalhados</span>
@@ -534,11 +544,16 @@
       <div id="income-items-list"></div>
       <div id="income-pending-total" class="iitem-pending-total" style="display:none"></div>
     </div>
+
+    <!-- Resultado do dia -->
     <div class="result-row">
       <span class="result-lbl">Resultado do dia</span>
-      <span class="result-val" id="result-val">$ 0,00</span>
+      <span class="result-val" id="result-val">R$ 0,00</span>
     </div>
+
+    <!-- Adicionar gasto -->
     <div id="add-exp-section">
+      <div class="dd-section-lbl">Adicionar gasto</div>
       <div class="fi-row" style="margin-bottom:8px">
         <select class="fi" id="exp-cat" style="flex:1"></select>
         <input class="fi" type="number" id="exp-val" min="0" step="0.01" placeholder="Valor" style="flex:1">
@@ -546,7 +561,9 @@
       <input class="fi" type="text" id="exp-desc" placeholder="Descrição (ex: Shell, Pizza, Spotify...)" style="margin-bottom:8px">
       <button class="btn btn-primary" onclick="addExpense()">+ Adicionar gasto</button>
     </div>
-    <div class="sec-title" style="margin-top:14px">Gastos do dia</div>
+
+    <!-- Lista de gastos -->
+    <div class="dd-section-lbl" style="margin-top:20px">Gastos do dia</div>
     <div id="exp-list"></div>
     <div class="empty-state" id="exp-empty-msg">Nenhum gasto lançado</div>
   </div>
@@ -758,7 +775,7 @@
   </div>
 </div>
 
-<script src="app.js?v=23"></script>
+<script src="app.js?v=24"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

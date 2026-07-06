@@ -565,13 +565,19 @@ function weekDates(off=0) {
   return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(d.getDate()+i); return dateStr(d); });
 }
 function selDate() { return weekDates(weekOffset)[selDayIdx]; }
-function changeWeek(dir) { weekOffset+=dir; selDayIdx=0; renderSemana(); }
+function changeWeek(dir) { weekOffset+=dir; renderSemana(); }
 
 // ══════════════════════════════════════════
 // INCOME HELPERS
 // ══════════════════════════════════════════
 function getDayIncome(date)       { return D.dailyIncome[date]||{}; }
 function setDayIncome(date,pid,v) { if(!D.dailyIncome[date])D.dailyIncome[date]={}; D.dailyIncome[date][pid]=parseFloat(v)||0; save(); }
+function saveDayIncomeWithFeedback(date,pid,v,el) {
+  setDayIncome(date,pid,v);
+  el.classList.add('inp-saved');
+  setTimeout(()=>el.classList.remove('inp-saved'),1400);
+  renderDayDetail();
+}
 // Receita paga de uma plataforma num dia (itens têm prioridade sobre input manual)
 function getDayPlatIncome(date, pid) {
   const items = (D.incomeItems||[]).filter(it=>it.date===date&&it.platformId===pid);
@@ -747,7 +753,7 @@ function renderDayDetail() {
       <div class="inc-inp-lbl" style="color:${p.color}">${p.name}</div>
       <input class="inc-inp" type="number" min="0" step="0.01" placeholder="0.00"
         value="${val}"
-        ${hasItems?'readonly title="Total calculado pelos serviços detalhados"':'onchange="setDayIncome(\''+date+'\',\''+p.id+'\',this.value);renderDayDetail()"'}
+        ${hasItems?'readonly title="Total calculado pelos serviços detalhados"':'onchange="saveDayIncomeWithFeedback(\''+date+'\',\''+p.id+'\',this.value,this)"'}
         ${hasItems||isOff?'style="opacity:.55;pointer-events:'+(hasItems?'none':'auto')+'"':''}
         ${isOff&&!hasItems?'disabled':''}>
     </div>`;

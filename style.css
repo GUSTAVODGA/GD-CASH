@@ -240,17 +240,49 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .plat-c-name{font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap}
 .plat-c-val{font-size:15px;font-weight:800;margin-top:2px}
 
-/* ── Income inputs ── */
-.inc-inputs-grid{display:grid;gap:8px;margin-bottom:14px}
-.inc-inp-wrap{display:flex;flex-direction:column;gap:4px}
-.inc-inp-lbl{font-size:11px;font-weight:700}
-.inc-inp{padding:9px 10px;font-size:14px;border-radius:10px;width:100%}
-.inc-inp:disabled{opacity:.4}
+/* ── Day Detail panel ── */
+.dd-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.dd-date{font-weight:800;font-size:17px;letter-spacing:-.3px}
+.dd-close{
+  background:rgba(255,214,10,.12);border:1px solid rgba(255,214,10,.22);
+  color:var(--gold);font-size:13px;font-weight:700;
+  padding:7px 16px;border-radius:20px;cursor:pointer;
+}
+.dd-section-lbl{
+  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--text3);margin-bottom:9px;
+}
 
-/* ── Result bar ── */
-.result-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-.result-lbl{font-size:12px;color:var(--text2);font-weight:600}
-.result-val{font-size:17px;font-weight:800}
+/* ── Income inputs ── */
+.inc-inputs-grid{display:grid;gap:10px;margin-bottom:16px}
+.inc-inp-wrap{display:flex;flex-direction:column;gap:6px}
+.inc-inp-lbl{font-size:11px;font-weight:700;letter-spacing:.03em}
+.inc-inp{
+  padding:14px 10px;font-size:18px;font-weight:800;
+  border-radius:14px;width:100%;text-align:center;
+  border:1.5px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.05);
+  color:var(--text);-webkit-appearance:none;appearance:none;
+  transition:border-color .2s,box-shadow .2s;
+}
+.inc-inp:focus{
+  border-color:rgba(255,214,10,.5);outline:none;
+  box-shadow:0 0 0 3px rgba(255,214,10,.12);
+}
+.inc-inp.inp-saved{
+  border-color:var(--green);
+  box-shadow:0 0 0 3px rgba(48,209,88,.15);
+}
+.inc-inp:disabled{opacity:.35}
+
+/* ── Result card ── */
+.result-row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:16px;padding:14px 18px;margin:16px 0;
+}
+.result-lbl{font-size:13px;color:var(--text2);font-weight:600}
+.result-val{font-size:20px;font-weight:900;letter-spacing:-.5px}
 .result-val.pos{color:var(--green)}
 .result-val.neg{color:var(--red)}
 
