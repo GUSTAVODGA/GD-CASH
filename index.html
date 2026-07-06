@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=24">
+<link rel="stylesheet" href="style.css?v=25">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -511,11 +511,9 @@
     <!-- Header -->
     <div class="dd-header">
       <div id="day-detail-date" class="dd-date"></div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <button class="btn-folga" id="btn-folga" onclick="toggleFolga()">Marcar folga</button>
-        <button class="dd-close" onclick="closeOverlay('modal-day-detail')">Concluir</button>
-      </div>
+      <button class="dd-close" onclick="closeOverlay('modal-day-detail')">Concluir</button>
     </div>
+    <button class="btn-folga" id="btn-folga" onclick="toggleFolga()" style="margin-bottom:18px">Marcar folga</button>
 
     <!-- Receita -->
     <div class="dd-section-lbl">Receita</div>
@@ -775,7 +773,7 @@
   </div>
 </div>
 
-<script src="app.js?v=24"></script>
+<script src="app.js?v=25"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
