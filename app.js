@@ -339,6 +339,11 @@ function openDayDetail(idx) {
   openOverlay('modal-day-detail');
 }
 
+function selectDay(idx) {
+  selDayIdx = idx;
+  document.querySelectorAll('#days-grid .day-btn').forEach((btn, i) => btn.classList.toggle('sel', i === idx));
+}
+
 function refreshAfterDayEdit() {
   renderDayDetail();
   // Update days-grid dots
@@ -712,7 +717,7 @@ function renderSemana() {
     const hasData=Object.values(getDayIncome(d)).some(v=>v>0)||getDayExpenses(d).length>0||(D.incomeItems||[]).some(it=>it.date===d);
     const isOff=D.daysOff.includes(d);
     const dt=parseDate(d);
-    return `<div class="day-btn${i===selDayIdx?' sel':''}${hasData?' has-data':''}${isOff?' off':''}" onclick="openDayDetail(${i})">
+    return `<div class="day-btn${i===selDayIdx?' sel':''}${hasData?' has-data':''}${isOff?' off':''}" onclick="selectDay(${i})">
       <div class="day-lbl">${WEEK_DAYS[i]}</div>
       <div class="day-num">${dt.getDate()}</div>
       <div class="day-dot"></div>
@@ -742,7 +747,7 @@ function renderDayDetail() {
       <div class="inc-inp-lbl" style="color:${p.color}">${p.name}</div>
       <input class="inc-inp" type="number" min="0" step="0.01" placeholder="0.00"
         value="${val}"
-        ${hasItems?'readonly title="Total calculado pelos serviços detalhados"':'onchange="setDayIncome(\''+date+'\',\''+p.id+'\',this.value);renderDayDetail()"'}
+        ${hasItems?'readonly title="Total calculado pelos serviços detalhados"':'onchange="setDayIncome(\''+date+'\',\''+p.id+'\',this.value);refreshAfterDayEdit()"'}
         ${hasItems||isOff?'style="opacity:.55;pointer-events:'+(hasItems?'none':'auto')+'"':''}
         ${isOff&&!hasItems?'disabled':''}>
     </div>`;
