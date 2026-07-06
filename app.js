@@ -1016,7 +1016,6 @@ function renderReserva() {
           <button class="res-hist-del" onclick="deleteResHist('${h.id}')">✕</button>
         </div>`).join('')
     : '<div class="empty-state">Nenhuma movimentação ainda</div>';
-  renderGoals();
 }
 
 function openResModal(type) {
@@ -1447,6 +1446,7 @@ function switchTab(tab) {
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
   if(tab==='reserva')   renderReserva();
+  if(tab==='metas')     renderGoals();
   if(tab==='fixos')      renderFixos();
   if(tab==='conversor')  loadConversorRates();
   if(tab==='ajustes')    { renderBudgetSettings(); initSettingsExtras(); }
