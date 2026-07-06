@@ -1065,11 +1065,15 @@ function renderWeekGoal() {
   const done = inc >= goal;
   const dates = weekDates(weekOffset);
   const now = new Date(); now.setHours(0,0,0,0);
-  const daysLeft = dates.filter(d => parseDate(d) > now).length;
+  const daysLeft = dates.filter(d => parseDate(d) >= now).length; // inclui hoje
   let foot = '';
   if (done) foot = 'Meta da semana atingida! 🎉';
   else if (daysLeft === 0) foot = `Faltaram ${R(goal-inc)} pra bater a meta.`;
-  else foot = `Faltam <b>${R(goal-inc)}</b> em ${daysLeft} dia${daysLeft!==1?'s':''}`;
+  else {
+    const perDay = Math.ceil((goal - inc) / daysLeft);
+    const dayTxt = daysLeft === 1 ? 'hoje' : `por dia (${daysLeft} dias)`;
+    foot = `Faltam <b>${R(goal-inc)}</b> — faça <b>${R(perDay)}</b> ${dayTxt}`;
+  }
 
   el.innerHTML = `
     <div class="wg-top">
@@ -1082,11 +1086,6 @@ function renderWeekGoal() {
     </div>
     <div class="wg-bar-wrap"><div class="wg-bar-fill${done?' wg-done':''}" style="width:${pct}%"></div></div>
     <div class="wg-foot">${foot}</div>`;
-}
-
-function carWeekGoalTap() {
-  if (!D.weeklyGoal) openWeekGoalModal();
-  else switchTab('semana');
 }
 
 function openWeekGoalModal() {
@@ -2324,32 +2323,6 @@ function renderInicioCards() {
   const goalCount = (D.goals || []).filter(g => !g.completed).length;
   const gSub = document.getElementById('car-goals-sub');
   if (gSub) gSub.textContent = goalCount + (goalCount === 1 ? ' meta ativa →' : ' metas ativas →');
-
-  // Weekly goal card
-  const wgTitle = document.getElementById('car-wgoal-title');
-  const wgSub   = document.getElementById('car-wgoal-sub');
-  if (wgTitle && wgSub) {
-    const goal    = D.weeklyGoal || 0;
-    const earned  = sumWeekIncome(0);
-    if (!goal) {
-      wgTitle.textContent = 'Meta da Semana';
-      wgSub.textContent   = 'Toque para definir →';
-    } else if (earned >= goal) {
-      wgTitle.textContent = 'Meta batida! ✓';
-      wgSub.textContent   = 'Superou em ' + R(earned - goal) + ' esta semana →';
-    } else {
-      const today   = todayStr();
-      const dates   = weekDates(0);
-      const todayIdx = dates.indexOf(today);
-      const daysLeft = todayIdx === -1 ? 1 : 7 - todayIdx; // dias restantes incluindo hoje
-      const remaining = goal - earned;
-      const perDay    = Math.ceil(remaining / daysLeft);
-      wgTitle.textContent = 'Meta da Semana';
-      wgSub.textContent   = daysLeft === 1
-        ? 'Faltam ' + R(remaining) + ' — hoje é o último dia!'
-        : R(perDay) + '/dia pelos próx. ' + daysLeft + ' dias →';
-    }
-  }
 
   // Update logo greeting with real name
   const nome = currentUser?.displayName?.split(' ')[0] || 'você';
