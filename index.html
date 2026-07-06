@@ -544,14 +544,6 @@
     <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span>Mês</span>
   </button>
-  <button class="nav-item" data-tab="reserva" onclick="switchTab('reserva')">
-    <svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
-    <span>Reserva</span>
-  </button>
-  <button class="nav-item nav-more-btn" onclick="openMoreMenu()">
-    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>
-    <span>Mais</span>
-  </button>
 </nav>
 
 <!-- ════ FAB GLOBAL ════ -->
@@ -564,7 +556,7 @@
     <span class="fab-action-icon fab-action-red">↓</span>Gasto do dia
   </button>
 </div>
-<button class="global-fab" id="global-fab" onclick="toggleFabMenu()">
+<button class="global-fab" id="global-fab" onclick="openQuickAdd()">
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
 
@@ -840,7 +832,65 @@
   </div>
 </div>
 
-<script src="app.js?v=26"></script>
+<!-- ════ QUICK ADD SHEET ════ -->
+<div class="overlay" id="modal-quick-add">
+  <div class="sheet sheet-qa">
+    <div class="sheet-handle"></div>
+    <div class="qa-title">Novo lançamento</div>
+    <div class="qa-type-toggle">
+      <button class="qa-type-btn qa-type-rec active" id="qa-btn-rec" onclick="qaSetType('rec')">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        Receita
+      </button>
+      <button class="qa-type-btn qa-type-gas" id="qa-btn-gas" onclick="qaSetType('gas')">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+        Gasto
+      </button>
+    </div>
+    <div class="qa-amt-display" id="qa-amt-display">R$ 0,00</div>
+    <input class="fi qa-amt-input" type="number" id="qa-amt-input" min="0" step="0.01" placeholder="0,00" inputmode="decimal" oninput="qaUpdateAmt()">
+    <div class="qa-field-row">
+      <div class="fg" style="flex:1">
+        <label class="fl">Descrição</label>
+        <input class="fi" type="text" id="qa-desc" placeholder="Ex: Ifood, Supermercado..." oninput="qaSuggestCat()">
+      </div>
+    </div>
+    <div id="qa-suggest-row" class="qa-suggest-row" style="display:none">
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg>
+      Sugerido: <span id="qa-suggest-txt"></span>
+    </div>
+    <div class="fg" id="qa-cat-row" style="display:none">
+      <label class="fl">Categoria</label>
+      <select class="fi" id="qa-cat-sel"></select>
+    </div>
+    <div class="fg" id="qa-plat-row">
+      <label class="fl">Plataforma</label>
+      <select class="fi" id="qa-plat-sel"></select>
+    </div>
+    <div class="qa-date-row">
+      <label class="fl">Data</label>
+      <input class="fi" type="date" id="qa-date">
+    </div>
+    <button class="btn btn-primary" onclick="qaConfirm()">Confirmar lançamento</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-quick-add')">Cancelar</button>
+  </div>
+</div>
+
+<!-- ════ NOTIF PERMISSION PROMPT ════ -->
+<div class="overlay" id="modal-notif-perm">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div style="text-align:center;padding:8px 0 16px">
+      <div style="font-size:32px;margin-bottom:10px">🔔</div>
+      <div class="sheet-title" style="margin:0 0 8px">Ativar lembretes</div>
+      <p style="font-size:13px;color:var(--tx2);line-height:1.5;margin-bottom:20px">Receba um lembrete diário às 21h para registrar seus lançamentos, e um resumo toda semana.</p>
+    </div>
+    <button class="btn btn-primary" onclick="requestNotifPermission()">Ativar notificações</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-notif-perm');localStorage.setItem('gdcash_notif_dismissed','1')">Agora não</button>
+  </div>
+</div>
+
+<script src="app.js?v=27"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

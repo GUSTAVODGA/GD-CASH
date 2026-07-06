@@ -51,6 +51,10 @@ function initFirebase() {
       await loadFromCloud();
       document.getElementById('curr-chip').textContent = currSym;
       renderInicio();
+      initTheme();
+      initSettingsExtras();
+      checkNotifPrompt();
+      renderInicioCards();
       checkGoalNotifications();
       checkReminders();
       checkOnboarding();
@@ -289,6 +293,7 @@ function renderInicio() {
   if (rpctEl) rpctEl.textContent = rpct + '%';
 
   renderRecentTx();
+  renderInicioCards();
 }
 
 function renderRecentTx() {
@@ -731,6 +736,7 @@ function renderSemana() {
   }).join('');
 
   renderWeekGoal();
+  renderDayAccordion();
 }
 
 function renderDayDetail() {
@@ -1434,13 +1440,13 @@ function switchTab(tab) {
   // Highlight "Mais" button for secondary tabs
   const moreTabs = ['fixos','conversor','ajustes','lembretes'];
   document.querySelector('.nav-more-btn')?.classList.toggle('active', moreTabs.includes(tab));
-  if(tab==='inicio')    renderInicio();
-  if(tab==='semana')    renderSemana();
+  if(tab==='inicio')    { renderInicio(); renderInicioCards(); }
+  if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
   if(tab==='reserva')   renderReserva();
   if(tab==='fixos')      renderFixos();
   if(tab==='conversor')  loadConversorRates();
-  if(tab==='ajustes')    renderBudgetSettings();
+  if(tab==='ajustes')    { renderBudgetSettings(); initSettingsExtras(); }
   if(tab==='lembretes')  renderLembretes();
   // Show FAB only on main tabs
   const fab = document.getElementById('global-fab');
@@ -2221,3 +2227,330 @@ function handleShortcut() {
 
 initSwipe();
 initLongPress();
+
+// ══════════════════════════════════════════
+// THEME (light / dark)
+// ══════════════════════════════════════════
+function initTheme() {
+  const saved = localStorage.getItem('gdcash_theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const dark = saved ? saved === 'dark' : prefersDark;
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  updateThemeToggle(dark);
+}
+function toggleTheme() {
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const newTheme = isDark ? 'light' : 'dark';
+  document.documentElement.dataset.theme = newTheme;
+  localStorage.setItem('gdcash_theme', newTheme);
+  updateThemeToggle(!isDark);
+}
+function updateThemeToggle(dark) {
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.classList.toggle('on', dark);
+}
+
+// ══════════════════════════════════════════
+// CAROUSEL DOTS
+// ══════════════════════════════════════════
+function updCarDots() {
+  const c = document.getElementById('car-inner');
+  if (!c) return;
+  const i = Math.round(c.scrollLeft / (c.scrollWidth / 2));
+  document.querySelectorAll('#car-dots .cdot').forEach((d, j) => d.classList.toggle('on', j === i));
+}
+
+// ══════════════════════════════════════════
+// RENDER INÍCIO — new big cards
+// ══════════════════════════════════════════
+function renderInicioCards() {
+  const weekInc = sumWeekIncome(weekOffset);
+  const weekExp = sumWeekExpenses(weekOffset);
+  const weekLiq = weekInc - weekExp;
+  const monthInc = sumMonthIncome(monthOffset);
+  const monthExp = sumMonthExpenses(monthOffset);
+  const monthLiq = monthInc - monthExp;
+
+  const bcWL = document.getElementById('bc-week-liq');
+  const bcWI = document.getElementById('bc-week-inc');
+  const bcWE = document.getElementById('bc-week-exp');
+  if (bcWL) animCount(bcWL, weekLiq, 650);
+  if (bcWI) bcWI.textContent = R(weekInc);
+  if (bcWE) bcWE.textContent = R(weekExp);
+
+  const bcML = document.getElementById('bc-month-liq');
+  const bcMI = document.getElementById('bc-month-inc');
+  const bcME = document.getElementById('bc-month-exp');
+  if (bcML) animCount(bcML, monthLiq, 650);
+  if (bcMI) bcMI.textContent = R(monthInc);
+  if (bcME) bcME.textContent = R(monthExp);
+
+  // Carousel subtitles
+  const reservePct = D.emergency.target > 0 ? Math.round(D.emergency.current / D.emergency.target * 100) : 0;
+  const rSub = document.getElementById('car-reserve-sub');
+  if (rSub) rSub.textContent = reservePct + '% da meta · Ver tudo →';
+
+  const goalCount = (D.goals || []).filter(g => !g.completed).length;
+  const gSub = document.getElementById('car-goals-sub');
+  if (gSub) gSub.textContent = goalCount + (goalCount === 1 ? ' meta ativa →' : ' metas ativas →');
+
+  // Update logo greeting with real name
+  const nome = currentUser?.displayName?.split(' ')[0] || 'você';
+  const greet = document.getElementById('logo-greeting');
+  if (greet) greet.innerHTML = 'Olá, <b>' + nome + '</b>';
+}
+
+// ══════════════════════════════════════════
+// DAY ACCORDION — Semana
+// ══════════════════════════════════════════
+function renderDayAccordion() {
+  const acc = document.getElementById('days-accordion');
+  if (!acc) return;
+  const dates = weekDates(weekOffset);
+  const NAMES = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
+
+  acc.innerHTML = dates.map((d, i) => {
+    const dt = parseDate(d);
+    const dayLabel = NAMES[i] + ', ' + dt.getDate() + ' ' + dt.toLocaleDateString('pt-BR',{month:'short'}).replace('.','');
+    const dayInc = sumDayIncome(d);
+    const dayExp = sumDayExpenses(d);
+    const dayLiq = dayInc - dayExp;
+    const exps = getDayExpenses(d);
+    const isOff = D.daysOff.includes(d);
+
+    const platItems = D.platforms.map(p => {
+      const v = getDayPlatIncome(d, p.id);
+      if (v <= 0) return '';
+      return `<div class="dacc-tx">
+        <div class="dacc-tx-ico" style="background:${p.color}22">
+          <svg viewBox="0 0 24 24" style="stroke:${p.color}"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </div>
+        <div class="dacc-tx-info"><div class="dacc-tx-lbl">${p.name}</div><div class="dacc-tx-cat">Receita</div></div>
+        <div class="dacc-tx-amt" style="color:var(--gn)">+${R(v)}</div>
+      </div>`;
+    }).join('');
+
+    const expItems = exps.map(e => `
+      <div class="dacc-tx">
+        <div class="dacc-tx-ico" style="background:var(--rd-t)">
+          <svg viewBox="0 0 24 24" style="stroke:var(--rd)"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+        </div>
+        <div class="dacc-tx-info"><div class="dacc-tx-lbl">${e.description||e.category}</div><div class="dacc-tx-cat">Gasto · ${e.category}</div></div>
+        <div class="dacc-tx-amt" style="color:var(--rd)">−${R(e.amount)}</div>
+        <button class="dacc-tx-del" onclick="deleteExpense('${e.id}');renderDayAccordion();refreshAfterDayEdit()">✕</button>
+      </div>`).join('');
+
+    const hasData = dayInc > 0 || exps.length > 0;
+    const txCount = (D.platforms.filter(p=>getDayPlatIncome(d,p.id)>0).length) + exps.length;
+    const subLabel = isOff ? 'Folga' : hasData ? txCount + (txCount===1?' lançamento':' lançamentos') : 'Nenhum lançamento';
+    const liqColor = dayLiq > 0 ? 'var(--gn)' : dayLiq < 0 ? 'var(--rd)' : 'var(--tx3)';
+    const liqSign = dayLiq > 0 ? '+' : '';
+    const isToday = d === todayStr();
+
+    return `<div class="dacc${isToday&&hasData?' open':''}" id="dacc-${i}">
+      <div class="dacc-head" onclick="toggleDacc(${i})">
+        <div class="dacc-dot ${hasData?'dacc-dot-active':'dacc-dot-empty'}"></div>
+        <div class="dacc-info">
+          <div class="dacc-name">${dayLabel}${isToday?' <span style="font-size:9px;background:var(--ac-t);color:var(--ac);border-radius:6px;padding:2px 6px;font-weight:700">HOJE</span>':''}</div>
+          <div class="dacc-sub">${subLabel}</div>
+        </div>
+        <div class="dacc-right">
+          ${hasData ? `<div class="dacc-liq" style="color:${liqColor}">${liqSign}${R(dayLiq)}</div>` : ''}
+          <div class="dacc-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
+        </div>
+      </div>
+      <div class="dacc-body">${platItems}${expItems}${!hasData?`<div style="padding:12px 14px;font-size:12px;color:var(--tx3);border-top:1px solid var(--border)">Nenhum lançamento neste dia. Use o <b>+</b> para adicionar.</div>`:''}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleDacc(i) {
+  const el = document.getElementById('dacc-' + i);
+  if (el) el.classList.toggle('open');
+}
+
+// ══════════════════════════════════════════
+// QUICK ADD SHEET
+// ══════════════════════════════════════════
+let qaType = 'rec';
+
+const CAT_KEYWORDS = {
+  'Alimentação': ['mercado', 'supermercado', 'ifood', 'rappi', 'pizza', 'burger', 'restaurante', 'lanche', 'comida', 'padaria', 'açaí'],
+  'Transporte': ['uber', 'gasolina', '99', 'combustível', 'posto', 'estacionamento', 'ônibus', 'metrô', 'taxi'],
+  'Moradia': ['aluguel', 'condomínio', 'água', 'luz', 'energia', 'gás', 'internet', 'net'],
+  'Lazer': ['cinema', 'netflix', 'spotify', 'show', 'festa', 'bar', 'balada', 'jogo', 'steam'],
+  'Saúde': ['farmácia', 'remédio', 'médico', 'academia', 'plano', 'consulta', 'dentista'],
+  'Serviços': ['salão', 'barbearia', 'lavanderia', 'conserto', 'manutenção'],
+};
+
+function qaSuggestCat() {
+  const desc = document.getElementById('qa-desc')?.value?.toLowerCase() || '';
+  if (!desc || qaType !== 'gas') {
+    document.getElementById('qa-suggest-row').style.display = 'none';
+    return;
+  }
+  for (const [cat, keys] of Object.entries(CAT_KEYWORDS)) {
+    if (keys.some(k => desc.includes(k))) {
+      document.getElementById('qa-suggest-row').style.display = 'flex';
+      document.getElementById('qa-suggest-txt').textContent = cat;
+      const sel = document.getElementById('qa-cat-sel');
+      if (sel) {
+        for (let i = 0; i < sel.options.length; i++) {
+          if (sel.options[i].value === cat) { sel.selectedIndex = i; break; }
+        }
+      }
+      return;
+    }
+  }
+  document.getElementById('qa-suggest-row').style.display = 'none';
+}
+
+function qaSetType(type) {
+  qaType = type;
+  document.getElementById('qa-btn-rec').classList.toggle('active', type === 'rec');
+  document.getElementById('qa-btn-gas').classList.toggle('active', type === 'gas');
+  document.getElementById('qa-cat-row').style.display = type === 'gas' ? '' : 'none';
+  document.getElementById('qa-plat-row').style.display = type === 'rec' ? '' : 'none';
+  document.getElementById('qa-suggest-row').style.display = 'none';
+}
+
+function qaUpdateAmt() {
+  const v = parseFloat(document.getElementById('qa-amt-input')?.value) || 0;
+  const el = document.getElementById('qa-amt-display');
+  if (el) el.textContent = R(v);
+}
+
+function openQuickAdd() {
+  // Populate selects
+  const platSel = document.getElementById('qa-plat-sel');
+  if (platSel) platSel.innerHTML = D.platforms.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  const catSel = document.getElementById('qa-cat-sel');
+  if (catSel) catSel.innerHTML = (D.expCats || []).map(c => `<option value="${c}">${c}</option>`).join('');
+
+  // Set today
+  const dateEl = document.getElementById('qa-date');
+  if (dateEl) dateEl.value = todayStr();
+
+  // Reset
+  document.getElementById('qa-amt-input').value = '';
+  document.getElementById('qa-amt-display').textContent = R(0);
+  document.getElementById('qa-desc').value = '';
+  document.getElementById('qa-suggest-row').style.display = 'none';
+  qaSetType('rec');
+
+  openOverlay('modal-quick-add');
+}
+
+function qaConfirm() {
+  const amt = parseFloat(document.getElementById('qa-amt-input')?.value);
+  if (!amt || amt <= 0) { alert('Informe um valor válido.'); return; }
+  const date = document.getElementById('qa-date')?.value || todayStr();
+  const desc = document.getElementById('qa-desc')?.value || '';
+
+  if (qaType === 'rec') {
+    const pid = document.getElementById('qa-plat-sel')?.value;
+    if (pid) {
+      setDayIncome(date, pid, amt);
+    }
+  } else {
+    const cat = document.getElementById('qa-cat-sel')?.value || (D.expCats[0] || 'Outros');
+    D.expenses.push({ id: uid(), date, category: cat, description: desc || cat, amount: amt });
+    save();
+    checkBudgetAlerts(cat);
+  }
+
+  closeOverlay('modal-quick-add');
+  haptic(10);
+
+  // Refresh whatever is visible
+  if (document.getElementById('page-inicio')?.classList.contains('active')) { renderInicio(); renderInicioCards(); }
+  if (document.getElementById('page-semana')?.classList.contains('active')) { renderSemana(); renderDayAccordion(); }
+}
+
+// ══════════════════════════════════════════
+// PUSH NOTIFICATIONS
+// ══════════════════════════════════════════
+async function requestNotifPermission() {
+  closeOverlay('modal-notif-perm');
+  if (!('Notification' in window)) { alert('Seu navegador não suporta notificações.'); return; }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    localStorage.setItem('gdcash_notif_enabled', '1');
+    scheduleDailyReminder();
+    alert('Notificações ativadas! Você receberá um lembrete diário às 21h.');
+  }
+}
+
+function checkNotifPrompt() {
+  if (localStorage.getItem('gdcash_notif_dismissed')) return;
+  if (localStorage.getItem('gdcash_notif_enabled')) return;
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'granted') {
+    localStorage.setItem('gdcash_notif_enabled', '1');
+    return;
+  }
+  // Show prompt after 30 seconds of use
+  setTimeout(() => {
+    if (!localStorage.getItem('gdcash_notif_dismissed')) {
+      openOverlay('modal-notif-perm');
+    }
+  }, 30000);
+}
+
+function scheduleDailyReminder() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready.then(reg => {
+    if (reg.active) {
+      reg.active.postMessage({ type: 'SCHEDULE_DAILY', hour: 21, minute: 0 });
+    }
+  });
+}
+
+function checkBudgetAlerts(cat) {
+  if (!D.catBudgets || !D.catBudgets[cat]) return;
+  const budget = D.catBudgets[cat];
+  const catSpent = (D.expenses || [])
+    .filter(e => monthDates(0).includes(e.date) && e.category === cat)
+    .reduce((s, e) => s + e.amount, 0);
+  const pct = Math.round(catSpent / budget * 100);
+  if (pct >= 80 && pct < 100 && Notification.permission === 'granted') {
+    new Notification('GD CASH — Alerta de orçamento', {
+      body: `Você já usou ${pct}% do limite de "${cat}" este mês.`,
+      icon: '/icon-192.png',
+    });
+  }
+}
+
+// ══════════════════════════════════════════
+// ADD THEME TOGGLE TO SETTINGS PAGE
+// ══════════════════════════════════════════
+function initSettingsExtras() {
+  const settingsPage = document.getElementById('page-ajustes');
+  if (!settingsPage) return;
+  const existing = settingsPage.querySelector('.theme-toggle-section');
+  if (existing) return;
+
+  const section = document.createElement('div');
+  section.className = 'theme-toggle-section';
+  section.innerHTML = `
+    <div class="sec-title">Aparência</div>
+    <div class="card settings-list">
+      <div class="theme-toggle-row">
+        <span>Modo escuro</span>
+        <button class="toggle-switch" id="theme-toggle-btn" onclick="toggleTheme()">
+          <div class="toggle-knob"></div>
+        </button>
+      </div>
+      <div class="theme-toggle-row">
+        <span>Notificações</span>
+        <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:12px" onclick="openOverlay('modal-notif-perm')">Configurar</button>
+      </div>
+    </div>`;
+
+  const firstSec = settingsPage.querySelector('.sec-title');
+  if (firstSec) firstSec.before(section);
+  else settingsPage.prepend(section);
+
+  // Set initial toggle state
+  updateThemeToggle(document.documentElement.dataset.theme === 'dark');
+}

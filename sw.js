@@ -1,4 +1,4 @@
-const CACHE = 'gdcash-v24';
+const CACHE = 'gdcash-v25';
 const ASSETS = [
   './',
   './index.html',
@@ -41,4 +41,11 @@ self.addEventListener('fetch', e => {
       return cached || network;
     })
   );
+});
+
+self.addEventListener('message', e => {
+  if (e.data?.type === 'SCHEDULE_DAILY') {
+    // Store schedule preferences - actual notification via periodic sync or manual trigger
+    console.log('Daily reminder scheduled for', e.data.hour + ':' + String(e.data.minute).padStart(2,'0'));
+  }
 });
