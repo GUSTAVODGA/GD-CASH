@@ -177,9 +177,21 @@
         </div>
         <div class="cc-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
       </div>
+      <div class="cc cc-blue" id="car-wgoal-card" onclick="carWeekGoalTap()">
+        <div class="cc-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div class="cc-body">
+          <div class="cc-lbl">Semana atual</div>
+          <div class="cc-title" id="car-wgoal-title">Meta da Semana</div>
+          <div class="cc-sub" id="car-wgoal-sub">Calculando...</div>
+        </div>
+        <div class="cc-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
     </div>
     <div class="cdots" id="car-dots">
       <div class="cdot on"></div>
+      <div class="cdot"></div>
       <div class="cdot"></div>
     </div>
   </div>
@@ -895,7 +907,7 @@
   </div>
 </div>
 
-<script src="app.js?v=36"></script>
+<script src="app.js?v=37"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

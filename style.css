@@ -127,6 +127,8 @@
 .cc-arr svg { width:14px; height:14px; stroke:var(--tx3); transition:stroke .3s; }
 .cc-gold .cc-ico { background:var(--ac-t); } .cc-gold .cc-ico svg { stroke:var(--ac); } .cc-gold .cc-title { color:var(--ac); }
 .cc-green .cc-ico { background:var(--gn-t); } .cc-green .cc-ico svg { stroke:var(--gn); } .cc-green .cc-title { color:var(--gn); }
+.cc-blue .cc-ico { background:rgba(37,99,168,.10); } .cc-blue .cc-ico svg { stroke:var(--bl); } .cc-blue .cc-title { color:var(--bl); }
+:root[data-theme="dark"] .cc-blue .cc-ico { background:rgba(96,165,250,.12); } :root[data-theme="dark"] .cc-blue .cc-ico svg { stroke:#60a5fa; } :root[data-theme="dark"] .cc-blue .cc-title { color:#60a5fa; }
 .cdots { display:flex; justify-content:center; gap:5px; margin-top:4px; }
 .cdot { width:5px; height:5px; border-radius:50%; background:var(--border); transition:all .25s; }
 .cdot.on { width:16px; border-radius:4px; background:var(--ac); }
