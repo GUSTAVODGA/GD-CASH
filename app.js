@@ -1088,6 +1088,16 @@ function renderWeekGoal() {
     <div class="wg-foot">${foot}</div>`;
 }
 
+function shareApp() {
+  const url = 'https://gustavodga.github.io/GD-CASH/';
+  const text = 'Controle suas finanças de forma simples e inteligente. Experimenta o GD Cash, é gratuito!';
+  if (navigator.share) {
+    navigator.share({ title: 'GD Cash', text, url }).catch(() => {});
+  } else {
+    navigator.clipboard?.writeText(url).then(() => alert('Link copiado! Cole e envie para quem quiser.'));
+  }
+}
+
 function openWeekGoalModal() {
   document.getElementById('wg-val').value = D.weeklyGoal || '';
   openOverlay('modal-week-goal');
