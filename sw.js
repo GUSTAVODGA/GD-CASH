@@ -1,4 +1,4 @@
-const CACHE = 'gdcash-v33';
+const CACHE = 'gdcash-v34';
 const ASSETS = [
   './',
   './index.html',

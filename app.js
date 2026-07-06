@@ -2121,11 +2121,13 @@ function exportCalendar() {
   });
   const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//GD CASH//PT\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events}END:VCALENDAR`;
   const blob = new Blob([ics], {type:'text/calendar'});
-  const file = new File([blob], 'gdcash-vencimentos.ics', {type:'text/calendar'});
-  if (navigator.canShare && navigator.canShare({files:[file]})) {
-    navigator.share({ files:[file], title:'GD Cash — Vencimentos' }).catch(()=>{});
+  const url = URL.createObjectURL(blob);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) {
+    // No iOS, navegar direto para o arquivo faz o Safari abrir o "Adicionar ao Calendário"
+    window.location.href = url;
   } else {
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href=url; a.download='gdcash-vencimentos.ics';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 3000);
