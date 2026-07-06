@@ -491,8 +491,8 @@ function exportData() {
   const a = document.createElement('a');
   a.href = url;
   a.download = `gdcash-backup-${todayStr()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
   localStorage.setItem('gdcash_last_backup', todayStr());
 }
 function importData(event) {
@@ -1887,8 +1887,9 @@ function shareMonthReport() {
       navigator.share({files:[file], title:`GD CASH — ${mLabel}`}).catch(()=>{});
     } else {
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download=`gdcash-${mLabel}.png`; a.click();
-      URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href=url; a.download=`gdcash-${mLabel}.png`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
   }, 'image/png');
 }
@@ -2091,8 +2092,9 @@ function exportCSV() {
   const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download=`gdcash-${todayStr()}.csv`; a.click();
-  URL.revokeObjectURL(url);
+  const a = document.createElement('a'); a.href=url; a.download=`gdcash-${todayStr()}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function exportCalendar() {
@@ -2113,8 +2115,9 @@ function exportCalendar() {
   const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//GD CASH//PT\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events}END:VCALENDAR`;
   const blob = new Blob([ics], {type:'text/calendar'});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='gdcash-vencimentos.ics'; a.click();
-  URL.revokeObjectURL(url);
+  const a = document.createElement('a'); a.href=url; a.download='gdcash-vencimentos.ics';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function emailMonthReport() {
