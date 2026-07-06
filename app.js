@@ -24,7 +24,8 @@ function cycleCurrency() {
   localStorage.setItem('gdcash_currency', currSym);
   document.getElementById('curr-chip').textContent = currSym;
   const active = document.querySelector('.page.active')?.id?.replace('page-', '');
-  if (active === 'semana')  renderSemana();
+  if (active === 'inicio')  renderInicio();
+  else if (active === 'semana')  renderSemana();
   else if (active === 'mes')     renderMes();
   else if (active === 'reserva') renderReserva();
   else if (active === 'fixos')   renderFixos();
@@ -49,7 +50,7 @@ function initFirebase() {
       avatarImg.src = user.photoURL || '';
       await loadFromCloud();
       document.getElementById('curr-chip').textContent = currSym;
-      renderSemana();
+      renderInicio();
       checkGoalNotifications();
       checkOnboarding();
       checkInstallBanner();
@@ -127,6 +128,11 @@ function dismissInstallBanner() {
 // TAB HELP (? por aba)
 // ══════════════════════════════════════════
 const TAB_HELP = {
+  inicio: {
+    icon: '🏠',
+    title: 'Tela Início',
+    text: 'Resumo da semana, movimentações recentes e reserva num só lugar. Use o botão + para lançar receita ou gasto sem sair da tela.',
+  },
   semana: {
     icon: '📅',
     title: 'Aba Semana',
@@ -237,6 +243,170 @@ async function saveToCloud() {
   } catch(e) {
     console.error('Erro ao salvar na nuvem:', e);
   }
+}
+
+// ══════════════════════════════════════════
+// RENDER: INÍCIO
+// ══════════════════════════════════════════
+function renderInicio() {
+  const hour = new Date().getHours();
+  const saudacao = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const nome = currentUser?.displayName?.split(' ')[0] || '';
+  const greetEl = document.getElementById('inicio-greeting');
+  if (greetEl) greetEl.textContent = saudacao + (nome ? ', ' + nome : '') + ' 👋';
+
+  const inc = sumWeekIncome(weekOffset), exp = sumWeekExpenses(weekOffset), liq = inc - exp;
+  animCount(document.getElementById('inicio-liq'), liq, 650);
+  animCount(document.getElementById('inicio-inc'), inc);
+  animCount(document.getElementById('inicio-exp'), exp);
+  const hero = document.getElementById('hero-inicio');
+  if (hero) hero.className = 'hero-card ' + (liq >= 0 ? 'pos' : 'neg');
+
+  const gwrap = document.getElementById('inicio-goal-wrap');
+  if (gwrap) {
+    if (D.weeklyGoal > 0) {
+      gwrap.style.display = '';
+      const pct = Math.min(100, Math.round(inc / D.weeklyGoal * 100));
+      const bar = document.getElementById('inicio-goal-bar');
+      if (bar) { bar.style.width = pct + '%'; bar.className = 'wg-bar-fill' + (pct >= 100 ? ' wg-done' : ''); }
+      const pctEl = document.getElementById('inicio-goal-pct');
+      if (pctEl) pctEl.textContent = R(inc) + ' / ' + R(D.weeklyGoal);
+    } else {
+      gwrap.style.display = 'none';
+    }
+  }
+
+  const rpct = D.emergency.target > 0 ? Math.min(100, Math.round(D.emergency.current / D.emergency.target * 100)) : 0;
+  const rbar = document.getElementById('inicio-reserve-bar');
+  if (rbar) { rbar.style.width = rpct + '%'; rbar.className = 'wg-bar-fill' + (rpct >= 100 ? ' wg-done' : ''); }
+  const rval = document.getElementById('inicio-reserve-val');
+  if (rval) rval.textContent = R(D.emergency.current);
+  const rpctEl = document.getElementById('inicio-reserve-pct-txt');
+  if (rpctEl) rpctEl.textContent = rpct + '%';
+
+  renderRecentTx();
+}
+
+function renderRecentTx() {
+  const listEl = document.getElementById('inicio-tx-list');
+  if (!listEl) return;
+  const platMap = Object.fromEntries((D.platforms || []).map(p => [p.id, p]));
+  const exps = (D.expenses || []).map(e => ({
+    type: 'exp', date: e.date, label: e.description || e.category, sub: e.category, amount: e.amount
+  }));
+  const incItems = (D.incomeItems || []).filter(it => it.status === 'paid').map(it => ({
+    type: 'inc', date: it.date,
+    label: it.note || platMap[it.platformId]?.name || 'Receita',
+    sub: platMap[it.platformId]?.name || '',
+    amount: it.amount
+  }));
+  const manualInc = [];
+  Object.entries(D.dailyIncome || {}).forEach(([date, pm]) => {
+    (D.platforms || []).forEach(p => {
+      const v = pm[p.id];
+      if (v && v > 0 && !(D.incomeItems || []).some(it => it.date === date && it.platformId === p.id))
+        manualInc.push({ type: 'inc', date, label: p.name, sub: '', amount: v });
+    });
+  });
+  const all = [...exps, ...incItems, ...manualInc]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 8);
+  if (!all.length) {
+    listEl.innerHTML = '<div class="empty-state">Sem movimentações ainda</div>';
+    return;
+  }
+  listEl.innerHTML = all.map(tx => `
+    <div class="tx-item">
+      <div class="tx-icon ${tx.type === 'inc' ? 'tx-icon-inc' : 'tx-icon-exp'}">${tx.type === 'inc' ? '↑' : '↓'}</div>
+      <div class="tx-info">
+        <div class="tx-label">${tx.label}</div>
+        <div class="tx-sub">${tx.sub ? tx.sub + ' · ' : ''}${fmtShort(tx.date)}</div>
+      </div>
+      <div class="tx-amt ${tx.type === 'inc' ? 'pos' : 'neg'}">${tx.type === 'inc' ? '+' : '−'}${currSym} ${Math.abs(tx.amount).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+    </div>`).join('');
+}
+
+// ── Dia: abrir / atualizar ──
+function openDayDetail(idx) {
+  selDayIdx = idx;
+  document.querySelectorAll('#days-grid .day-btn').forEach((btn, i) => btn.classList.toggle('sel', i === idx));
+  populateExpCatSel();
+  renderDayDetail();
+  openOverlay('modal-day-detail');
+}
+
+function refreshAfterDayEdit() {
+  renderDayDetail();
+  // Update days-grid dots
+  const dates = weekDates(weekOffset);
+  document.querySelectorAll('#days-grid .day-btn').forEach((btn, i) => {
+    if (i >= dates.length) return;
+    const d = dates[i];
+    const hasData = Object.values(getDayIncome(d)).some(v => v > 0)
+      || getDayExpenses(d).length > 0
+      || (D.incomeItems || []).some(it => it.date === d);
+    btn.classList.toggle('has-data', hasData);
+  });
+  // Refresh hero on semana page if active
+  if (document.getElementById('page-semana')?.classList.contains('active')) {
+    const inc = sumWeekIncome(weekOffset), exp = sumWeekExpenses(weekOffset), liq = inc - exp;
+    animCount(document.getElementById('ws-inc'), inc);
+    animCount(document.getElementById('ws-exp'), exp);
+    animCount(document.getElementById('ws-liq'), liq, 650);
+    document.getElementById('hero-semana').className = 'hero-card ' + (liq >= 0 ? 'pos' : 'neg');
+    document.getElementById('plat-cards').innerHTML = D.platforms.map(p =>
+      `<div class="plat-c" style="border-top-color:${p.color}" onclick="openPlatSettings()">
+        <div class="plat-c-name" style="color:${p.color}">${p.name}</div>
+        <div class="plat-c-val">${R(sumPlatWeek(p.id, weekOffset))}</div>
+      </div>`).join('');
+  }
+  // Refresh inicio if active
+  if (document.getElementById('page-inicio')?.classList.contains('active')) renderInicio();
+}
+
+// ── Mais / FAB ──
+function openMoreMenu() { openOverlay('modal-more'); }
+function switchMore(tab) { closeOverlay('modal-more'); setTimeout(() => switchTab(tab), 50); }
+
+let _fabOpen = false;
+function toggleFabMenu() { _fabOpen ? closeFabMenu() : openFabMenu(); }
+
+function openFabMenu() {
+  _fabOpen = true;
+  const bd = document.getElementById('fab-backdrop');
+  const ac = document.getElementById('fab-actions');
+  const btn = document.getElementById('global-fab');
+  bd.style.display = ''; ac.style.display = '';
+  btn.classList.add('fab-open');
+  requestAnimationFrame(() => {
+    bd.style.opacity = '1';
+    ac.style.opacity = '1';
+    ac.style.transform = 'translateY(0)';
+  });
+}
+
+function closeFabMenu() {
+  _fabOpen = false;
+  const bd = document.getElementById('fab-backdrop');
+  const ac = document.getElementById('fab-actions');
+  bd.style.opacity = '0';
+  ac.style.opacity = '0';
+  ac.style.transform = 'translateY(12px)';
+  document.getElementById('global-fab').classList.remove('fab-open');
+  setTimeout(() => { bd.style.display = 'none'; ac.style.display = 'none'; }, 220);
+}
+
+function fabAction(type) {
+  closeFabMenu();
+  setTimeout(() => {
+    if (type === 'reserva') { openResModal('dep'); return; }
+    if (!document.getElementById('page-semana')?.classList.contains('active')) {
+      switchTab('semana');
+      setTimeout(() => openDayDetail(selDayIdx), 350);
+    } else {
+      openDayDetail(selDayIdx);
+    }
+  }, 250);
 }
 
 // ══════════════════════════════════════════
@@ -567,19 +737,17 @@ function renderSemana() {
     </div>`).join('');
 
   document.getElementById('days-grid').innerHTML=dates.map((d,i)=>{
-    const hasData=Object.values(getDayIncome(d)).some(v=>v>0)||getDayExpenses(d).length>0;
+    const hasData=Object.values(getDayIncome(d)).some(v=>v>0)||getDayExpenses(d).length>0||(D.incomeItems||[]).some(it=>it.date===d);
     const isOff=D.daysOff.includes(d);
     const dt=parseDate(d);
-    return `<div class="day-btn${i===selDayIdx?' sel':''}${hasData?' has-data':''}${isOff?' off':''}" onclick="selectDay(${i})">
+    return `<div class="day-btn${i===selDayIdx?' sel':''}${hasData?' has-data':''}${isOff?' off':''}" onclick="openDayDetail(${i})">
       <div class="day-lbl">${WEEK_DAYS[i]}</div>
       <div class="day-num">${dt.getDate()}</div>
       <div class="day-dot"></div>
     </div>`;
   }).join('');
 
-  renderDayDetail();
   renderWeekGoal();
-  populateExpCatSel();
 }
 
 function selectDay(idx) { selDayIdx=idx; renderSemana(); }
@@ -679,12 +847,12 @@ function addIncomeItem() {
   document.getElementById('ii-amt').value='';
   document.getElementById('ii-note').value='';
   document.getElementById('income-add-form').style.display='none';
-  save(); renderSemana();
+  save(); refreshAfterDayEdit();
 }
 
 function deleteIncomeItem(id) {
   D.incomeItems=(D.incomeItems||[]).filter(it=>it.id!==id);
-  save(); renderSemana();
+  save(); refreshAfterDayEdit();
 }
 
 function toggleIncomeForm() {
@@ -700,7 +868,7 @@ function toggleFolga() {
   const date=selDate();
   if(D.daysOff.includes(date)) D.daysOff=D.daysOff.filter(d=>d!==date);
   else D.daysOff.push(date);
-  save(); renderSemana();
+  save(); refreshAfterDayEdit();
 }
 
 function populateExpCatSel() {
@@ -715,10 +883,10 @@ function addExpense() {
   D.expenses.push({id:uid(),date,category:cat,amount:val,description:desc});
   document.getElementById('exp-val').value='';
   document.getElementById('exp-desc').value='';
-  save(); renderSemana();
+  save(); refreshAfterDayEdit();
 }
 
-function deleteExpense(id) { D.expenses=D.expenses.filter(e=>e.id!==id); save(); renderSemana(); }
+function deleteExpense(id) { D.expenses=D.expenses.filter(e=>e.id!==id); save(); refreshAfterDayEdit(); }
 
 // ══════════════════════════════════════════
 // RENDER: MÊS
@@ -1397,16 +1565,23 @@ function switchTab(tab) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   const page = document.getElementById('page-'+tab);
+  if (!page) return;
   page.classList.add('active');
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
+  // Highlight "Mais" button for secondary tabs
+  const moreTabs = ['fixos','conversor','ajustes'];
+  document.querySelector('.nav-more-btn')?.classList.toggle('active', moreTabs.includes(tab));
+  if(tab==='inicio')    renderInicio();
   if(tab==='semana')    renderSemana();
   if(tab==='mes')       renderMes();
   if(tab==='reserva')   renderReserva();
   if(tab==='fixos')     renderFixos();
   if(tab==='conversor') loadConversorRates();
   if(tab==='ajustes')   renderBudgetSettings();
+  // Show FAB only on main tabs
+  const fab = document.getElementById('global-fab');
+  if (fab) fab.style.display = ['inicio','semana','mes','reserva'].includes(tab) ? '' : 'none';
   checkFirstVisit(tab);
-  // stagger cards
   page.classList.add('tab-fresh');
   page.querySelectorAll('.card,.hero-card').forEach((el,i)=>{
     el.style.setProperty('--sd', (i*0.055)+'s');

@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -127,8 +127,56 @@
 
 <main>
 
+<!-- ════ INÍCIO ════ -->
+<section class="page active" id="page-inicio">
+  <div class="inicio-header">
+    <div class="inicio-greeting" id="inicio-greeting">Bom dia 👋</div>
+    <button class="tab-help-btn" onclick="showTabHelp('inicio')">?</button>
+  </div>
+
+  <div class="hero-card pos" id="hero-inicio">
+    <div class="hero-top">
+      <span class="hero-lbl">Líquido desta semana</span>
+      <span class="hero-val" id="inicio-liq">$ 0,00</span>
+    </div>
+    <div class="hero-chips">
+      <div class="hero-chip"><span class="chip-dot dot-green"></span>Receita <b id="inicio-inc">$ 0,00</b></div>
+      <div class="hero-chip"><span class="chip-dot dot-red"></span>Gastos <b id="inicio-exp">$ 0,00</b></div>
+    </div>
+  </div>
+
+  <div class="inicio-goal-wrap" id="inicio-goal-wrap" style="display:none">
+    <div class="inicio-goal-header">
+      <span class="inicio-goal-lbl">Meta da semana</span>
+      <span class="inicio-goal-pct" id="inicio-goal-pct"></span>
+    </div>
+    <div class="wg-bar-wrap"><div class="wg-bar-fill" id="inicio-goal-bar" style="width:0%"></div></div>
+  </div>
+
+  <div class="card inicio-reserve-card">
+    <div class="inicio-reserve-row">
+      <div>
+        <div class="inicio-reserve-lbl">Reserva de emergência</div>
+        <div class="inicio-reserve-val" id="inicio-reserve-val">$ 0,00</div>
+      </div>
+      <div style="text-align:right">
+        <div class="inicio-reserve-pct-txt" id="inicio-reserve-pct-txt">0%</div>
+        <button class="link-btn" onclick="switchTab('reserva')">Ver tudo →</button>
+      </div>
+    </div>
+    <div class="wg-bar-wrap" style="margin-top:10px">
+      <div class="wg-bar-fill" id="inicio-reserve-bar" style="width:0%"></div>
+    </div>
+  </div>
+
+  <div class="sec-title">Movimentações recentes</div>
+  <div class="card tx-list" id="inicio-tx-list">
+    <div class="empty-state">Sem movimentações ainda</div>
+  </div>
+</section>
+
 <!-- ════ SEMANA ════ -->
-<section class="page active" id="page-semana">
+<section class="page" id="page-semana">
   <div class="nav-row">
     <button class="nav-arrow" onclick="changeWeek(-1)">‹</button>
     <div class="nav-title" id="week-lbl">Semana</div>
@@ -154,61 +202,6 @@
   <div class="days-grid" id="days-grid"></div>
 
   <div class="week-goal-card" id="week-goal-card"></div>
-
-  <div class="card" style="margin-bottom:14px">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
-      <div style="font-weight:700;font-size:14px" id="day-detail-date"></div>
-      <button class="btn-folga" id="btn-folga" onclick="toggleFolga()">Marcar folga</button>
-    </div>
-
-    <div class="inc-inputs-grid" id="inc-inputs-grid"></div>
-
-    <!-- Serviços detalhados -->
-    <div class="iitems-section">
-      <div class="iitems-header">
-        <span class="iitems-title">Serviços detalhados</span>
-        <button class="iitems-add-btn" onclick="toggleIncomeForm()">+ Serviço</button>
-      </div>
-
-      <div id="income-add-form" style="display:none" class="iitem-form">
-        <div class="fi-row" style="margin-bottom:8px">
-          <select class="fi" id="ii-plat" style="flex:1"></select>
-          <input class="fi" type="number" id="ii-amt" min="0" step="0.01" placeholder="Valor" style="flex:1">
-        </div>
-        <input class="fi" type="text" id="ii-note" placeholder="Descrição (ex: Cliente 1, Pedro...)" style="margin-bottom:8px">
-        <div class="fi-row" style="margin-bottom:8px">
-          <select class="fi" id="ii-status" style="flex:1">
-            <option value="paid">✅ Recebido</option>
-            <option value="pending">⏳ A receber</option>
-          </select>
-        </div>
-        <button class="btn btn-primary" onclick="addIncomeItem()">Salvar serviço</button>
-      </div>
-
-      <div id="income-items-list"></div>
-      <div id="income-pending-total" class="iitem-pending-total" style="display:none"></div>
-    </div>
-
-    <div class="result-row">
-      <span class="result-lbl">Resultado do dia</span>
-      <span class="result-val" id="result-val">$ 0,00</span>
-    </div>
-
-    <div id="add-exp-section">
-      <div class="fi-row" style="margin-bottom:8px">
-        <select class="fi" id="exp-cat" style="flex:1"></select>
-        <input class="fi" type="number" id="exp-val" min="0" step="0.01" placeholder="Valor" style="flex:1">
-      </div>
-      <input class="fi" type="text" id="exp-desc" placeholder="Descrição (ex: Shell, Pizza, Spotify...)" style="margin-bottom:8px">
-      <button class="btn btn-primary" onclick="addExpense()">+ Adicionar gasto</button>
-    </div>
-  </div>
-
-  <div class="sec-title">Gastos do dia</div>
-  <div class="card">
-    <div id="exp-list"></div>
-    <div class="empty-state" id="exp-empty-msg">Nenhum gasto lançado</div>
-  </div>
 </section>
 
 <!-- ════ RESERVA ════ -->
@@ -453,33 +446,115 @@
 </main>
 
 <nav class="bottom-nav">
-  <button class="nav-item active" data-tab="semana" onclick="switchTab('semana')">
+  <button class="nav-item active" data-tab="inicio" onclick="switchTab('inicio')">
+    <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span>Início</span>
+  </button>
+  <button class="nav-item" data-tab="semana" onclick="switchTab('semana')">
     <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     <span>Semana</span>
-  </button>
-  <button class="nav-item" data-tab="reserva" onclick="switchTab('reserva')">
-    <svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
-    <span>Reserva</span>
   </button>
   <button class="nav-item" data-tab="mes" onclick="switchTab('mes')">
     <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span>Mês</span>
   </button>
-  <button class="nav-item" data-tab="fixos" onclick="switchTab('fixos')">
-    <svg viewBox="0 0 24 24"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
-    <span>Fixos</span>
+  <button class="nav-item" data-tab="reserva" onclick="switchTab('reserva')">
+    <svg viewBox="0 0 24 24"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+    <span>Reserva</span>
   </button>
-  <button class="nav-item" data-tab="conversor" onclick="switchTab('conversor')">
-    <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-    <span>Conversor</span>
-  </button>
-  <button class="nav-item" data-tab="ajustes" onclick="switchTab('ajustes')">
-    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-    <span>Ajustes</span>
+  <button class="nav-item nav-more-btn" onclick="openMoreMenu()">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="19" cy="12" r="1.5" fill="currentColor"/></svg>
+    <span>Mais</span>
   </button>
 </nav>
 
+<!-- ════ FAB GLOBAL ════ -->
+<div class="fab-backdrop" id="fab-backdrop" style="display:none" onclick="closeFabMenu()"></div>
+<div class="fab-actions" id="fab-actions" style="display:none;opacity:0;transform:translateY(12px)">
+  <button class="fab-action-item" onclick="fabAction('income')">
+    <span class="fab-action-icon fab-action-green">↑</span>Receita do dia
+  </button>
+  <button class="fab-action-item" onclick="fabAction('expense')">
+    <span class="fab-action-icon fab-action-red">↓</span>Gasto do dia
+  </button>
+  <button class="fab-action-item" onclick="fabAction('reserva')">
+    <span class="fab-action-icon fab-action-gold">🛡</span>Depositar reserva
+  </button>
+</div>
+<button class="global-fab" id="global-fab" onclick="toggleFabMenu()">
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+</button>
+
 <!-- ════ MODALS ════ -->
+
+<!-- Detalhe do dia (bottom sheet) -->
+<div class="overlay" id="modal-day-detail">
+  <div class="sheet" style="max-height:92vh">
+    <div class="sheet-handle"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-weight:700;font-size:15px" id="day-detail-date"></div>
+      <button class="btn-folga" id="btn-folga" onclick="toggleFolga()">Marcar folga</button>
+    </div>
+    <div class="inc-inputs-grid" id="inc-inputs-grid"></div>
+    <div class="iitems-section">
+      <div class="iitems-header">
+        <span class="iitems-title">Serviços detalhados</span>
+        <button class="iitems-add-btn" onclick="toggleIncomeForm()">+ Serviço</button>
+      </div>
+      <div id="income-add-form" style="display:none" class="iitem-form">
+        <div class="fi-row" style="margin-bottom:8px">
+          <select class="fi" id="ii-plat" style="flex:1"></select>
+          <input class="fi" type="number" id="ii-amt" min="0" step="0.01" placeholder="Valor" style="flex:1">
+        </div>
+        <input class="fi" type="text" id="ii-note" placeholder="Descrição (ex: Cliente 1, Pedro...)" style="margin-bottom:8px">
+        <div class="fi-row" style="margin-bottom:8px">
+          <select class="fi" id="ii-status" style="flex:1">
+            <option value="paid">✅ Recebido</option>
+            <option value="pending">⏳ A receber</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" onclick="addIncomeItem()">Salvar serviço</button>
+      </div>
+      <div id="income-items-list"></div>
+      <div id="income-pending-total" class="iitem-pending-total" style="display:none"></div>
+    </div>
+    <div class="result-row">
+      <span class="result-lbl">Resultado do dia</span>
+      <span class="result-val" id="result-val">$ 0,00</span>
+    </div>
+    <div id="add-exp-section">
+      <div class="fi-row" style="margin-bottom:8px">
+        <select class="fi" id="exp-cat" style="flex:1"></select>
+        <input class="fi" type="number" id="exp-val" min="0" step="0.01" placeholder="Valor" style="flex:1">
+      </div>
+      <input class="fi" type="text" id="exp-desc" placeholder="Descrição (ex: Shell, Pizza, Spotify...)" style="margin-bottom:8px">
+      <button class="btn btn-primary" onclick="addExpense()">+ Adicionar gasto</button>
+    </div>
+    <div class="sec-title" style="margin-top:14px">Gastos do dia</div>
+    <div id="exp-list"></div>
+    <div class="empty-state" id="exp-empty-msg">Nenhum gasto lançado</div>
+  </div>
+</div>
+
+<!-- Mais opções -->
+<div class="overlay" id="modal-more">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Mais</div>
+    <div class="more-grid">
+      <button class="more-item" onclick="switchMore('fixos')">
+        <span class="more-icon">🔁</span><span>Fixos</span>
+      </button>
+      <button class="more-item" onclick="switchMore('conversor')">
+        <span class="more-icon">💱</span><span>Conversor</span>
+      </button>
+      <button class="more-item" onclick="switchMore('ajustes')">
+        <span class="more-icon">⚙️</span><span>Ajustes</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal-res">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -634,7 +709,7 @@
   </div>
 </div>
 
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

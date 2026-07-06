@@ -25,9 +25,7 @@
 html,body{height:100%;overflow-x:hidden}
 body{
   background:var(--bg);
-  background-image:
-    radial-gradient(ellipse 120% 50% at 50% -5%, rgba(255,184,0,.08) 0%, transparent 65%),
-    radial-gradient(ellipse 70% 55% at 95% 95%, rgba(0,230,160,.04) 0%, transparent 55%);
+  background-image:radial-gradient(ellipse 100% 40% at 50% -8%, rgba(255,184,0,.05) 0%, transparent 60%);
   background-attachment:fixed;
   color:var(--text);
   font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
@@ -109,7 +107,7 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .logo-mark{
   width:9px;height:9px;border-radius:50%;
   background:linear-gradient(135deg,var(--gold),var(--orange));
-  box-shadow:0 0 10px rgba(255,184,0,.8),0 0 22px rgba(255,184,0,.4);
+  box-shadow:0 0 8px rgba(255,184,0,.5);
 }
 
 /* ── Bottom nav ── */
@@ -146,9 +144,8 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 
 /* ── Generic card ── */
 .card{
-  background:rgba(19,22,29,0.8);
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-  border:1px solid rgba(255,255,255,0.07);
+  background:var(--surface);
+  border:1px solid rgba(255,255,255,0.06);
   border-radius:var(--radius);padding:14px;
 }
 .sec-title{font-size:12px;font-weight:700;color:var(--text3);letter-spacing:.06em;text-transform:uppercase;margin:18px 0 8px}
@@ -597,6 +594,94 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .acct-btn-chev{color:var(--text3);font-size:16px}
 .acct-btn-danger{color:#ff5a72}
 .acct-btn-danger .acct-btn-icon{background:rgba(255,90,114,.1);color:#ff5a72}
+
+/* ══════════════════════════════════════════
+   TELA INÍCIO
+   ══════════════════════════════════════════ */
+.inicio-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.inicio-greeting{font-size:20px;font-weight:800;letter-spacing:-.3px}
+.inicio-goal-wrap{
+  background:rgba(255,184,0,.06);border:1px solid rgba(255,184,0,.12);
+  border-radius:14px;padding:12px 14px;margin-bottom:14px;
+}
+.inicio-goal-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.inicio-goal-lbl{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+.inicio-goal-pct{font-size:12px;font-weight:800;color:var(--gold)}
+.inicio-reserve-card{margin-bottom:14px}
+.inicio-reserve-row{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:2px}
+.inicio-reserve-lbl{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.inicio-reserve-val{font-size:20px;font-weight:800;color:var(--gold)}
+.inicio-reserve-pct-txt{font-size:20px;font-weight:800;color:var(--text)}
+.link-btn{background:none;border:none;color:var(--gold);font-size:12px;font-weight:700;cursor:pointer;padding:4px 0 0;display:block}
+
+/* ── Transactions list ── */
+.tx-list{padding:0;overflow:hidden}
+.tx-item{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.05)}
+.tx-item:last-child{border-bottom:none}
+.tx-icon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:900;flex-shrink:0}
+.tx-icon-inc{background:rgba(0,230,160,.1);color:var(--green)}
+.tx-icon-exp{background:rgba(255,77,106,.1);color:var(--red)}
+.tx-info{flex:1;min-width:0}
+.tx-label{font-size:13.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-sub{font-size:11.5px;color:var(--text3);margin-top:1px}
+.tx-amt{font-size:14px;font-weight:800;flex-shrink:0}
+.tx-amt.pos{color:var(--green)}
+.tx-amt.neg{color:var(--red)}
+
+/* ══════════════════════════════════════════
+   GLOBAL FAB
+   ══════════════════════════════════════════ */
+.global-fab{
+  position:fixed;right:20px;bottom:calc(82px + env(safe-area-inset-bottom,0px));z-index:70;
+  width:52px;height:52px;border-radius:50%;border:none;cursor:pointer;
+  background:linear-gradient(135deg,var(--gold),var(--orange));color:#1a0f00;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 4px 20px rgba(255,184,0,.35),0 2px 8px rgba(0,0,0,.4);
+  transition:transform .2s;
+}
+.global-fab.fab-open{transform:rotate(45deg)}
+.global-fab:active{transform:scale(.92)}
+.global-fab.fab-open:active{transform:rotate(45deg) scale(.92)}
+.fab-backdrop{
+  position:fixed;inset:0;z-index:65;
+  background:rgba(0,0,0,.55);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  opacity:0;transition:opacity .22s;
+}
+.fab-actions{
+  position:fixed;right:20px;bottom:calc(148px + env(safe-area-inset-bottom,0px));z-index:70;
+  display:flex;flex-direction:column;gap:8px;
+  transition:opacity .22s,transform .22s;
+}
+.fab-action-item{
+  display:flex;align-items:center;gap:10px;padding:10px 16px 10px 10px;
+  background:var(--surface2);border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;color:var(--text);font-size:14px;font-weight:600;
+  cursor:pointer;white-space:nowrap;
+  box-shadow:0 4px 20px rgba(0,0,0,.45);
+  text-align:left;
+}
+.fab-action-item:active{opacity:.8}
+.fab-action-icon{
+  width:30px;height:30px;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:900;flex-shrink:0;
+}
+.fab-action-green{background:rgba(0,230,160,.12);color:var(--green)}
+.fab-action-red{background:rgba(255,77,106,.12);color:var(--red)}
+.fab-action-gold{background:rgba(255,184,0,.12);color:var(--gold);font-size:12px}
+
+/* ══════════════════════════════════════════
+   MAIS MENU
+   ══════════════════════════════════════════ */
+.more-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+.more-item{
+  display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:20px 10px;background:rgba(255,255,255,.04);
+  border:1px solid rgba(255,255,255,.08);border-radius:16px;
+  color:var(--text);font-size:13px;font-weight:700;cursor:pointer;
+}
+.more-item:active{background:rgba(255,255,255,.09)}
+.more-icon{font-size:26px}
 
 /* ══════════════════════════════════════════
    INSTALL BANNER
