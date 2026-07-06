@@ -747,7 +747,7 @@ function renderDayDetail() {
       <div class="inc-inp-lbl" style="color:${p.color}">${p.name}</div>
       <input class="inc-inp" type="number" min="0" step="0.01" placeholder="0.00"
         value="${val}"
-        ${hasItems?'readonly title="Total calculado pelos serviços detalhados"':'onchange="setDayIncome(\''+date+'\',\''+p.id+'\',this.value);refreshAfterDayEdit()"'}
+        ${hasItems?'readonly title="Total calculado pelos serviços detalhados"':'onchange="setDayIncome(\''+date+'\',\''+p.id+'\',this.value);renderDayDetail()"'}
         ${hasItems||isOff?'style="opacity:.55;pointer-events:'+(hasItems?'none':'auto')+'"':''}
         ${isOff&&!hasItems?'disabled':''}>
     </div>`;
@@ -1405,6 +1405,15 @@ function openOverlay(id)  { document.getElementById(id).classList.add('open'); }
 function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open')); });
+
+// Refresh Semana hero when day-detail panel closes (any close path)
+new MutationObserver((mutations) => {
+  for (const m of mutations) {
+    if (m.attributeName === 'class' && !m.target.classList.contains('open')) {
+      refreshAfterDayEdit();
+    }
+  }
+}).observe(document.getElementById('modal-day-detail'), { attributes: true });
 
 // ══════════════════════════════════════════
 // TABS
