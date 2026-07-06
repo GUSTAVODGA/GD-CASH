@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=26">
+<link rel="stylesheet" href="style.css?v=27">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -118,58 +118,124 @@
 </div>
 
 <header class="topbar">
-  <div class="logo"><span class="logo-mark"></span>GD CASH</div>
-  <button class="curr-chip" id="curr-chip" onclick="cycleCurrency()" title="Mudar moeda"></button>
-  <button class="user-avatar-btn" id="user-avatar-btn" style="display:none" onclick="openAccountMenu()">
-    <img id="user-avatar-img" src="" alt="" class="user-avatar-img">
-  </button>
+  <div class="logo-group">
+    <div class="logo-badge" onclick="openAccountMenu()">GD</div>
+    <div class="logo-greeting" id="logo-greeting">Olá, <b>Gustavo</b></div>
+  </div>
+  <div class="topbar-right">
+    <button class="curr-chip" id="curr-chip" onclick="cycleCurrency()" title="Mudar moeda" style="display:none"></button>
+    <button class="user-avatar-btn" id="user-avatar-btn" style="display:none" onclick="openAccountMenu()">
+      <img id="user-avatar-img" src="" alt="" class="user-avatar-img">
+    </button>
+    <button class="gear-btn" onclick="switchTab('ajustes')" title="Configurações">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+  </div>
 </header>
 
 <main>
 
 <!-- ════ INÍCIO ════ -->
 <section class="page active" id="page-inicio">
-  <div class="inicio-header">
-    <div class="inicio-greeting" id="inicio-greeting">Bom dia 👋</div>
-    <button class="tab-help-btn" onclick="showTabHelp('inicio')">?</button>
+  <!-- Hidden elements kept for JS compatibility -->
+  <div style="display:none">
+    <div id="inicio-greeting"></div>
+    <div id="inicio-liq"></div>
+    <div id="inicio-inc"></div>
+    <div id="inicio-exp"></div>
+    <div id="inicio-goal-bar"></div>
+    <div id="inicio-goal-pct"></div>
+    <div id="inicio-reserve-bar"></div>
+    <div id="inicio-reserve-val"></div>
+    <div id="inicio-reserve-pct-txt"></div>
+    <div id="hero-inicio" class="hero-card pos"></div>
+    <div id="inicio-goal-wrap"></div>
   </div>
 
-  <div class="hero-card pos" id="hero-inicio">
-    <div class="hero-top">
-      <span class="hero-lbl">Líquido desta semana</span>
-      <span class="hero-val" id="inicio-liq">$ 0,00</span>
-    </div>
-    <div class="hero-chips">
-      <div class="hero-chip"><span class="chip-dot dot-green"></span>Receita <b id="inicio-inc">$ 0,00</b></div>
-      <div class="hero-chip"><span class="chip-dot dot-red"></span>Gastos <b id="inicio-exp">$ 0,00</b></div>
-    </div>
-  </div>
-
-  <div class="inicio-goal-wrap" id="inicio-goal-wrap" onclick="openWeekGoalModal()">
-    <div class="inicio-goal-header">
-      <span class="inicio-goal-lbl">Meta da semana</span>
-      <span class="inicio-goal-pct" id="inicio-goal-pct">Definir →</span>
-    </div>
-    <div class="wg-bar-wrap"><div class="wg-bar-fill" id="inicio-goal-bar" style="width:0%"></div></div>
-  </div>
-
-  <div class="card inicio-reserve-card">
-    <div class="inicio-reserve-row">
-      <div>
-        <div class="inicio-reserve-lbl">Reserva de emergência</div>
-        <div class="inicio-reserve-val" id="inicio-reserve-val">$ 0,00</div>
+  <!-- 1. Compact carousel -->
+  <div class="car-wrap">
+    <div class="car-inner" id="car-inner" onscroll="updCarDots()">
+      <div class="cc cc-gold" onclick="switchTab('reserva')">
+        <div class="cc-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="cc-body">
+          <div class="cc-lbl">Proteção financeira</div>
+          <div class="cc-title">Reserva de Emergência</div>
+          <div class="cc-sub" id="car-reserve-sub">Acompanhe seu progresso →</div>
+        </div>
+        <div class="cc-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
       </div>
-      <div style="text-align:right">
-        <div class="inicio-reserve-pct-txt" id="inicio-reserve-pct-txt">0%</div>
-        <button class="link-btn" onclick="switchTab('reserva')">Ver tudo →</button>
+      <div class="cc cc-green" onclick="switchTab('reserva')">
+        <div class="cc-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        </div>
+        <div class="cc-body">
+          <div class="cc-lbl">Suas conquistas</div>
+          <div class="cc-title">Planeje. Realize.</div>
+          <div class="cc-sub" id="car-goals-sub">Metas ativas →</div>
+        </div>
+        <div class="cc-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
       </div>
     </div>
-    <div class="wg-bar-wrap" style="margin-top:10px">
-      <div class="wg-bar-fill" id="inicio-reserve-bar" style="width:0%"></div>
+    <div class="cdots" id="car-dots">
+      <div class="cdot on"></div>
+      <div class="cdot"></div>
     </div>
   </div>
 
-  <div class="sec-title">Movimentações recentes</div>
+  <!-- 2. Quadradinhos -->
+  <div class="sec-label">Acesso rápido</div>
+  <div class="quad-grid">
+    <div class="qi" onclick="switchTab('conversor')">
+      <div class="qi-ico qi-gold">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      </div>
+      <div class="qi-lbl">Conversor</div>
+    </div>
+    <div class="qi" onclick="switchTab('lembretes')">
+      <div class="qi-ico qi-blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      </div>
+      <div class="qi-lbl">Lembretes</div>
+    </div>
+    <div class="qi" onclick="switchTab('fixos')">
+      <div class="qi-ico qi-red">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      </div>
+      <div class="qi-lbl">Fixos</div>
+    </div>
+  </div>
+
+  <!-- 3. Big nav cards -->
+  <div class="sec-label">Navegar</div>
+  <div class="bigcards">
+    <div class="bigcard" onclick="switchTab('semana')">
+      <div class="bigcard-top">
+        <div class="bigcard-lbl">Esta Semana</div>
+        <div class="bigcard-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+      <div class="bigcard-val" id="bc-week-liq">R$ 0,00</div>
+      <div class="bigcard-chips">
+        <div class="bigcard-chip"><div class="bchd bchd-gn"></div>Receita <b id="bc-week-inc">R$ 0,00</b></div>
+        <div class="bigcard-chip"><div class="bchd bchd-rd"></div>Gastos <b id="bc-week-exp">R$ 0,00</b></div>
+      </div>
+    </div>
+    <div class="bigcard" onclick="switchTab('mes')">
+      <div class="bigcard-top">
+        <div class="bigcard-lbl" id="bc-month-lbl">Este Mês</div>
+        <div class="bigcard-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+      <div class="bigcard-val" id="bc-month-liq">R$ 0,00</div>
+      <div class="bigcard-chips">
+        <div class="bigcard-chip"><div class="bchd bchd-gn"></div>Receita <b id="bc-month-inc">R$ 0,00</b></div>
+        <div class="bigcard-chip"><div class="bchd bchd-rd"></div>Gastos <b id="bc-month-exp">R$ 0,00</b></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent transactions (kept for JS compat) -->
+  <div class="sec-label">Movimentações recentes</div>
   <div class="card tx-list" id="inicio-tx-list">
     <div class="empty-state">Sem movimentações ainda</div>
   </div>
@@ -200,6 +266,7 @@
 
   <div class="sec-title">Dias da semana</div>
   <div class="days-grid" id="days-grid"></div>
+  <div id="days-accordion"></div>
 
   <div class="week-goal-card" id="week-goal-card"></div>
 </section>
