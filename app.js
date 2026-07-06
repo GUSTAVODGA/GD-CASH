@@ -55,6 +55,9 @@ function initFirebase() {
       initSettingsExtras();
       checkNotifPrompt();
       renderInicioCards();
+      // FAB só na aba Semana
+      const fab = document.getElementById('global-fab');
+      if (fab) fab.style.display = 'none';
       checkGoalNotifications();
       checkReminders();
       checkOnboarding();
@@ -1450,7 +1453,7 @@ function switchTab(tab) {
   if(tab==='lembretes')  renderLembretes();
   // Show FAB only on main tabs
   const fab = document.getElementById('global-fab');
-  if (fab) fab.style.display = ['inicio','semana','mes','reserva'].includes(tab) ? '' : 'none';
+  if (fab) fab.style.display = tab === 'semana' ? '' : 'none';
   checkFirstVisit(tab);
   page.classList.add('tab-fresh');
   page.querySelectorAll('.card,.hero-card').forEach((el,i)=>{
@@ -2225,7 +2228,7 @@ function handleShortcut() {
   history.replaceState({}, '', location.pathname);
 }
 
-initSwipe();
+// initSwipe() removido — interferia com o carrossel
 initLongPress();
 
 // ══════════════════════════════════════════
@@ -2318,18 +2321,25 @@ function renderDayAccordion() {
     const exps = getDayExpenses(d);
     const isOff = D.daysOff.includes(d);
 
+    // Income rows — with delete button to clear and re-add
     const platItems = D.platforms.map(p => {
       const v = getDayPlatIncome(d, p.id);
       if (v <= 0) return '';
+      const hasItems = (D.incomeItems||[]).some(it => it.date===d && it.platformId===p.id);
+      const delAction = hasItems
+        ? `D.incomeItems=(D.incomeItems||[]).filter(it=>!(it.date==='${d}'&&it.platformId==='${p.id}'));save();renderDayAccordion();refreshAfterDayEdit()`
+        : `setDayIncome('${d}','${p.id}',0);renderDayAccordion();refreshAfterDayEdit()`;
       return `<div class="dacc-tx">
         <div class="dacc-tx-ico" style="background:${p.color}22">
           <svg viewBox="0 0 24 24" style="stroke:${p.color}"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </div>
         <div class="dacc-tx-info"><div class="dacc-tx-lbl">${p.name}</div><div class="dacc-tx-cat">Receita</div></div>
         <div class="dacc-tx-amt" style="color:var(--gn)">+${R(v)}</div>
+        <button class="dacc-tx-del" title="Remover" onclick="${delAction}">✕</button>
       </div>`;
     }).join('');
 
+    // Expense rows — with delete button
     const expItems = exps.map(e => `
       <div class="dacc-tx">
         <div class="dacc-tx-ico" style="background:var(--rd-t)">
@@ -2337,7 +2347,7 @@ function renderDayAccordion() {
         </div>
         <div class="dacc-tx-info"><div class="dacc-tx-lbl">${e.description||e.category}</div><div class="dacc-tx-cat">Gasto · ${e.category}</div></div>
         <div class="dacc-tx-amt" style="color:var(--rd)">−${R(e.amount)}</div>
-        <button class="dacc-tx-del" onclick="deleteExpense('${e.id}');renderDayAccordion();refreshAfterDayEdit()">✕</button>
+        <button class="dacc-tx-del" title="Remover" onclick="deleteExpense('${e.id}');renderDayAccordion();refreshAfterDayEdit()">✕</button>
       </div>`).join('');
 
     const hasData = dayInc > 0 || exps.length > 0;
@@ -2346,6 +2356,16 @@ function renderDayAccordion() {
     const liqColor = dayLiq > 0 ? 'var(--gn)' : dayLiq < 0 ? 'var(--rd)' : 'var(--tx3)';
     const liqSign = dayLiq > 0 ? '+' : '';
     const isToday = d === todayStr();
+
+    // "Editar dia completo" footer inside expanded body
+    const editFooter = `<div style="padding:10px 14px;border-top:1px solid var(--border)">
+      <button onclick="event.stopPropagation();openDayDetail(${i})" style="width:100%;padding:10px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Editar dia completo
+      </button>
+    </div>`;
+
+    const emptyMsg = `<div style="padding:12px 14px;font-size:12px;color:var(--tx3);border-top:1px solid var(--border)">Nenhum lançamento. Use o <b>+</b> para adicionar.</div>`;
 
     return `<div class="dacc${isToday&&hasData?' open':''}" id="dacc-${i}">
       <div class="dacc-head" onclick="toggleDacc(${i})">
@@ -2359,7 +2379,7 @@ function renderDayAccordion() {
           <div class="dacc-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
         </div>
       </div>
-      <div class="dacc-body">${platItems}${expItems}${!hasData?`<div style="padding:12px 14px;font-size:12px;color:var(--tx3);border-top:1px solid var(--border)">Nenhum lançamento neste dia. Use o <b>+</b> para adicionar.</div>`:''}</div>
+      <div class="dacc-body">${hasData ? platItems + expItems + editFooter : emptyMsg}</div>
     </div>`;
   }).join('');
 }
@@ -2427,9 +2447,9 @@ function openQuickAdd() {
   const catSel = document.getElementById('qa-cat-sel');
   if (catSel) catSel.innerHTML = (D.expCats || []).map(c => `<option value="${c}">${c}</option>`).join('');
 
-  // Set today
+  // Use selected day in Semana, otherwise today
   const dateEl = document.getElementById('qa-date');
-  if (dateEl) dateEl.value = todayStr();
+  if (dateEl) dateEl.value = selDate() || todayStr();
 
   // Reset
   document.getElementById('qa-amt-input').value = '';
