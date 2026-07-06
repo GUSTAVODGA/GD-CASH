@@ -1,47 +1,80 @@
-/* ══ THEME TOKENS ══ */
+/* ══ THEME TOKENS — sistema unificado ══ */
 :root {
-  --bg: #edf2f7;
+  /* Layout */
+  --bg: #f2f4f8;
   --surface: #ffffff;
-  --surface2: #f0f4f8;
-  --surface3: #e8eef5;
+  --surface2: #eef1f6;
+  --surface3: #e4e9f2;
+  --border: rgba(0,0,0,.08);
+  --shadow: 0 2px 14px rgba(0,0,0,.07);
+  --topbar-bg: rgba(242,244,248,.95);
+  --nav-bg: rgba(255,255,255,.96);
+  --radius: 20px;
+  --radius-sm: 14px;
+  /* Text */
   --tx: #1a202c;
   --tx2: rgba(26,32,44,.52);
   --tx3: rgba(26,32,44,.34);
-  --ac: #c9820a;
-  --ac-t: rgba(201,130,10,.10);
-  --ac-b: rgba(201,130,10,.22);
+  --text: #1a202c;
+  --text2: rgba(26,32,44,.52);
+  --text3: rgba(26,32,44,.34);
+  /* Accent / brand */
+  --ac: #b87008;
+  --ac-t: rgba(184,112,8,.10);
+  --ac-b: rgba(184,112,8,.22);
+  --gold: #b87008;
+  --orange: #d4620a;
+  /* Semantic */
   --gn: #1e7a3c;
   --gn-t: rgba(30,122,60,.10);
+  --green: #1e7a3c;
+  --green-d: #155a2b;
   --rd: #c0392b;
   --rd-t: rgba(192,57,43,.10);
+  --red: #c0392b;
+  --red-d: #a93226;
   --bl: #2563a8;
   --bl-t: rgba(37,99,168,.10);
-  --border: rgba(0,0,0,.07);
-  --shadow: 0 2px 14px rgba(0,0,0,.07);
-  --topbar-bg: rgba(255,255,255,.92);
-  --nav-bg: rgba(255,255,255,.95);
+  --blue: #2563a8;
+  --violet: #6d28d9;
+  /* Positive / negative */
+  --pos: var(--green);
+  --neg: var(--red);
 }
 :root[data-theme="dark"] {
   --bg: #000000;
   --surface: #111111;
   --surface2: #1a1a1a;
   --surface3: #222222;
+  --border: rgba(255,255,255,.06);
+  --shadow: none;
+  --topbar-bg: rgba(0,0,0,.90);
+  --nav-bg: rgba(0,0,0,.92);
   --tx: #ffffff;
   --tx2: rgba(255,255,255,.50);
   --tx3: rgba(255,255,255,.26);
+  --text: #ffffff;
+  --text2: rgba(255,255,255,.50);
+  --text3: rgba(255,255,255,.26);
   --ac: #ffd60a;
   --ac-t: rgba(255,214,10,.10);
   --ac-b: rgba(255,214,10,.22);
+  --gold: #ffd60a;
+  --orange: #ff9f0a;
   --gn: #30d158;
   --gn-t: rgba(48,209,88,.12);
+  --green: #30d158;
+  --green-d: #248a3d;
   --rd: #ff453a;
   --rd-t: rgba(255,69,58,.12);
+  --red: #ff453a;
+  --red-d: #c0392b;
   --bl: #64d2ff;
   --bl-t: rgba(100,210,255,.12);
-  --border: rgba(255,255,255,.06);
-  --shadow: none;
-  --topbar-bg: rgba(0,0,0,.88);
-  --nav-bg: rgba(0,0,0,.92);
+  --blue: #64d2ff;
+  --violet: #bf5af2;
+  --pos: var(--green);
+  --neg: var(--red);
 }
 
 /* ══ TOPBAR NEW DESIGN ══ */
@@ -212,26 +245,7 @@
 /* ══════════════════════════════════════════
    GD CASH — dark premium + glassmorphism
    ══════════════════════════════════════════ */
-:root{
-  --bg:#000000;
-  --surface:#111111;
-  --surface2:#1a1a1a;
-  --surface3:#222222;
-  --border:rgba(255,255,255,0.06);
-  --text:#ffffff;
-  --text2:rgba(255,255,255,.50);
-  --text3:rgba(255,255,255,.26);
-  --green:#30d158;
-  --green-d:#248a3d;
-  --red:#ff453a;
-  --red-d:#c0392b;
-  --gold:#ffd60a;
-  --orange:#ff9f0a;
-  --blue:#64d2ff;
-  --violet:#bf5af2;
-  --radius:20px;
-  --radius-sm:14px;
-}
+/* variáveis movidas para o sistema de tema unificado no topo */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow-x:hidden}
 body{
