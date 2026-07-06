@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -313,6 +313,19 @@
     </svg>
     Compartilhar resumo do mês
   </button>
+  <button class="share-month-btn" onclick="emailMonthReport()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+    </svg>
+    Enviar resumo por e-mail
+  </button>
+  <button class="share-month-btn" onclick="exportCSV()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+      <line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/>
+    </svg>
+    Exportar planilha CSV
+  </button>
 </section>
 
 <!-- ════ FIXOS ════ -->
@@ -329,6 +342,19 @@
   <div class="card"><div id="fixed-list"></div></div>
 
   <button class="fab" onclick="openFixedModal()" title="Adicionar gasto fixo">+</button>
+</section>
+
+<!-- ════ LEMBRETES ════ -->
+<section class="page" id="page-lembretes">
+  <div class="page-header-row">
+    <span class="page-header-title">Lembretes</span>
+    <button class="tab-help-btn" onclick="showTabHelp('lembretes')">?</button>
+  </div>
+  <div id="lembretes-list"></div>
+  <button class="btn btn-secondary" style="margin-bottom:10px" onclick="openLembreteModal()">+ Novo lembrete</button>
+  <button class="btn btn-secondary" style="margin-bottom:14px;display:flex;align-items:center;justify-content:center;gap:8px" onclick="exportCalendar()">
+    <span>📅</span> Exportar vencimentos p/ Calendário
+  </button>
 </section>
 
 <!-- ════ CONVERSOR ════ -->
@@ -548,6 +574,9 @@
       <button class="more-item" onclick="switchMore('ajustes')">
         <span class="more-icon">⚙️</span><span>Ajustes</span>
       </button>
+      <button class="more-item" onclick="switchMore('lembretes')">
+        <span class="more-icon">🔔</span><span>Lembretes</span>
+      </button>
     </div>
   </div>
 </div>
@@ -706,7 +735,37 @@
   </div>
 </div>
 
-<script src="app.js?v=18"></script>
+<div class="overlay" id="modal-lembrete">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="lembrete-modal-title">Novo Lembrete</div>
+    <input type="hidden" id="lembrete-edit-id">
+    <div class="fg"><label class="fl">Nome</label><input class="fi" type="text" id="lem-name" placeholder="Ex: Troca de óleo, Revisão, Seguro..."></div>
+    <div class="fg"><label class="fl">Data</label><input class="fi" type="date" id="lem-date"></div>
+    <div class="fg">
+      <label class="fl">Notificar</label>
+      <select class="fi" id="lem-notif">
+        <option value="0">No dia</option>
+        <option value="1">1 dia antes</option>
+        <option value="2" selected>2 dias antes</option>
+        <option value="7">1 semana antes</option>
+      </select>
+    </div>
+    <div class="fg">
+      <label class="fl">Repetir</label>
+      <select class="fi" id="lem-repeat">
+        <option value="none">Não repete</option>
+        <option value="weekly">Toda semana</option>
+        <option value="monthly">Todo mês</option>
+        <option value="yearly">Todo ano</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="saveLembrete()">Salvar</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-lembrete')">Cancelar</button>
+  </div>
+</div>
+
+<script src="app.js?v=19"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

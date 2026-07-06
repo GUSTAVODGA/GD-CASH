@@ -52,6 +52,7 @@ function initFirebase() {
       document.getElementById('curr-chip').textContent = currSym;
       renderInicio();
       checkGoalNotifications();
+      checkReminders();
       checkOnboarding();
       checkInstallBanner();
       handleShortcut();
@@ -154,6 +155,11 @@ const TAB_HELP = {
     title: 'Conversor de Moedas',
     text: 'Converta entre Real, Dólar, Euro e Libra com cotação atualizada automaticamente. Útil para precificar serviços ou comparar preços em outras moedas.',
   },
+  lembretes: {
+    icon: '🔔',
+    title: 'Lembretes',
+    text: 'Crie lembretes para qualquer coisa — troca de óleo, seguro, revisão, vencimentos. Ativa notificação no dia ou com antecedência. Use o botão Calendário para exportar os vencimentos dos fixos.',
+  },
   ajustes: {
     icon: '⚙️',
     title: 'Ajustes',
@@ -211,6 +217,7 @@ async function loadFromCloud() {
       D = { ...defaultData(), ...doc.data() };
       if (!D.goals) D.goals = [];
       if (!D.weeklyGoal) D.weeklyGoal = 0;
+      if (!D.reminders) D.reminders = [];
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
     } else {
       // Primeiro login — oferece migrar dados locais existentes
@@ -289,10 +296,10 @@ function renderRecentTx() {
   if (!listEl) return;
   const platMap = Object.fromEntries((D.platforms || []).map(p => [p.id, p]));
   const exps = (D.expenses || []).map(e => ({
-    type: 'exp', date: e.date, label: e.description || e.category, sub: e.category, amount: e.amount
+    type: 'exp', id: e.id, date: e.date, label: e.description || e.category, sub: e.category, amount: e.amount
   }));
   const incItems = (D.incomeItems || []).filter(it => it.status === 'paid').map(it => ({
-    type: 'inc', date: it.date,
+    type: 'inc', id: it.id, date: it.date,
     label: it.note || platMap[it.platformId]?.name || 'Receita',
     sub: platMap[it.platformId]?.name || '',
     amount: it.amount
@@ -302,7 +309,7 @@ function renderRecentTx() {
     (D.platforms || []).forEach(p => {
       const v = pm[p.id];
       if (v && v > 0 && !(D.incomeItems || []).some(it => it.date === date && it.platformId === p.id))
-        manualInc.push({ type: 'inc', date, label: p.name, sub: '', amount: v });
+        manualInc.push({ type: 'inc', id: '', date, label: p.name, sub: '', amount: v });
     });
   });
   const all = [...exps, ...incItems, ...manualInc]
@@ -313,7 +320,7 @@ function renderRecentTx() {
     return;
   }
   listEl.innerHTML = all.map((tx, i) => `
-    <div class="tx-item" style="--sd:${i*0.04}s">
+    <div class="tx-item" style="--sd:${i*0.04}s"${tx.id ? ` data-id="${tx.id}" data-type="${tx.type}"` : ''}>
       <div class="tx-icon ${tx.type === 'inc' ? 'tx-icon-inc' : 'tx-icon-exp'}">${tx.type === 'inc' ? '↑' : '↓'}</div>
       <div class="tx-info">
         <div class="tx-label">${tx.label}</div>
@@ -440,6 +447,7 @@ function defaultData() {
     weeklyGoal: 0,
     incomeItems: [],
     catBudgets: {},
+    reminders: [],
   };
 }
 
@@ -452,6 +460,7 @@ let D = (() => {
       if(!p.weeklyGoal)  p.weeklyGoal=0;
       if(!p.incomeItems) p.incomeItems=[];
       if(!p.catBudgets)  p.catBudgets={};
+      if(!p.reminders)   p.reminders=[];
       return p;
     }
   } catch(e){}
@@ -808,6 +817,7 @@ function addIncomeItem() {
   document.getElementById('ii-amt').value='';
   document.getElementById('ii-note').value='';
   document.getElementById('income-add-form').style.display='none';
+  flyNumber(amt, document.getElementById('ii-amt'));
   haptic(10); save(); refreshAfterDayEdit();
 }
 
@@ -1402,15 +1412,16 @@ function switchTab(tab) {
   page.classList.add('active');
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   // Highlight "Mais" button for secondary tabs
-  const moreTabs = ['fixos','conversor','ajustes'];
+  const moreTabs = ['fixos','conversor','ajustes','lembretes'];
   document.querySelector('.nav-more-btn')?.classList.toggle('active', moreTabs.includes(tab));
   if(tab==='inicio')    renderInicio();
   if(tab==='semana')    renderSemana();
   if(tab==='mes')       renderMes();
   if(tab==='reserva')   renderReserva();
-  if(tab==='fixos')     renderFixos();
-  if(tab==='conversor') loadConversorRates();
-  if(tab==='ajustes')   renderBudgetSettings();
+  if(tab==='fixos')      renderFixos();
+  if(tab==='conversor')  loadConversorRates();
+  if(tab==='ajustes')    renderBudgetSettings();
+  if(tab==='lembretes')  renderLembretes();
   // Show FAB only on main tabs
   const fab = document.getElementById('global-fab');
   if (fab) fab.style.display = ['inicio','semana','mes','reserva'].includes(tab) ? '' : 'none';
@@ -1932,6 +1943,221 @@ function deleteCatBudget(cat) {
 }
 
 // ══════════════════════════════════════════
+// LEMBRETES
+// ══════════════════════════════════════════
+function renderLembretes() {
+  const el = document.getElementById('lembretes-list');
+  if (!el) return;
+  if (!D.reminders || !D.reminders.length) {
+    el.innerHTML = '<div class="card"><div class="empty-state">Nenhum lembrete ainda</div></div>';
+    return;
+  }
+  const today = new Date(); today.setHours(0,0,0,0);
+  const REPEAT = { none:'Não repete', weekly:'Semanal', monthly:'Mensal', yearly:'Anual' };
+  const sorted = [...D.reminders].sort((a,b) => a.date.localeCompare(b.date));
+  el.innerHTML = '<div class="card" style="padding:0">' + sorted.map((r, i) => {
+    const rDate = parseDate(r.date);
+    const daysUntil = Math.round((rDate - today) / (1000*60*60*24));
+    const isUrgent = daysUntil >= 0 && daysUntil <= 3;
+    const isPast = daysUntil < 0;
+    const status = daysUntil === 0 ? 'Hoje!'
+                 : daysUntil === 1 ? 'Amanhã'
+                 : daysUntil > 1  ? `Em ${daysUntil} dias`
+                 : `${Math.abs(daysUntil)} dia${Math.abs(daysUntil)!==1?'s':''} atrás`;
+    return `<div class="lembrete-item${isUrgent?' lembrete-urgent':''}${isPast?' lembrete-past':''}${i>0?' lembrete-sep':''}">
+      <div class="lembrete-icon">🔔</div>
+      <div class="lembrete-info">
+        <div class="lembrete-name">${r.name}</div>
+        <div class="lembrete-meta">${fmtShort(r.date)} · ${REPEAT[r.repeat||'none']}</div>
+      </div>
+      <div class="lembrete-right">
+        <span class="lembrete-status${isUrgent?' lembrete-status-urgent':''}">${status}</span>
+        <button class="fixed-del" onclick="openLembreteModal('${r.id}')">···</button>
+        <button class="fixed-del" onclick="deleteLembrete('${r.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function openLembreteModal(id) {
+  const r = id ? D.reminders.find(r => r.id === id) : null;
+  document.getElementById('lembrete-modal-title').textContent = r ? 'Editar Lembrete' : 'Novo Lembrete';
+  document.getElementById('lembrete-edit-id').value = id || '';
+  document.getElementById('lem-name').value = r?.name || '';
+  document.getElementById('lem-date').value = r?.date || '';
+  document.getElementById('lem-notif').value = String(r?.notifDaysBefore ?? 2);
+  document.getElementById('lem-repeat').value = r?.repeat || 'none';
+  openOverlay('modal-lembrete');
+}
+
+function saveLembrete() {
+  const id = document.getElementById('lembrete-edit-id').value;
+  const name = document.getElementById('lem-name').value.trim();
+  const date = document.getElementById('lem-date').value;
+  const notifDaysBefore = parseInt(document.getElementById('lem-notif').value) || 0;
+  const repeat = document.getElementById('lem-repeat').value;
+  if (!name || !date) { alert('Preencha nome e data.'); return; }
+  if (!D.reminders) D.reminders = [];
+  if (id) {
+    const idx = D.reminders.findIndex(r => r.id === id);
+    if (idx !== -1) D.reminders[idx] = { ...D.reminders[idx], name, date, notifDaysBefore, repeat };
+  } else {
+    D.reminders.push({ id: uid(), name, date, notifDaysBefore, repeat, lastNotif: '' });
+    requestNotifPermission();
+  }
+  save(); closeOverlay('modal-lembrete'); renderLembretes();
+}
+
+function deleteLembrete(id) {
+  D.reminders = D.reminders.filter(r => r.id !== id);
+  save(); renderLembretes();
+}
+
+function checkReminders() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  if (!D.reminders || !D.reminders.length) return;
+  const today = new Date(); today.setHours(0,0,0,0);
+  let changed = false;
+  D.reminders.forEach(r => {
+    if (!r.date || r.lastNotif === todayStr()) return;
+    const rDate = parseDate(r.date);
+    const daysUntil = Math.round((rDate - today) / (1000*60*60*24));
+    const notifyWhen = r.notifDaysBefore || 0;
+    if (daysUntil === notifyWhen) {
+      const body = notifyWhen > 0 ? `Daqui ${notifyWhen} dia${notifyWhen!==1?'s':''}` : 'É hoje!';
+      new Notification(`🔔 ${r.name}`, { body, icon: '/GD-CASH/icon-192.png' });
+      r.lastNotif = todayStr();
+      changed = true;
+    }
+  });
+  if (changed) save();
+}
+
+// ══════════════════════════════════════════
+// EXPORT — CSV / ICS / EMAIL
+// ══════════════════════════════════════════
+function exportCSV() {
+  const rows = [['Data','Tipo','Categoria/Plataforma','Descrição','Valor']];
+  D.expenses.forEach(e => rows.push([e.date,'Gasto',e.category,e.description||e.category,-e.amount]));
+  (D.incomeItems||[]).forEach(it => {
+    const plat = D.platforms.find(p=>p.id===it.platformId)?.name||'';
+    rows.push([it.date,'Receita',plat,it.note||plat,it.amount]);
+  });
+  Object.entries(D.dailyIncome||{}).forEach(([date,pm]) => {
+    D.platforms.forEach(p => {
+      const v = pm[p.id];
+      const hasItems = (D.incomeItems||[]).some(it=>it.date===date&&it.platformId===p.id);
+      if(v&&v>0&&!hasItems) rows.push([date,'Receita',p.name,p.name,v]);
+    });
+  });
+  rows.sort((a,b) => String(a[0]).localeCompare(String(b[0])));
+  const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=`gdcash-${todayStr()}.csv`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportCalendar() {
+  const fixed = (D.fixedExpenses||[]).filter(f => f.dueDay);
+  if (!fixed.length) { alert('Cadastre gastos fixos com dia de vencimento antes de exportar.'); return; }
+  const now = new Date();
+  let events = '';
+  fixed.forEach(f => {
+    for (let m = 0; m < 12; m++) {
+      const d = new Date(now.getFullYear(), now.getMonth()+m, f.dueDay);
+      if (d.getDate() !== f.dueDay) continue;
+      const ds = d.toISOString().split('T')[0].replace(/-/g,'');
+      const nd = new Date(d); nd.setDate(nd.getDate()+1);
+      const ns = nd.toISOString().split('T')[0].replace(/-/g,'');
+      events += `BEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${ds}\r\nDTEND;VALUE=DATE:${ns}\r\nSUMMARY:🔁 ${f.name} — vencimento\r\nDESCRIPTION:${f.category} · ${R(f.amount)}\r\nUID:gdcash-${f.id}-${ds}@gdcash\r\nBEGIN:VALARM\r\nTRIGGER:-P2D\r\nACTION:DISPLAY\r\nDESCRIPTION:Vence em 2 dias: ${f.name}\r\nEND:VALARM\r\nEND:VEVENT\r\n`;
+    }
+  });
+  const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//GD CASH//PT\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events}END:VCALENDAR`;
+  const blob = new Blob([ics], {type:'text/calendar'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='gdcash-vencimentos.ics'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function emailMonthReport() {
+  const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp;
+  const mLabel=fmtMonthYear(monthOffset);
+  const subject = `GD CASH — Resumo ${mLabel}`;
+  const body = `Resumo financeiro: ${mLabel}\n\nReceita:  ${R(inc)}\nGastos:   ${R(exp)}\nLíquido:  ${R(liq)}\n\nReserva de emergência: ${R(D.emergency.current)}\n\n---\nGerado pelo GD CASH`;
+  window.open(`mailto:${currentUser?.email||''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+}
+
+// ══════════════════════════════════════════
+// SWIPE ENTRE ABAS
+// ══════════════════════════════════════════
+function initSwipe() {
+  const TABS = ['inicio','semana','mes','reserva'];
+  let sx = 0, sy = 0, blocked = false;
+  const main = document.querySelector('main');
+  if (!main) return;
+  main.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    blocked = !!e.target.closest('.cat-pills,.plat-cards,.overlay,.sheet');
+  }, { passive: true });
+  main.addEventListener('touchend', e => {
+    if (blocked || document.querySelector('.overlay.open')) return;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+    const active = document.querySelector('.page.active')?.id?.replace('page-','');
+    const idx = TABS.indexOf(active);
+    if (idx === -1) return;
+    if (dx < 0 && idx < TABS.length-1) switchTab(TABS[idx+1]);
+    else if (dx > 0 && idx > 0) switchTab(TABS[idx-1]);
+  }, { passive: true });
+}
+
+// ══════════════════════════════════════════
+// LONG PRESS DELETE (lista de movimentações)
+// ══════════════════════════════════════════
+function initLongPress() {
+  let lpTimer = null;
+  const list = document.getElementById('inicio-tx-list');
+  if (!list) return;
+  const cancel = () => clearTimeout(lpTimer);
+  list.addEventListener('touchstart', e => {
+    const item = e.target.closest('[data-id]');
+    if (!item || !item.dataset.id) return;
+    lpTimer = setTimeout(() => {
+      haptic(25);
+      item.classList.add('tx-pressing');
+      setTimeout(() => item.classList.remove('tx-pressing'), 300);
+      const { type, id } = item.dataset;
+      if (confirm('Excluir esta movimentação?')) {
+        if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); }
+        else if (type === 'inc') { D.incomeItems = (D.incomeItems||[]).filter(it => it.id !== id); }
+        save(); renderInicio();
+      }
+    }, 550);
+  }, { passive: true });
+  list.addEventListener('touchend', cancel, { passive: true });
+  list.addEventListener('touchmove', cancel, { passive: true });
+}
+
+// ══════════════════════════════════════════
+// NÚMERO VOANDO
+// ══════════════════════════════════════════
+function flyNumber(amount, fromEl) {
+  if (!fromEl) return;
+  const rect = fromEl.getBoundingClientRect();
+  const fly = document.createElement('div');
+  fly.className = 'fly-number';
+  fly.textContent = '+' + R(Math.abs(amount));
+  fly.style.left = (rect.left + rect.width / 2) + 'px';
+  fly.style.top = rect.top + 'px';
+  document.body.appendChild(fly);
+  requestAnimationFrame(() => requestAnimationFrame(() => fly.classList.add('fly-go')));
+  setTimeout(() => fly.remove(), 900);
+}
+
+// ══════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════
 if (CLOUD_ENABLED) {
@@ -1939,6 +2165,7 @@ if (CLOUD_ENABLED) {
 } else {
   renderSemana();
   checkGoalNotifications();
+  checkReminders();
 }
 
 // ── Manifest shortcuts (long-press icon on home screen) ──
@@ -1963,3 +2190,6 @@ function handleShortcut() {
   // Clean URL without reload
   history.replaceState({}, '', location.pathname);
 }
+
+initSwipe();
+initLongPress();

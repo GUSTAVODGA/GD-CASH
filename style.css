@@ -817,3 +817,48 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
   position:absolute;top:12px;right:0;
   background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:2px 4px;
 }
+
+/* ── Color util classes (used in S2S bars) ── */
+.v-green{color:var(--green);font-weight:700}
+.v-red{color:var(--red);font-weight:700}
+
+/* ══════════════════════════════════════════
+   LEMBRETES
+   ══════════════════════════════════════════ */
+.lembrete-item{
+  display:flex;align-items:center;gap:10px;padding:12px 14px;
+}
+.lembrete-sep{border-top:1px solid rgba(255,255,255,0.06)}
+.lembrete-icon{font-size:20px;flex-shrink:0;width:32px;text-align:center}
+.lembrete-info{flex:1;min-width:0}
+.lembrete-name{font-size:14px;font-weight:700;color:var(--text)}
+.lembrete-meta{font-size:11.5px;color:var(--text3);margin-top:2px}
+.lembrete-right{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.lembrete-status{font-size:11.5px;font-weight:700;color:var(--text3);white-space:nowrap}
+.lembrete-status-urgent{color:var(--red)}
+.lembrete-urgent .lembrete-name{color:var(--red)}
+.lembrete-past{opacity:.5}
+
+/* ══════════════════════════════════════════
+   NÚMERO VOANDO
+   ══════════════════════════════════════════ */
+.fly-number{
+  position:fixed;z-index:9999;pointer-events:none;
+  font-size:17px;font-weight:800;color:var(--green);
+  transform:translateX(-50%);
+  opacity:1;
+  transition:transform .8s cubic-bezier(.22,.68,0,1.2), opacity .7s ease;
+  white-space:nowrap;text-shadow:0 0 12px rgba(48,209,88,.5);
+}
+.fly-number.fly-go{
+  transform:translateX(-50%) translateY(-70px);
+  opacity:0;
+}
+
+/* ══════════════════════════════════════════
+   LONG PRESS FEEDBACK
+   ══════════════════════════════════════════ */
+.tx-item.tx-pressing{
+  background:rgba(255,69,58,0.08);
+  transition:background .15s;
+}
