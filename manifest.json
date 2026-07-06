@@ -4,11 +4,34 @@
   "description": "Controle financeiro para motoristas de aplicativo",
   "start_url": "/GD-CASH/",
   "display": "standalone",
-  "background_color": "#0b0d12",
-  "theme_color": "#ffb800",
+  "background_color": "#000000",
+  "theme_color": "#ffd60a",
   "orientation": "portrait",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Lançar receita",
+      "short_name": "Receita",
+      "description": "Abrir o lançamento de receita do dia",
+      "url": "/GD-CASH/?action=income",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Lançar gasto",
+      "short_name": "Gasto",
+      "description": "Abrir o lançamento de gasto do dia",
+      "url": "/GD-CASH/?action=expense",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Ver saldo",
+      "short_name": "Saldo",
+      "description": "Ver saldo da semana atual",
+      "url": "/GD-CASH/?action=balance",
+      "icons": [{ "src": "icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

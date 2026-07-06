@@ -54,6 +54,7 @@ function initFirebase() {
       checkGoalNotifications();
       checkOnboarding();
       checkInstallBanner();
+      handleShortcut();
     } else {
       currentUser = null;
       loginScreen.style.display = 'flex';
@@ -311,8 +312,8 @@ function renderRecentTx() {
     listEl.innerHTML = '<div class="empty-state">Sem movimentações ainda</div>';
     return;
   }
-  listEl.innerHTML = all.map(tx => `
-    <div class="tx-item">
+  listEl.innerHTML = all.map((tx, i) => `
+    <div class="tx-item" style="--sd:${i*0.04}s">
       <div class="tx-icon ${tx.type === 'inc' ? 'tx-icon-inc' : 'tx-icon-exp'}">${tx.type === 'inc' ? '↑' : '↓'}</div>
       <div class="tx-info">
         <div class="tx-label">${tx.label}</div>
@@ -365,7 +366,7 @@ function openMoreMenu() { openOverlay('modal-more'); }
 function switchMore(tab) { closeOverlay('modal-more'); setTimeout(() => switchTab(tab), 50); }
 
 let _fabOpen = false;
-function toggleFabMenu() { _fabOpen ? closeFabMenu() : openFabMenu(); }
+function toggleFabMenu() { haptic(6); _fabOpen ? closeFabMenu() : openFabMenu(); }
 
 function openFabMenu() {
   _fabOpen = true;
@@ -491,6 +492,7 @@ function importData(event) {
   event.target.value = '';
 }
 function uid()  { return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function haptic(ms=8) { try { navigator.vibrate?.(ms); } catch(e) {} }
 
 // ══════════════════════════════════════════
 // DATE UTILS
@@ -806,7 +808,7 @@ function addIncomeItem() {
   document.getElementById('ii-amt').value='';
   document.getElementById('ii-note').value='';
   document.getElementById('income-add-form').style.display='none';
-  save(); refreshAfterDayEdit();
+  haptic(10); save(); refreshAfterDayEdit();
 }
 
 function deleteIncomeItem(id) {
@@ -842,7 +844,7 @@ function addExpense() {
   D.expenses.push({id:uid(),date,category:cat,amount:val,description:desc});
   document.getElementById('exp-val').value='';
   document.getElementById('exp-desc').value='';
-  save(); refreshAfterDayEdit();
+  haptic(10); save(); refreshAfterDayEdit();
 }
 
 function deleteExpense(id) { D.expenses=D.expenses.filter(e=>e.id!==id); save(); refreshAfterDayEdit(); }
@@ -1937,4 +1939,27 @@ if (CLOUD_ENABLED) {
 } else {
   renderSemana();
   checkGoalNotifications();
+}
+
+// ── Manifest shortcuts (long-press icon on home screen) ──
+function handleShortcut() {
+  const action = new URLSearchParams(location.search).get('action');
+  if (!action) return;
+  if (action === 'income' || action === 'expense') {
+    switchTab('semana');
+    setTimeout(() => {
+      openDayDetail(selDayIdx);
+      if (action === 'expense') {
+        setTimeout(() => {
+          const sheet = document.querySelector('#modal-day-detail .sheet');
+          const expSec = document.getElementById('add-exp-section');
+          if (sheet && expSec) sheet.scrollTop = expSec.offsetTop - 20;
+        }, 400);
+      }
+    }, 350);
+  } else if (action === 'balance') {
+    switchTab('inicio');
+  }
+  // Clean URL without reload
+  history.replaceState({}, '', location.pathname);
 }
