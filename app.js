@@ -1582,6 +1582,14 @@ function buildDemoData() {
     ],
     weeklyGoal: 1500,
     catBudgets: { 'Gasolina': 400, 'Alimentação': 300 },
+    reminders: (() => {
+      const d = new Date(); d.setHours(0,0,0,0);
+      const add = (n) => { const x = new Date(d); x.setDate(x.getDate()+n); return dateStr(x); };
+      return [
+        { id:'rm1', name:'Troca de óleo',  date:add(5),  notifDaysBefore:2, repeat:'monthly', lastNotif:'' },
+        { id:'rm2', name:'Revisão do carro', date:add(18), notifDaysBefore:7, repeat:'yearly',  lastNotif:'' },
+      ];
+    })(),
     incomeItems: [
       { id:'ii1', date:w[2], platformId:'d3', amount:350, note:'Site cliente — sinal',    status:'paid'    },
       { id:'ii2', date:w[2], platformId:'d3', amount:150, note:'Site cliente — restante', status:'pending' },
