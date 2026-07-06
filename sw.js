@@ -1,4 +1,4 @@
-const CACHE = 'gdcash-v15';
+const CACHE = 'gdcash-v16';
 const ASSETS = [
   './',
   './index.html',
@@ -18,6 +18,8 @@ self.addEventListener('activate', e => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then(clients => clients.forEach(c => c.postMessage({ type: 'SW_UPDATED' })))
   );
 });
 
