@@ -260,15 +260,15 @@ function renderInicio() {
 
   const gwrap = document.getElementById('inicio-goal-wrap');
   if (gwrap) {
+    const bar = document.getElementById('inicio-goal-bar');
+    const pctEl = document.getElementById('inicio-goal-pct');
     if (D.weeklyGoal > 0) {
-      gwrap.style.display = '';
       const pct = Math.min(100, Math.round(inc / D.weeklyGoal * 100));
-      const bar = document.getElementById('inicio-goal-bar');
       if (bar) { bar.style.width = pct + '%'; bar.className = 'wg-bar-fill' + (pct >= 100 ? ' wg-done' : ''); }
-      const pctEl = document.getElementById('inicio-goal-pct');
       if (pctEl) pctEl.textContent = R(inc) + ' / ' + R(D.weeklyGoal);
     } else {
-      gwrap.style.display = 'none';
+      if (bar) { bar.style.width = '0%'; bar.className = 'wg-bar-fill'; }
+      if (pctEl) pctEl.textContent = 'Definir →';
     }
   }
 

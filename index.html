@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -145,10 +145,10 @@
     </div>
   </div>
 
-  <div class="inicio-goal-wrap" id="inicio-goal-wrap" style="display:none">
+  <div class="inicio-goal-wrap" id="inicio-goal-wrap" onclick="openWeekGoalModal()">
     <div class="inicio-goal-header">
       <span class="inicio-goal-lbl">Meta da semana</span>
-      <span class="inicio-goal-pct" id="inicio-goal-pct"></span>
+      <span class="inicio-goal-pct" id="inicio-goal-pct">Definir →</span>
     </div>
     <div class="wg-bar-wrap"><div class="wg-bar-fill" id="inicio-goal-bar" style="width:0%"></div></div>
   </div>
@@ -706,7 +706,7 @@
   </div>
 </div>
 
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
