@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════
-// GD FROTA — Gestão de Transportes
+// LAGOS SERVIÇOS DE TRANSPORTE — Gestão de Frota
 // PWA + Firebase (Auth e-mail/senha + Firestore compartilhado)
 // Enquanto o Firebase não é configurado, roda em MODO DEMO (localStorage).
 // ══════════════════════════════════════════
@@ -14,7 +14,7 @@ const firebaseConfig = {
 };
 
 const DEMO = firebaseConfig.apiKey === 'COLE_AQUI';
-const LS_KEY = 'gdfrota_demo_v1';
+const LS_KEY = 'lagos_demo_v1';
 
 let auth = null, db = null;
 let me = null; // { uid, email, nome }
@@ -227,7 +227,7 @@ function initApp() {
   if (DEMO) {
     $('login-form').style.display = 'none';
     $('login-demo').style.display = '';
-    if (localStorage.getItem('gdfrota_demo_active')) enterDemo(true);
+    if (localStorage.getItem('lagos_demo_active')) enterDemo(true);
     return;
   }
   firebase.initializeApp(firebaseConfig);
@@ -294,8 +294,8 @@ function forgotPassword() {
 }
 
 function enterDemo(silent) {
-  localStorage.setItem('gdfrota_demo_active', '1');
-  me = { uid: 'demo', email: 'demo@gdfrota.app', nome: localStorage.getItem('gdfrota_demo_nome') || 'Você' };
+  localStorage.setItem('lagos_demo_active', '1');
+  me = { uid: 'demo', email: 'demo@lagos.app', nome: localStorage.getItem('lagos_demo_nome') || 'Você' };
   if (!demoLoad()) seedDemo();
   showApp();
   if (!silent) toast('Modo demonstração — dados salvos só neste aparelho');
@@ -304,7 +304,7 @@ function enterDemo(silent) {
 function doLogout() {
   confirmDialog('Sair', 'Deseja sair da sua conta?', () => {
     if (DEMO) {
-      localStorage.removeItem('gdfrota_demo_active');
+      localStorage.removeItem('lagos_demo_active');
       location.reload();
       return;
     }
@@ -330,7 +330,7 @@ function saveProfileName() {
   if (!nome) { toast('Digite um nome.'); return; }
   me.nome = nome;
   if (DEMO) {
-    localStorage.setItem('gdfrota_demo_nome', nome);
+    localStorage.setItem('lagos_demo_nome', nome);
     demoSave();
   } else {
     dataSet('profiles', me.uid, { nome, email: me.email }).catch(e => console.error(e));
@@ -580,7 +580,9 @@ function openTxForm(tx) {
   const sel = $('tx-veiculo');
   sel.innerHTML = '<option value="">— Nenhum / geral —</option>' +
     S.vehicles.filter(v => v.status !== 'inativo' || (tx && tx.veiculo === v.id))
-      .map(v => `<option value="${v.id}">${esc(v.nome)} · ${esc(v.placa || '')}</option>`).join('');
+      .map(v => `<option value="${v.id}">${esc(v.nome)} · ${esc(v.placa || '')}</option>`).join('') +
+    // ao editar lançamento de veículo já excluído, mantém o vínculo visível
+    (tx && tx.veiculo && !vehById(tx.veiculo) ? `<option value="${tx.veiculo}">Veículo removido</option>` : '');
   sel.value = tx ? (tx.veiculo || '') : '';
 
   updateTipoSeg();
@@ -1039,7 +1041,7 @@ function exportCSV() {
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'gdfrota-lancamentos.csv';
+  a.download = 'lagos-lancamentos.csv';
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1057,11 +1059,11 @@ function applyTheme(theme) {
   if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1220' : '#f4f7fb');
 }
 function initTheme() {
-  applyTheme(localStorage.getItem('gdfrota_theme') === 'dark' ? 'dark' : 'light');
+  applyTheme(localStorage.getItem('lagos_theme') === 'dark' ? 'dark' : 'light');
 }
 function toggleTheme() {
   const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-  localStorage.setItem('gdfrota_theme', next);
+  localStorage.setItem('lagos_theme', next);
   applyTheme(next);
   renderMais();
 }
@@ -1117,10 +1119,29 @@ function seedDemo() {
 // ══════════════════════════════════════════
 // BOOT
 // ══════════════════════════════════════════
+// migra chaves antigas do armazenamento (versões iniciais usavam prefixo gdfrota_)
+[
+  ['gdfrota_demo_v1', 'lagos_demo_v1'],
+  ['gdfrota_demo_active', 'lagos_demo_active'],
+  ['gdfrota_demo_nome', 'lagos_demo_nome'],
+  ['gdfrota_theme', 'lagos_theme'],
+].forEach(([antiga, nova]) => {
+  try {
+    const val = localStorage.getItem(antiga);
+    if (val !== null && localStorage.getItem(nova) === null) localStorage.setItem(nova, val);
+    if (val !== null) localStorage.removeItem(antiga);
+  } catch (e) {}
+});
+
 document.addEventListener('input', e => {
   if (e.target.id === 'tx-litros' || e.target.id === 'tx-valor') updateFuelHint();
 });
 document.addEventListener('change', e => { if (e.target.id === 'tx-veiculo') updateFuelHint(); });
+
+// Enter no login envia o formulário
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && (e.target.id === 'login-pass' || e.target.id === 'login-email') && !DEMO) doLogin();
+});
 
 // fechar overlay tocando fora
 document.querySelectorAll('.overlay').forEach(ov => {

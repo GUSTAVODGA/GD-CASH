@@ -17,7 +17,7 @@ passos abaixo (uns 15 minutos, tudo gratuito no plano Spark do Firebase).
 ## 2. Registrar o app web
 
 1. Na tela inicial do projeto, clique no ícone **`</>` (Web)**.
-2. Apelido: `GD Frota` → **Registrar app** (não precisa marcar Hosting).
+2. Apelido: `Lagos` → **Registrar app** (não precisa marcar Hosting).
 3. Vai aparecer um bloco `const firebaseConfig = { ... }`. **Copie esses valores** e cole
    no topo do arquivo `app.js` desta pasta, substituindo os `"COLE_AQUI"`.
 
@@ -74,7 +74,7 @@ desses 3 e-mails **não lê nem escreve nada**.
 
 O app é 100% estático (como o GD Cash): basta hospedar esta pasta `frota/` no
 GitHub Pages, Netlify ou similar. Sugestão: criar um repositório próprio para a
-empresa (ex.: `gd-frota`) e copiar esta pasta para lá.
+empresa (ex.: `lagos`) e copiar esta pasta para lá.
 
 ---
 
