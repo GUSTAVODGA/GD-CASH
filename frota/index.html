@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>GD Frota — Gestão de Transportes</title>
+<meta name="description" content="Controle financeiro e operacional da frota: despesas, receitas, veículos, manutenção e motoristas.">
+<meta name="theme-color" content="#0b1220">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GD Frota">
+<link rel="stylesheet" href="style.css?v=1">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<!-- ═══════════ LOGIN ═══════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <img src="icon-192.png" alt="GD Frota" class="login-logo">
+    <h1>GD Frota</h1>
+    <p class="login-sub">Gestão de transportes da sua empresa</p>
+
+    <div id="login-form">
+      <label class="fld">
+        <span>E-mail</span>
+        <input type="email" id="login-email" autocomplete="username" placeholder="seu@email.com" inputmode="email">
+      </label>
+      <label class="fld">
+        <span>Senha</span>
+        <input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••">
+      </label>
+      <div id="login-err" class="login-err" style="display:none"></div>
+      <button class="btn btn-primary btn-block" id="btn-login" onclick="doLogin()">Entrar</button>
+      <button class="btn-link" onclick="forgotPassword()">Esqueci minha senha</button>
+    </div>
+
+    <div id="login-demo" style="display:none">
+      <div class="demo-note">⚙️ O aplicativo ainda não foi conectado ao servidor (Firebase). Enquanto isso, você pode explorar com dados de exemplo salvos apenas neste aparelho.</div>
+      <button class="btn btn-primary btn-block" onclick="enterDemo()">Explorar em modo demonstração</button>
+    </div>
+
+    <p class="login-foot">Acesso restrito aos sócios da empresa.</p>
+  </div>
+</div>
+
+<!-- ═══════════ APP ═══════════ -->
+<div id="app" style="display:none">
+
+  <!-- ── PÁGINA: INÍCIO ── -->
+  <section class="page active" id="page-inicio">
+    <header class="page-head">
+      <div>
+        <div class="head-greet" id="inicio-greeting">Olá 👋</div>
+        <div class="head-sub" id="inicio-date"></div>
+      </div>
+      <button class="avatar-btn" id="btn-avatar" onclick="openAjustes()"><span id="avatar-initial">?</span></button>
+    </header>
+
+    <div class="hero-card" id="hero-inicio">
+      <div class="hero-label">Resultado de <span id="hero-month"></span></div>
+      <div class="hero-value" id="hero-liq">R$ 0,00</div>
+      <div class="hero-row">
+        <div class="hero-mini pos"><span class="hero-mini-lbl">▲ Receitas</span><span id="hero-inc">R$ 0,00</span></div>
+        <div class="hero-mini neg"><span class="hero-mini-lbl">▼ Despesas</span><span id="hero-exp">R$ 0,00</span></div>
+      </div>
+    </div>
+
+    <div id="alert-section" style="display:none">
+      <h2 class="sec-title">⚠️ Atenção</h2>
+      <div id="alert-list"></div>
+    </div>
+
+    <h2 class="sec-title">Despesas do mês por categoria</h2>
+    <div class="card" id="cat-breakdown"><div class="empty-mini">Nenhuma despesa lançada neste mês.</div></div>
+
+    <h2 class="sec-title">Custo do mês por veículo</h2>
+    <div class="card" id="veh-breakdown"><div class="empty-mini">Nenhuma despesa vinculada a veículos.</div></div>
+
+    <div class="sec-title-row">
+      <h2 class="sec-title">Atividade recente</h2>
+      <button class="btn-link" onclick="goTab('lanc')">Ver tudo →</button>
+    </div>
+    <div id="recent-list"></div>
+  </section>
+
+  <!-- ── PÁGINA: LANÇAMENTOS ── -->
+  <section class="page" id="page-lanc">
+    <header class="page-head">
+      <h1 class="page-title">Lançamentos</h1>
+    </header>
+
+    <div class="month-nav">
+      <button class="mn-btn" onclick="shiftMonth(-1)">‹</button>
+      <div class="mn-label" id="lanc-month-label"></div>
+      <button class="mn-btn" onclick="shiftMonth(1)">›</button>
+    </div>
+
+    <div class="mini-summary">
+      <div class="ms-item pos">▲ <span id="lanc-sum-inc">R$ 0</span></div>
+      <div class="ms-item neg">▼ <span id="lanc-sum-exp">R$ 0</span></div>
+      <div class="ms-item" id="lanc-sum-liq">= R$ 0</div>
+    </div>
+
+    <div class="filter-row">
+      <div class="chips" id="lanc-type-chips">
+        <button class="chip chip-on" data-f="todos" onclick="setLancFilter('todos')">Todos</button>
+        <button class="chip" data-f="despesa" onclick="setLancFilter('despesa')">Despesas</button>
+        <button class="chip" data-f="receita" onclick="setLancFilter('receita')">Receitas</button>
+      </div>
+      <select class="veh-filter" id="lanc-veh-filter" onchange="renderLanc()">
+        <option value="">Todos os veículos</option>
+      </select>
+    </div>
+
+    <div id="lanc-list"></div>
+  </section>
+
+  <!-- ── PÁGINA: FROTA ── -->
+  <section class="page" id="page-frota">
+    <header class="page-head">
+      <h1 class="page-title">Frota</h1>
+      <button class="btn btn-small" onclick="openVehicleForm()">+ Veículo</button>
+    </header>
+    <div id="veh-list"></div>
+  </section>
+
+  <!-- ── PÁGINA: MAIS ── -->
+  <section class="page" id="page-mais">
+    <header class="page-head">
+      <h1 class="page-title">Mais</h1>
+    </header>
+
+    <div class="sec-title-row">
+      <h2 class="sec-title">Motoristas</h2>
+      <button class="btn btn-small" onclick="openDriverForm()">+ Motorista</button>
+    </div>
+    <div id="driver-list"></div>
+
+    <h2 class="sec-title">Relatórios</h2>
+    <div class="card">
+      <button class="row-btn" onclick="exportCSV()">
+        <span class="row-ico">📊</span>
+        <span class="row-txt"><b>Exportar lançamentos (CSV)</b><small>Abre no Excel / Google Planilhas</small></span>
+      </button>
+    </div>
+
+    <h2 class="sec-title">Ajustes</h2>
+    <div class="card">
+      <button class="row-btn" onclick="openNameModal()">
+        <span class="row-ico">👤</span>
+        <span class="row-txt"><b>Meu nome de exibição</b><small id="ajuste-nome-atual">—</small></span>
+      </button>
+      <button class="row-btn" onclick="toggleTheme()">
+        <span class="row-ico">🌗</span>
+        <span class="row-txt"><b>Tema</b><small id="theme-label">Escuro</small></span>
+      </button>
+      <button class="row-btn" onclick="doLogout()">
+        <span class="row-ico">🚪</span>
+        <span class="row-txt"><b>Sair</b><small id="ajuste-email-atual"></small></span>
+      </button>
+    </div>
+
+    <p class="about-foot">GD Frota v1.0 · feito para a gestão da sua frota 🚐</p>
+  </section>
+
+  <!-- ── NAV INFERIOR ── -->
+  <nav class="bottom-nav">
+    <button class="nav-btn nav-on" data-tab="inicio" onclick="goTab('inicio')"><span class="nav-ico">🏠</span><span>Início</span></button>
+    <button class="nav-btn" data-tab="lanc" onclick="goTab('lanc')"><span class="nav-ico">🧾</span><span>Lançamentos</span></button>
+    <button class="nav-btn" data-tab="frota" onclick="goTab('frota')"><span class="nav-ico">🚐</span><span>Frota</span></button>
+    <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico">⚙️</span><span>Mais</span></button>
+  </nav>
+
+  <button id="fab" onclick="openTxForm()">+</button>
+</div>
+
+<!-- ═══════════ MODAIS ═══════════ -->
+
+<!-- Novo/editar lançamento -->
+<div class="overlay" id="modal-tx">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="tx-form-title">Novo lançamento</h3><button class="x" onclick="closeOverlay('modal-tx')">✕</button></div>
+    <div class="seg">
+      <button id="seg-despesa" class="seg-btn seg-on" onclick="setTxTipo('despesa')">Despesa</button>
+      <button id="seg-receita" class="seg-btn" onclick="setTxTipo('receita')">Receita</button>
+    </div>
+    <label class="fld"><span>Valor (R$)</span><input type="text" id="tx-valor" inputmode="decimal" placeholder="0,00"></label>
+    <label class="fld"><span>Data</span><input type="date" id="tx-data"></label>
+    <div class="fld"><span>Categoria</span><div class="cat-grid" id="tx-cat-grid"></div></div>
+    <label class="fld"><span>Veículo</span><select id="tx-veiculo"><option value="">— Nenhum / geral —</option></select></label>
+    <div id="tx-fuel-extra" style="display:none">
+      <div class="fld-row">
+        <label class="fld"><span>Litros</span><input type="text" id="tx-litros" inputmode="decimal" placeholder="0,0"></label>
+        <label class="fld"><span>Km no painel</span><input type="text" id="tx-km" inputmode="numeric" placeholder="km atual"></label>
+      </div>
+      <div class="fuel-hint" id="tx-fuel-hint"></div>
+    </div>
+    <label class="fld"><span>Descrição <small>(opcional)</small></span><input type="text" id="tx-desc" placeholder="Ex.: troca de óleo, repasse da prefeitura…"></label>
+    <button class="btn btn-primary btn-block" id="tx-save-btn" onclick="saveTx()">Salvar</button>
+  </div>
+</div>
+
+<!-- Detalhe do lançamento -->
+<div class="overlay" id="modal-tx-detail">
+  <div class="sheet">
+    <div class="sheet-head"><h3>Lançamento</h3><button class="x" onclick="closeOverlay('modal-tx-detail')">✕</button></div>
+    <div id="tx-detail-body"></div>
+    <div class="fld-row">
+      <button class="btn btn-secondary" onclick="editTxFromDetail()">✏️ Editar</button>
+      <button class="btn btn-danger" onclick="deleteTxFromDetail()">🗑 Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Novo/editar veículo -->
+<div class="overlay" id="modal-veh">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="veh-form-title">Novo veículo</h3><button class="x" onclick="closeOverlay('modal-veh')">✕</button></div>
+    <label class="fld"><span>Apelido / identificação</span><input type="text" id="veh-nome" placeholder="Ex.: Van 01"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Placa</span><input type="text" id="veh-placa" placeholder="ABC1D23" style="text-transform:uppercase"></label>
+      <label class="fld"><span>Ano</span><input type="text" id="veh-ano" inputmode="numeric" placeholder="2020"></label>
+    </div>
+    <label class="fld"><span>Modelo</span><input type="text" id="veh-modelo" placeholder="Ex.: Fiat Ducato, Sprinter 415…"></label>
+    <label class="fld"><span>Km atual (painel)</span><input type="text" id="veh-km" inputmode="numeric" placeholder="0"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Última troca de óleo (km)</span><input type="text" id="veh-oleo-km" inputmode="numeric" placeholder="km da troca"></label>
+      <label class="fld"><span>Trocar a cada (km)</span><input type="text" id="veh-oleo-int" inputmode="numeric" placeholder="10000"></label>
+    </div>
+    <div class="fld-row">
+      <label class="fld"><span>Venc. licenciamento</span><input type="date" id="veh-licenc"></label>
+      <label class="fld"><span>Venc. seguro</span><input type="date" id="veh-seguro"></label>
+    </div>
+    <label class="fld"><span>Status</span>
+      <select id="veh-status">
+        <option value="ativo">🟢 Ativo</option>
+        <option value="manutencao">🟡 Em manutenção</option>
+        <option value="inativo">⚪ Inativo</option>
+      </select>
+    </label>
+    <button class="btn btn-primary btn-block" onclick="saveVehicle()">Salvar</button>
+    <button class="btn btn-danger btn-block" id="veh-del-btn" style="display:none" onclick="deleteVehicleFromForm()">🗑 Excluir veículo</button>
+  </div>
+</div>
+
+<!-- Detalhe do veículo -->
+<div class="overlay" id="modal-veh-detail">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="veh-detail-title">Veículo</h3><button class="x" onclick="closeOverlay('modal-veh-detail')">✕</button></div>
+    <div id="veh-detail-body"></div>
+  </div>
+</div>
+
+<!-- Novo/editar motorista -->
+<div class="overlay" id="modal-driver">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="driver-form-title">Novo motorista</h3><button class="x" onclick="closeOverlay('modal-driver')">✕</button></div>
+    <label class="fld"><span>Nome</span><input type="text" id="drv-nome" placeholder="Nome completo"></label>
+    <label class="fld"><span>Telefone <small>(opcional)</small></span><input type="tel" id="drv-tel" placeholder="(00) 00000-0000"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Categoria CNH</span>
+        <select id="drv-cnh-cat"><option>D</option><option>E</option><option>C</option><option>B</option><option>A</option></select>
+      </label>
+      <label class="fld"><span>Validade CNH</span><input type="date" id="drv-cnh-val"></label>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveDriver()">Salvar</button>
+    <button class="btn btn-danger btn-block" id="drv-del-btn" style="display:none" onclick="deleteDriverFromForm()">🗑 Excluir motorista</button>
+  </div>
+</div>
+
+<!-- Nome de exibição -->
+<div class="overlay" id="modal-name">
+  <div class="sheet">
+    <div class="sheet-head"><h3>Como você quer ser chamado?</h3><button class="x" onclick="closeOverlay('modal-name')">✕</button></div>
+    <p class="modal-note">Esse nome aparece nos lançamentos para que os sócios saibam quem registrou cada um.</p>
+    <label class="fld"><span>Seu nome</span><input type="text" id="profile-nome" placeholder="Ex.: João"></label>
+    <button class="btn btn-primary btn-block" onclick="saveProfileName()">Salvar</button>
+  </div>
+</div>
+
+<!-- Confirmação -->
+<div class="overlay" id="modal-confirm">
+  <div class="sheet sheet-small">
+    <h3 id="confirm-title">Confirmar</h3>
+    <p class="modal-note" id="confirm-msg"></p>
+    <div class="fld-row">
+      <button class="btn btn-secondary" onclick="closeOverlay('modal-confirm')">Cancelar</button>
+      <button class="btn btn-danger" id="confirm-yes">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="app.js?v=1"></script>
+</body>
+</html>

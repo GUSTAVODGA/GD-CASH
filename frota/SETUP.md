@@ -1,0 +1,97 @@
+# GD Frota — Guia de configuração (Firebase)
+
+O app funciona em **modo demonstração** (dados salvos só no aparelho) enquanto o Firebase
+não é configurado. Para que os **3 sócios** vejam os mesmos dados em tempo real, siga os
+passos abaixo (uns 15 minutos, tudo gratuito no plano Spark do Firebase).
+
+> É o mesmo processo que fizemos no GD Cash, com duas diferenças:
+> login por **e-mail/senha** (em vez de Google) e **um banco compartilhado** entre os 3.
+
+---
+
+## 1. Criar o projeto no Firebase
+
+1. Acesse https://console.firebase.google.com e faça login com sua conta Google.
+2. **Adicionar projeto** → nome: `gd-frota` → pode desativar o Google Analytics → **Criar**.
+
+## 2. Registrar o app web
+
+1. Na tela inicial do projeto, clique no ícone **`</>` (Web)**.
+2. Apelido: `GD Frota` → **Registrar app** (não precisa marcar Hosting).
+3. Vai aparecer um bloco `const firebaseConfig = { ... }`. **Copie esses valores** e cole
+   no topo do arquivo `app.js` desta pasta, substituindo os `"COLE_AQUI"`.
+
+## 3. Ativar o login por e-mail/senha
+
+1. Menu lateral → **Criação (Build)** → **Authentication** → **Vamos começar**.
+2. Aba **Método de login** → **E-mail/senha** → ativar a primeira opção → **Salvar**.
+
+## 4. Criar os 3 usuários (os sócios)
+
+1. Ainda em **Authentication**, aba **Usuários** → **Adicionar usuário**.
+2. Crie um usuário para cada sócio com o e-mail dele e uma senha inicial
+   (eles podem trocar depois pelo "Esqueci minha senha" na tela de login).
+3. **Importante:** o app não tem tela de cadastro de propósito — só entra quem
+   você criar aqui.
+
+## 5. Criar o banco de dados (Firestore)
+
+1. Menu **Criação (Build)** → **Firestore Database** → **Criar banco de dados**.
+2. Local: `southamerica-east1 (São Paulo)` → iniciar em **modo de produção** → **Criar**.
+
+## 6. Regras de segurança (trava o acesso aos 3 e-mails)
+
+Na aba **Regras** do Firestore, apague tudo e cole o texto abaixo,
+**trocando os 3 e-mails** pelos e-mails reais criados no passo 4. Depois **Publicar**.
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSocio() {
+      return request.auth != null && request.auth.token.email in [
+        'socio1@exemplo.com',
+        'socio2@exemplo.com',
+        'socio3@exemplo.com'
+      ];
+    }
+    match /{document=**} {
+      allow read, write: if isSocio();
+    }
+  }
+}
+```
+
+Com isso, mesmo que alguém descubra o endereço do app, sem estar logado com um
+desses 3 e-mails **não lê nem escreve nada**.
+
+## 7. Autorizar o domínio do app
+
+1. **Authentication** → aba **Configurações** → **Domínios autorizados**.
+2. Adicione o domínio onde o app vai ficar hospedado (ex.: `gustavodga.github.io`).
+
+## 8. Publicar o app
+
+O app é 100% estático (como o GD Cash): basta hospedar esta pasta `frota/` no
+GitHub Pages, Netlify ou similar. Sugestão: criar um repositório próprio para a
+empresa (ex.: `gd-frota`) e copiar esta pasta para lá.
+
+---
+
+## Estrutura dos dados no Firestore
+
+| Coleção    | Conteúdo                                                        |
+|------------|-----------------------------------------------------------------|
+| `tx`       | Lançamentos (despesas/receitas) com autor, veículo, litros, km  |
+| `vehicles` | Veículos da frota (km, óleo, licenciamento, seguro, status)     |
+| `drivers`  | Motoristas (CNH, validade, telefone)                            |
+| `profiles` | Nome de exibição de cada sócio (`profiles/{uid}`)               |
+
+## Dicas de uso
+
+- **Abastecimento:** lançando combustível com *litros* e *km do painel*, o app
+  atualiza o odômetro do veículo sozinho e calcula o **consumo médio (km/L)**.
+- **Alertas automáticos:** licenciamento/seguro vencendo (30 dias), troca de óleo
+  por km e CNH dos motoristas aparecem na aba **Início**.
+- **CSV:** em **Mais → Exportar lançamentos** sai uma planilha pronta para o
+  contador (abre no Excel/Google Planilhas).
