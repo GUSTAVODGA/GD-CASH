@@ -880,6 +880,7 @@ function addExpense() {
   document.getElementById('exp-val').value='';
   document.getElementById('exp-desc').value='';
   haptic(10); save(); refreshAfterDayEdit();
+  notifyRegistered(val, desc || cat, cat);
 }
 
 function deleteExpense(id) { D.expenses=D.expenses.filter(e=>e.id!==id); save(); refreshAfterDayEdit(); }
@@ -2507,6 +2508,7 @@ function qaConfirm() {
   if (qaType === 'rec') {
     const pid = document.getElementById('qa-plat-sel')?.value;
     if (pid) {
+      const platName = D.platforms.find(p => p.id === pid)?.name || 'Receita';
       const hasItems = (D.incomeItems||[]).some(it => it.date===date && it.platformId===pid);
       if (hasItems) {
         if (!D.incomeItems) D.incomeItems = [];
@@ -2516,12 +2518,14 @@ function qaConfirm() {
         const existing = getDayIncome(date)[pid] || 0;
         setDayIncome(date, pid, existing + amt);
       }
+      notifyRegistered(amt, desc || platName, platName);
     }
   } else {
     const cat = document.getElementById('qa-cat-sel')?.value || (D.expCats[0] || 'Outros');
     D.expenses.push({ id: uid(), date, category: cat, description: desc || cat, amount: amt });
     save();
     checkBudgetAlerts(cat);
+    notifyRegistered(amt, desc || cat, cat);
   }
 
   closeOverlay('modal-quick-add');
@@ -2530,6 +2534,18 @@ function qaConfirm() {
   // Refresh whatever is visible
   if (document.getElementById('page-inicio')?.classList.contains('active')) { renderInicio(); renderInicioCards(); }
   if (document.getElementById('page-semana')?.classList.contains('active')) { renderSemana(); renderDayAccordion(); }
+}
+
+function notifyRegistered(amount, label, category) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    new Notification(R(amount) + ' registrado', {
+      body: label + (category && category !== label ? ' · ' + category : ''),
+      icon: '/GD-CASH/icon-192.png',
+      silent: true,
+      tag: 'gdcash-entry',
+    });
+  } catch(e) {}
 }
 
 // ══════════════════════════════════════════
