@@ -113,6 +113,23 @@ function fmtData(dateStr) {
   return String(d).padStart(2, '0') + '/' + String(m).padStart(2, '0') + '/' + y;
 }
 function fmtKm(v) { return (Number(v) || 0).toLocaleString('pt-BR') + ' km'; }
+function fmtDataHora(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// Cor fixa por pessoa (derivada do nome) — cada sócio tem sua cor no app
+const AUTHOR_COLORS = ['#2563eb', '#2e8b3d', '#d97706', '#7c3aed', '#0d9488', '#db2777', '#b91c1c', '#475569'];
+function authorColor(nome) {
+  let h = 0;
+  const s = String(nome || '?');
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AUTHOR_COLORS[h % AUTHOR_COLORS.length];
+}
+function authorChip(nome) {
+  const n = String(nome || '?');
+  return `<span class="tx-author"><span class="au-dot" style="background:${authorColor(n)}">${esc(n[0].toUpperCase())}</span>${esc(n.split(' ')[0])}</span>`;
+}
 function diasAte(dateStr) {
   if (!dateStr) return null;
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -368,6 +385,7 @@ function renderInicio() {
   $('inicio-greeting').textContent = sauda + (nome ? ', ' + nome : '') + ' 👋';
   $('inicio-date').textContent = capFirst(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }));
   $('avatar-initial').textContent = (me.nome || me.email || '?')[0].toUpperCase();
+  $('btn-avatar').style.background = authorColor(me.nome || me.email);
 
   const txs = txDoMes(0);
   const inc = txs.filter(t => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0);
@@ -497,8 +515,7 @@ function txItemHTML(t) {
   if (vnome) partes.push(esc(vnome));
   if (t.cat === 'combustivel' && t.litros) partes.push(t.litros.toLocaleString('pt-BR') + ' L');
   if (t.desc) partes.push(esc(t.desc));
-  const autor = t.autorNome || '?';
-  const meta = `<span class="tx-author"><span class="au-dot">${esc(autor[0].toUpperCase())}</span>${esc(autor.split(' ')[0])}</span>${partes.length ? ' · ' + partes.join(' · ') : ''}`;
+  const meta = `${authorChip(t.autorNome)}${partes.length ? ' · ' + partes.join(' · ') : ''}`;
   return `
     <button class="tx-item" onclick="openTxDetail('${t.id}')">
       <div class="tx-ico">${c.ico}</div>
@@ -617,6 +634,7 @@ async function saveTx() {
   const veiculo = $('tx-veiculo').value || '';
   if (txCat === 'combustivel' && !veiculo) { toast('Selecione o veículo abastecido.'); return; }
 
+  const original = editingTxId ? S.tx.find(x => x.id === editingTxId) : null;
   const t = {
     tipo: txTipo,
     cat: txCat,
@@ -626,10 +644,15 @@ async function saveTx() {
     desc: $('tx-desc').value.trim(),
     litros: txCat === 'combustivel' ? parseValor($('tx-litros').value) : 0,
     km: txCat === 'combustivel' ? parseIntBR($('tx-km').value) : 0,
-    autorNome: me.nome || me.email,
-    autorUid: me.uid,
-    ts: editingTxId ? (S.tx.find(x => x.id === editingTxId)?.ts || Date.now()) : Date.now(),
+    // autor original nunca muda; edições ficam registradas à parte
+    autorNome: original ? (original.autorNome || '?') : (me.nome || me.email),
+    autorUid: original ? (original.autorUid || '') : me.uid,
+    ts: original ? (original.ts || Date.now()) : Date.now(),
   };
+  if (original) {
+    t.editadoPorNome = me.nome || me.email;
+    t.editadoEm = Date.now();
+  }
   const id = editingTxId || newId();
   closeOverlay('modal-tx');
   try {
@@ -667,7 +690,8 @@ function openTxDetail(id) {
   if (t.litros) rows.push(['Litros', t.litros.toLocaleString('pt-BR') + ' L (' + R(t.valor / t.litros) + '/L)']);
   if (t.km) rows.push(['Km no painel', fmtKm(t.km)]);
   if (t.desc) rows.push(['Descrição', t.desc]);
-  rows.push(['Lançado por', t.autorNome || '—']);
+  rows.push(['Lançado por', (t.autorNome || '—') + (t.ts ? ' · ' + fmtDataHora(t.ts) : '')]);
+  if (t.editadoPorNome) rows.push(['Editado por', t.editadoPorNome + (t.editadoEm ? ' · ' + fmtDataHora(t.editadoEm) : '')]);
   $('tx-detail-body').innerHTML = '<div class="detail-rows">' +
     rows.map(([k, v]) => `<div class="detail-row"><small>${k}</small><b>${esc(v)}</b></div>`).join('') + '</div>';
   openOverlay('modal-tx-detail');
@@ -841,6 +865,7 @@ function openVehicleForm(v) {
 async function saveVehicle() {
   const nome = $('veh-nome').value.trim();
   if (!nome) { toast('Dê um nome ao veículo (ex.: Van 01).'); return; }
+  const origV = editingVehId ? vehById(editingVehId) : null;
   const v = {
     nome,
     placa: $('veh-placa').value.trim().toUpperCase(),
@@ -852,6 +877,9 @@ async function saveVehicle() {
     licenciamento: $('veh-licenc').value || '',
     seguro: $('veh-seguro').value || '',
     status: $('veh-status').value,
+    criadoPorNome: origV?.criadoPorNome || me.nome || me.email,
+    atualizadoPorNome: me.nome || me.email,
+    atualizadoEm: Date.now(),
   };
   const id = editingVehId || newId();
   closeOverlay('modal-veh');
@@ -900,6 +928,7 @@ function openVehDetail(id) {
     .sort((a, b) => b.data.localeCompare(a.data) || b.km - a.km).slice(0, 5);
   $('veh-detail-body').innerHTML = `
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    ${v.atualizadoPorNome ? `<p class="modal-note" style="margin-top:-4px">Última edição: ${esc(v.atualizadoPorNome)}${v.atualizadoEm ? ' · ' + fmtDataHora(v.atualizadoEm) : ''}</p>` : ''}
     <div class="fld-row">
       <button class="btn btn-secondary" onclick="openKmForm('${id}')">📍 Registrar km</button>
       <button class="btn btn-secondary" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar</button>
@@ -960,11 +989,15 @@ function openDriverForm(idOrNull) {
 async function saveDriver() {
   const nome = $('drv-nome').value.trim();
   if (!nome) { toast('Digite o nome do motorista.'); return; }
+  const origD = editingDrvId ? S.drivers.find(x => x.id === editingDrvId) : null;
   const d = {
     nome,
     telefone: $('drv-tel').value.trim(),
     cnhCategoria: $('drv-cnh-cat').value,
     cnhValidade: $('drv-cnh-val').value || '',
+    criadoPorNome: origD?.criadoPorNome || me.nome || me.email,
+    atualizadoPorNome: me.nome || me.email,
+    atualizadoEm: Date.now(),
   };
   const id = editingDrvId || newId();
   closeOverlay('modal-driver');
