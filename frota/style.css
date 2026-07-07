@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════
-   GD FROTA — estilo
-   Identidade: azul-marinho profundo + âmbar
+   LAGOS SERVIÇOS DE TRANSPORTE — estilo
+   Identidade da marca: azul-marinho + verde estrada
    ═══════════════════════════════════════════ */
 
 :root {
@@ -12,8 +12,8 @@
   --txt: #e8edf7;
   --txt2: #9fb0cc;
   --txt3: #64779c;
-  --accent: #fbbf24;
-  --accent-txt: #0b1220;
+  --accent: #3fae4c;
+  --accent-txt: #ffffff;
   --pos: #34d399;
   --neg: #f87171;
   --warn: #fbbf24;
@@ -30,7 +30,7 @@
   --txt: #16223a;
   --txt2: #4d5f80;
   --txt3: #8195b5;
-  --accent: #d97706;
+  --accent: #2e8b3d;
   --accent-txt: #ffffff;
   --pos: #059669;
   --neg: #dc2626;
@@ -66,7 +66,7 @@ small { color: var(--txt3); }
   animation: fadeUp .45s ease both;
 }
 .login-logo { width: 84px; height: 84px; border-radius: 22px; box-shadow: var(--shadow); margin-bottom: 16px; }
-.login-card h1 { font-size: 1.9rem; letter-spacing: -.02em; color: #e8edf7; }
+.login-card h1 { font-size: 2rem; letter-spacing: .06em; color: #e8edf7; font-style: italic; font-weight: 800; }
 .login-sub { color: #9fb0cc; margin: 6px 0 26px; text-align: center; }
 #login-form, #login-demo { width: 100%; display: flex; flex-direction: column; gap: 12px; }
 .login-err {
@@ -96,8 +96,8 @@ small { color: var(--txt3); }
 .head-sub { color: var(--txt2); font-size: .85rem; margin-top: 2px; }
 .avatar-btn {
   width: 42px; height: 42px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent), #f59e0b);
-  color: #0b1220; font-weight: 800; font-size: 1.05rem;
+  background: linear-gradient(135deg, var(--accent), #2f8f3e);
+  color: #fff; font-weight: 800; font-size: 1.05rem;
   display: flex; align-items: center; justify-content: center;
   box-shadow: var(--shadow);
 }
@@ -157,7 +157,7 @@ small { color: var(--txt3); }
 .cat-row .c-top b { font-weight: 600; }
 .cat-row .c-val { font-weight: 700; }
 .c-bar { height: 6px; border-radius: 4px; background: var(--card2); overflow: hidden; }
-.c-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), #f59e0b); transition: width .5s ease; }
+.c-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), #2f8f3e); transition: width .5s ease; }
 
 /* ═══════════ LISTA DE LANÇAMENTOS ═══════════ */
 .month-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -284,9 +284,9 @@ small { color: var(--txt3); }
 #fab {
   position: fixed; right: 18px; bottom: calc(84px + env(safe-area-inset-bottom)); z-index: 41;
   width: 58px; height: 58px; border-radius: 18px;
-  background: linear-gradient(135deg, var(--accent), #f59e0b);
-  color: #0b1220; font-size: 1.9rem; font-weight: 700; line-height: 1;
-  box-shadow: 0 10px 26px rgba(245,158,11,.4);
+  background: linear-gradient(135deg, var(--accent), #2f8f3e);
+  color: #fff; font-size: 1.9rem; font-weight: 700; line-height: 1;
+  box-shadow: 0 10px 26px rgba(63,174,76,.4);
   transition: transform .12s ease;
 }
 #fab:active { transform: scale(.92); }
@@ -308,7 +308,7 @@ small { color: var(--txt3); }
   transition: transform .1s ease, opacity .15s;
 }
 .btn:active { transform: scale(.97); }
-.btn-primary { background: linear-gradient(135deg, var(--accent), #f59e0b); color: #0b1220; }
+.btn-primary { background: linear-gradient(135deg, var(--accent), #2f8f3e); color: #fff; }
 .btn-secondary { background: var(--card2); border: 1px solid var(--border); color: var(--txt); }
 .btn-danger { background: rgba(248,113,113,.13); border: 1px solid rgba(248,113,113,.4); color: var(--neg); }
 .btn-block { width: 100%; }

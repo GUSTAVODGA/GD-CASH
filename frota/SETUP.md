@@ -1,4 +1,4 @@
-# Lagos Transportadora (GD Frota) — Guia de configuração (Firebase)
+# Lagos Serviços de Transporte — Guia de configuração (Firebase)
 
 O app funciona em **modo demonstração** (dados salvos só no aparelho) enquanto o Firebase
 não é configurado. Para que os **3 sócios** vejam os mesmos dados em tempo real, siga os
