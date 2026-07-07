@@ -528,7 +528,7 @@ function getMonday(dt) {
   const d = new Date(dt); const day = d.getDay();
   d.setDate(d.getDate() + (day===0 ? -6 : 1-day)); d.setHours(0,0,0,0); return d;
 }
-function dateStr(d)    { return d.toISOString().split('T')[0]; }
+function dateStr(d)    { const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
 function todayStr()    { return dateStr(new Date()); }
 function parseDate(s)  { return new Date(s+'T12:00:00'); }
 function fmtShort(d)   { return parseDate(d).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); }
@@ -2128,9 +2128,9 @@ function exportCalendar() {
     for (let m = 0; m < 12; m++) {
       const d = new Date(now.getFullYear(), now.getMonth()+m, f.dueDay);
       if (d.getDate() !== f.dueDay) continue;
-      const ds = d.toISOString().split('T')[0].replace(/-/g,'');
+      const ds = dateStr(d).replace(/-/g,'');
       const nd = new Date(d); nd.setDate(nd.getDate()+1);
-      const ns = nd.toISOString().split('T')[0].replace(/-/g,'');
+      const ns = dateStr(nd).replace(/-/g,'');
       events += `BEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${ds}\r\nDTEND;VALUE=DATE:${ns}\r\nSUMMARY:🔁 ${f.name} — vencimento\r\nDESCRIPTION:${f.category} · ${R(f.amount)}\r\nUID:gdcash-${f.id}-${ds}@gdcash\r\nBEGIN:VALARM\r\nTRIGGER:-P2D\r\nACTION:DISPLAY\r\nDESCRIPTION:Vence em 2 dias: ${f.name}\r\nEND:VALARM\r\nEND:VEVENT\r\n`;
     }
   });
