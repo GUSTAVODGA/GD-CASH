@@ -1,4 +1,4 @@
-const CACHE = 'gdfrota-v3';
+const CACHE = 'gdfrota-v4';
 const ASSETS = [
   './',
   './index.html',

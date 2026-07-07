@@ -942,7 +942,7 @@ function renderMais() {
   }
   $('ajuste-nome-atual').textContent = me.nome || '—';
   $('ajuste-email-atual').textContent = me.email || '';
-  $('theme-label').textContent = document.documentElement.dataset.theme === 'light' ? 'Claro' : 'Escuro';
+  $('theme-label').textContent = document.documentElement.dataset.theme === 'dark' ? 'Escuro' : 'Claro';
 }
 
 function openDriverForm(idOrNull) {
@@ -1016,19 +1016,20 @@ function exportCSV() {
 // ══════════════════════════════════════════
 // TEMA
 // ══════════════════════════════════════════
+// Tema padrão é o CLARO (identidade da marca); escuro é opcional
+function applyTheme(theme) {
+  if (theme === 'dark') document.documentElement.dataset.theme = 'dark';
+  else delete document.documentElement.dataset.theme;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0b1220' : '#f4f7fb');
+}
 function initTheme() {
-  const saved = localStorage.getItem('gdfrota_theme');
-  if (saved === 'light') document.documentElement.dataset.theme = 'light';
+  applyTheme(localStorage.getItem('gdfrota_theme') === 'dark' ? 'dark' : 'light');
 }
 function toggleTheme() {
-  const isLight = document.documentElement.dataset.theme === 'light';
-  if (isLight) {
-    delete document.documentElement.dataset.theme;
-    localStorage.setItem('gdfrota_theme', 'dark');
-  } else {
-    document.documentElement.dataset.theme = 'light';
-    localStorage.setItem('gdfrota_theme', 'light');
-  }
+  const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('gdfrota_theme', next);
+  applyTheme(next);
   renderMais();
 }
 
