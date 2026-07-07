@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=31">
+<link rel="stylesheet" href="style.css?v=32">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -907,12 +907,13 @@
   </div>
 </div>
 
-<script src="app.js?v=42"></script>
+<script src="app.js?v=43"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
-    navigator.serviceWorker.addEventListener('message', e => {
-      if (e.data?.type === 'SW_UPDATED') location.reload();
+    // Recarrega a página automaticamente quando um novo SW assume o controle
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      window.location.reload();
     });
   }
 </script>

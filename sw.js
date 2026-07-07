@@ -1,9 +1,7 @@
-const CACHE = 'gdcash-v42';
+const CACHE = 'gdcash-v43';
 const ASSETS = [
   './',
   './index.html',
-  './style.css',
-  './app.js',
   './manifest.json',
 ];
 
@@ -18,8 +16,6 @@ self.addEventListener('activate', e => {
     caches.keys()
       .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
-      .then(() => self.clients.matchAll({ type: 'window' }))
-      .then(clients => clients.forEach(c => c.navigate(c.url)))
   );
 });
 
@@ -28,7 +24,7 @@ self.addEventListener('fetch', e => {
   if (url.includes('firebase') || url.includes('googleapis') || url.includes('gstatic') || url.includes('jsdelivr')) return;
   if (!url.startsWith(self.registration.scope)) return;
 
-  // HTML sempre pela rede primeiro para evitar HTML desatualizado no cache
+  // HTML sempre pela rede primeiro para garantir versão atualizada
   if (e.request.headers.get('Accept')?.includes('text/html')) {
     e.respondWith(
       fetch(e.request)
@@ -42,6 +38,8 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // JS/CSS com ?v=N: sempre vai à rede (URL diferente = cache miss garantido)
+  // Outros assets: cache-first com atualização em background
   e.respondWith(
     caches.match(e.request).then(cached => {
       const network = fetch(e.request).then(res => {
