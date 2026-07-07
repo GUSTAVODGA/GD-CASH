@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>GD Frota — Gestão de Transportes</title>
+<title>Lagos Transportadora — Gestão de Frota</title>
 <meta name="description" content="Controle financeiro e operacional da frota: despesas, receitas, veículos, manutenção e motoristas.">
 <meta name="theme-color" content="#0b1220">
 <link rel="manifest" href="manifest.json">
@@ -12,8 +12,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="GD Frota">
-<link rel="stylesheet" href="style.css?v=1">
+<meta name="apple-mobile-web-app-title" content="Lagos">
+<link rel="stylesheet" href="style.css?v=2">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -23,9 +23,9 @@
 <!-- ═══════════ LOGIN ═══════════ -->
 <div id="login-screen">
   <div class="login-card">
-    <img src="icon-192.png" alt="GD Frota" class="login-logo">
-    <h1>GD Frota</h1>
-    <p class="login-sub">Gestão de transportes da sua empresa</p>
+    <img src="icon-192.png" alt="Lagos Transportadora" class="login-logo">
+    <h1>Lagos Transportadora</h1>
+    <p class="login-sub">Gestão da frota e das finanças da empresa</p>
 
     <div id="login-form">
       <label class="fld">
@@ -167,7 +167,7 @@
       </button>
     </div>
 
-    <p class="about-foot">GD Frota v1.0 · feito para a gestão da sua frota 🚐</p>
+    <p class="about-foot">Lagos Transportadora · GD Frota v1.1 🚐</p>
   </section>
 
   <!-- ── NAV INFERIOR ── -->
@@ -258,6 +258,17 @@
   </div>
 </div>
 
+<!-- Registrar km -->
+<div class="overlay" id="modal-km">
+  <div class="sheet">
+    <div class="sheet-head"><h3>Registrar quilometragem</h3><button class="x" onclick="closeOverlay('modal-km')">✕</button></div>
+    <p class="modal-note" id="km-veh-info"></p>
+    <label class="fld"><span>Km no painel</span><input type="text" id="km-valor" inputmode="numeric" placeholder="Ex.: 148900"></label>
+    <label class="fld"><span>Data</span><input type="date" id="km-data"></label>
+    <button class="btn btn-primary btn-block" onclick="saveKmLog()">Salvar</button>
+  </div>
+</div>
+
 <!-- Novo/editar motorista -->
 <div class="overlay" id="modal-driver">
   <div class="sheet">
@@ -299,6 +310,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=1"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

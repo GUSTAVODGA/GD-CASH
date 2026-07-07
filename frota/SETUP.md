@@ -1,4 +1,4 @@
-# GD Frota — Guia de configuração (Firebase)
+# Lagos Transportadora (GD Frota) — Guia de configuração (Firebase)
 
 O app funciona em **modo demonstração** (dados salvos só no aparelho) enquanto o Firebase
 não é configurado. Para que os **3 sócios** vejam os mesmos dados em tempo real, siga os
@@ -12,7 +12,7 @@ passos abaixo (uns 15 minutos, tudo gratuito no plano Spark do Firebase).
 ## 1. Criar o projeto no Firebase
 
 1. Acesse https://console.firebase.google.com e faça login com sua conta Google.
-2. **Adicionar projeto** → nome: `gd-frota` → pode desativar o Google Analytics → **Criar**.
+2. **Adicionar projeto** → nome: `lagos-transportadora` → pode desativar o Google Analytics → **Criar**.
 
 ## 2. Registrar o app web
 
@@ -85,12 +85,16 @@ empresa (ex.: `gd-frota`) e copiar esta pasta para lá.
 | `tx`       | Lançamentos (despesas/receitas) com autor, veículo, litros, km  |
 | `vehicles` | Veículos da frota (km, óleo, licenciamento, seguro, status)     |
 | `drivers`  | Motoristas (CNH, validade, telefone)                            |
+| `kmlog`    | Leituras de quilometragem registradas manualmente               |
 | `profiles` | Nome de exibição de cada sócio (`profiles/{uid}`)               |
 
 ## Dicas de uso
 
 - **Abastecimento:** lançando combustível com *litros* e *km do painel*, o app
   atualiza o odômetro do veículo sozinho e calcula o **consumo médio (km/L)**.
+- **Quilometragem:** além dos abastecimentos, dá para registrar leituras de km
+  avulsas (Frota → veículo → *Registrar km*). Com isso o app mostra **quanto
+  cada veículo rodou no mês** e o **custo por km**.
 - **Alertas automáticos:** licenciamento/seguro vencendo (30 dias), troca de óleo
   por km e CNH dos motoristas aparecem na aba **Início**.
 - **CSV:** em **Mais → Exportar lançamentos** sai uma planilha pronta para o

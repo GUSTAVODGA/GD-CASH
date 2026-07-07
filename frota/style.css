@@ -229,9 +229,9 @@ small { color: var(--txt3); }
 .st-ativo { background: rgba(52,211,153,.14); color: var(--pos); }
 .st-manutencao { background: rgba(251,191,36,.14); color: var(--warn); }
 .st-inativo { background: var(--card2); color: var(--txt3); }
-.veh-stats { display: flex; gap: 8px; margin-top: 14px; }
+.veh-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 14px; }
 .veh-stat {
-  flex: 1; background: var(--card2); border-radius: 12px; padding: 8px 10px;
+  background: var(--card2); border-radius: 12px; padding: 8px 10px;
   display: flex; flex-direction: column; gap: 2px;
 }
 .veh-stat small { font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; }

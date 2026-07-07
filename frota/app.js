@@ -20,7 +20,7 @@ let auth = null, db = null;
 let me = null; // { uid, email, nome }
 
 // Estado compartilhado (espelho do Firestore ou do localStorage no demo)
-let S = { vehicles: [], drivers: [], tx: [], profiles: {} };
+let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {} };
 let unsubs = [];
 
 // Estado de UI
@@ -184,7 +184,7 @@ async function dataDelete(coll, id) {
 
 function startListeners() {
   stopListeners();
-  ['vehicles', 'drivers', 'tx'].forEach(coll => {
+  ['vehicles', 'drivers', 'tx', 'kmlog'].forEach(coll => {
     unsubs.push(db.collection(coll).onSnapshot(snap => {
       S[coll] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
       renderAll();
@@ -453,11 +453,12 @@ function renderVehBreakdown(txs) {
   const max = Math.max(...Object.values(porVeh));
   const rows = Object.entries(porVeh).sort((a, b) => b[1] - a[1]).map(([vid, val]) => {
     const pct = Math.round(val / max * 100);
+    const rodou = vehById(vid) ? kmRodadoMes(vid) : 0;
     return `
       <div class="cat-row">
         <div class="c-ico">🚐</div>
         <div class="c-body">
-          <div class="c-top"><b>${esc(vehNome(vid))}</b><span class="c-val">${R(val)}</span></div>
+          <div class="c-top"><b>${esc(vehNome(vid))}</b><span class="c-val">${R(val)}${rodou ? ' <small>· ' + fmtKm(rodou) + '</small>' : ''}</span></div>
           <div class="c-bar"><div class="c-bar-fill" style="width:${pct}%"></div></div>
         </div>
       </div>`;
@@ -686,6 +687,68 @@ function deleteTxFromDetail() {
 }
 
 // ══════════════════════════════════════════
+// QUILOMETRAGEM
+// ══════════════════════════════════════════
+// Leituras de km de um veículo: registros manuais (kmlog) + abastecimentos com km
+function kmReadings(vid) {
+  const manuais = S.kmlog.filter(l => l.veiculo === vid && l.km > 0)
+    .map(l => ({ data: l.data, km: l.km }));
+  const abastecidas = S.tx.filter(t => t.veiculo === vid && t.cat === 'combustivel' && t.km > 0)
+    .map(t => ({ data: t.data, km: t.km }));
+  return [...manuais, ...abastecidas].sort((a, b) => a.data.localeCompare(b.data) || a.km - b.km);
+}
+
+// Km rodado no mês = última leitura do mês − última leitura anterior ao mês
+// (se não houver leitura anterior, usa a primeira leitura do próprio mês)
+function kmRodadoMes(vid, offset = 0) {
+  const mk = monthKey(offset);
+  const reads = kmReadings(vid);
+  const doMes = reads.filter(r => r.data.startsWith(mk));
+  if (!doMes.length) return 0;
+  const ultima = Math.max(...doMes.map(r => r.km));
+  const anteriores = reads.filter(r => r.data < mk + '-01');
+  const base = anteriores.length ? Math.max(...anteriores.map(r => r.km)) : Math.min(...doMes.map(r => r.km));
+  return Math.max(0, ultima - base);
+}
+
+let kmVehId = null;
+function openKmForm(vid) {
+  const v = vehById(vid);
+  if (!v) return;
+  kmVehId = vid;
+  $('km-veh-info').textContent = v.nome + (v.km ? ' — última leitura: ' + fmtKm(v.km) : '');
+  $('km-valor').value = '';
+  $('km-data').value = todayStr();
+  closeOverlay('modal-veh-detail');
+  openOverlay('modal-km');
+}
+
+async function saveKmLog() {
+  const km = parseIntBR($('km-valor').value);
+  if (km <= 0) { toast('Informe o km do painel.'); return; }
+  const v = vehById(kmVehId);
+  if (!v) return;
+  const data = $('km-data').value || todayStr();
+  closeOverlay('modal-km');
+  try {
+    await dataSet('kmlog', newId(), {
+      veiculo: kmVehId, km, data,
+      autorNome: me.nome || me.email, autorUid: me.uid, ts: Date.now(),
+    });
+    if (km > (Number(v.km) || 0)) await dataSet('vehicles', v.id, { ...stripId(v), km });
+    toast('Km registrado ✓');
+  } catch (e) { toast('Erro ao salvar.'); }
+}
+
+function deleteKmLog(id) {
+  confirmDialog('Excluir leitura de km', 'Excluir este registro de quilometragem?', async () => {
+    try { await dataDelete('kmlog', id); toast('Registro excluído'); }
+    catch (e) { toast('Erro ao excluir.'); }
+    closeOverlay('modal-veh-detail');
+  });
+}
+
+// ══════════════════════════════════════════
 // FROTA
 // ══════════════════════════════════════════
 function consumoMedio(vid) {
@@ -735,6 +798,7 @@ function renderFrota() {
       const gasto = S.tx.filter(t => t.veiculo === v.id && t.tipo === 'despesa' && (t.data || '').startsWith(mk))
         .reduce((s, t) => s + t.valor, 0);
       const cons = consumoMedio(v.id);
+      const rodou = kmRodadoMes(v.id);
       const chips = vehAlertChips(v);
       return `
         <button class="veh-card" onclick="openVehDetail('${v.id}')">
@@ -748,6 +812,7 @@ function renderFrota() {
           </div>
           <div class="veh-stats">
             <div class="veh-stat"><small>Km atual</small><b>${v.km ? fmtKm(v.km) : '—'}</b></div>
+            <div class="veh-stat"><small>Rodou no mês</small><b>${rodou ? fmtKm(rodou) : '—'}</b></div>
             <div class="veh-stat"><small>Gasto no mês</small><b>${R(gasto)}</b></div>
             <div class="veh-stat"><small>Consumo</small><b>${cons ? cons.toFixed(1).replace('.', ',') + ' km/L' : '—'}</b></div>
           </div>
@@ -815,21 +880,36 @@ function openVehDetail(id) {
   const txsV = S.tx.filter(t => t.veiculo === id).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   const gastoMes = txsV.filter(t => t.tipo === 'despesa' && (t.data || '').startsWith(mk)).reduce((s, t) => s + t.valor, 0);
   const cons = consumoMedio(id);
+  const rodou = kmRodadoMes(id);
+  const custoKm = rodou > 0 ? gastoMes / rodou : null;
   const proxOleo = (Number(v.oleoUltimaKm) || 0) + (Number(v.oleoIntervalo) || 0);
 
   const cells = [
     ['Placa', v.placa || '—'],
     ['Modelo', (v.modelo || '—') + (v.ano ? ' · ' + v.ano : '')],
     ['Km atual', v.km ? fmtKm(v.km) : '—'],
-    ['Consumo médio', cons ? cons.toFixed(1).replace('.', ',') + ' km/L' : '—'],
+    ['Rodou no mês', rodou ? fmtKm(rodou) : '—'],
     ['Gasto no mês', R(gastoMes)],
+    ['Custo por km (mês)', custoKm ? R(custoKm) : '—'],
+    ['Consumo médio', cons ? cons.toFixed(1).replace('.', ',') + ' km/L' : '—'],
     ['Próx. troca de óleo', proxOleo > (Number(v.oleoUltimaKm) || 0) ? fmtKm(proxOleo) : '—'],
     ['Licenciamento', fmtData(v.licenciamento)],
     ['Seguro', fmtData(v.seguro)],
   ];
+  const kmLogs = S.kmlog.filter(l => l.veiculo === id)
+    .sort((a, b) => b.data.localeCompare(a.data) || b.km - a.km).slice(0, 5);
   $('veh-detail-body').innerHTML = `
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
-    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar veículo</button>
+    <div class="fld-row">
+      <button class="btn btn-secondary" onclick="openKmForm('${id}')">📍 Registrar km</button>
+      <button class="btn btn-secondary" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar</button>
+    </div>
+    ${kmLogs.length ? '<h2 class="sec-title">Leituras de km registradas</h2><div class="card">' + kmLogs.map(l => `
+      <div class="row-btn">
+        <span class="row-ico">📍</span>
+        <span class="row-txt"><b>${fmtKm(l.km)}</b><small>${fmtDia(l.data)} · por ${esc((l.autorNome || '?').split(' ')[0])}</small></span>
+        <button class="x" onclick="deleteKmLog('${l.id}')">✕</button>
+      </div>`).join('') + '</div>' : ''}
     <h2 class="sec-title">Últimos lançamentos deste veículo</h2>
     ${txsV.length ? txsV.slice(0, 6).map(txItemHTML).join('') : '<div class="empty-mini">Nenhum lançamento ainda.</div>'}
   `;
@@ -968,7 +1048,11 @@ function seedDemo() {
   const v1 = newId(), v2 = newId();
   S.vehicles = [
     { id: v1, nome: 'Van 01', placa: 'ABC1D23', modelo: 'Fiat Ducato', ano: '2019', km: 148300, oleoUltimaKm: 139500, oleoIntervalo: 10000, licenciamento: dfut(22), seguro: dfut(120), status: 'ativo' },
-    { id: v2, nome: 'Van 02', placa: 'DEF4G56', modelo: 'Mercedes Sprinter 415', ano: '2021', km: 96400, oleoUltimaKm: 95800, oleoIntervalo: 10000, licenciamento: dfut(200), seguro: dfut(45), status: 'ativo' },
+    { id: v2, nome: 'Van 02', placa: 'DEF4G56', modelo: 'Mercedes Sprinter 415', ano: '2021', km: 96650, oleoUltimaKm: 95800, oleoIntervalo: 10000, licenciamento: dfut(200), seguro: dfut(45), status: 'ativo' },
+  ];
+  S.kmlog = [
+    { id: newId(), veiculo: v2, km: 96650, data: dstr(0), autorNome: 'Você', autorUid: 'demo', ts: Date.now() },
+    { id: newId(), veiculo: v1, km: 145700, data: dstr(36), autorNome: 'Sócio 2', autorUid: 'demo', ts: Date.now() - 36 * 86400000 },
   ];
   S.drivers = [
     { id: newId(), nome: 'Carlos Silva', telefone: '(24) 99999-1111', cnhCategoria: 'D', cnhValidade: dfut(400) },

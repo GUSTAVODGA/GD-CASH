@@ -1,7 +1,7 @@
 {
-  "name": "GD Frota — Gestão de Transportes",
-  "short_name": "GD Frota",
-  "description": "Controle financeiro e operacional da frota: despesas, receitas, veículos, manutenção e motoristas.",
+  "name": "Lagos Transportadora — Gestão de Frota",
+  "short_name": "Lagos",
+  "description": "Controle financeiro e operacional da frota: despesas, receitas, quilometragem, veículos, manutenção e motoristas.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
