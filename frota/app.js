@@ -693,7 +693,6 @@ function openTxDetail(id) {
   if (t.km) rows.push(['Km no painel', fmtKm(t.km)]);
   if (t.desc) rows.push(['Descrição', t.desc]);
   rows.push(['Lançado por', (t.autorNome || '—') + (t.ts ? ' · ' + fmtDataHora(t.ts) : '')]);
-  if (t.editadoPorNome) rows.push(['Editado por', t.editadoPorNome + (t.editadoEm ? ' · ' + fmtDataHora(t.editadoEm) : '')]);
   $('tx-detail-body').innerHTML = '<div class="detail-rows">' +
     rows.map(([k, v]) => `<div class="detail-row"><small>${k}</small><b>${esc(v)}</b></div>`).join('') + '</div>';
   openOverlay('modal-tx-detail');
@@ -930,7 +929,6 @@ function openVehDetail(id) {
     .sort((a, b) => b.data.localeCompare(a.data) || b.km - a.km).slice(0, 5);
   $('veh-detail-body').innerHTML = `
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
-    ${v.atualizadoPorNome ? `<p class="modal-note" style="margin-top:-4px">Última edição: ${esc(v.atualizadoPorNome)}${v.atualizadoEm ? ' · ' + fmtDataHora(v.atualizadoEm) : ''}</p>` : ''}
     <div class="fld-row">
       <button class="btn btn-secondary" onclick="openKmForm('${id}')">📍 Registrar km</button>
       <button class="btn btn-secondary" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar</button>
