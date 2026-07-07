@@ -1074,13 +1074,20 @@ function renderWeekGoal() {
   const done = inc >= goal;
   const dates = weekDates(weekOffset);
   const now = new Date(); now.setHours(0,0,0,0);
-  const daysLeft = dates.filter(d => parseDate(d) >= now).length; // inclui hoje
+  const today = todayStr();
+  // Conta só dias sem receita lançada: dias futuros sempre; hoje só se ainda não tiver nada
+  const daysLeft = dates.filter(d => {
+    const dDate = parseDate(d);
+    if (dDate < now) return false;           // dia passado
+    if (d === today) return sumDayIncome(today) === 0; // hoje: só se sem receita
+    return true;                              // dia futuro
+  }).length;
   let foot = '';
   if (done) foot = 'Meta da semana atingida! 🎉';
   else if (daysLeft === 0) foot = `Faltaram ${R(goal-inc)} pra bater a meta.`;
   else {
     const perDay = Math.ceil((goal - inc) / daysLeft);
-    const dayTxt = daysLeft === 1 ? 'hoje' : `por dia (${daysLeft} dias)`;
+    const dayTxt = daysLeft === 1 ? 'hoje' : `por dia nos próx. ${daysLeft} dias`;
     foot = `Faltam <b>${R(goal-inc)}</b> — faça <b>${R(perDay)}</b> ${dayTxt}`;
   }
 
