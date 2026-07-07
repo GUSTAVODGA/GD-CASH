@@ -244,6 +244,19 @@
 /* ══ NOTIFICATION BUTTON IN SETTINGS ══ */
 .notif-settings-row { margin-top:8px; }
 
+/* ══ CURRENCY PICKER PILLS ══ */
+.curr-pills { display:flex; flex-wrap:wrap; gap:8px; }
+.curr-pill {
+  padding:7px 14px; border-radius:20px; border:1.5px solid var(--border);
+  background:var(--surface2); color:var(--tx); font-size:13px; font-weight:600;
+  cursor:pointer; transition:background .18s, border-color .18s, color .18s;
+}
+.curr-pill-on {
+  background:var(--ac-t); border-color:var(--ac); color:var(--ac);
+}
+:root[data-theme="dark"] .curr-pill { background:var(--surface2); color:var(--tx); border-color:var(--border); }
+:root[data-theme="dark"] .curr-pill-on { background:rgba(184,112,8,.18); border-color:var(--ac); color:var(--ac); }
+
 /* ══════════════════════════════════════════
    GD CASH — dark premium + glassmorphism
    ══════════════════════════════════════════ */

@@ -15,14 +15,17 @@ const firebaseConfig = {
 let auth, db, currentUser = null;
 
 // ── Moeda ──
-const CURRENCIES = ['R$', 'US$', '€', '£'];
+const CURRENCIES = ['R$', 'US$', 'CA$', 'AU$', 'MX$', '€', '£', '¥'];
 let currSym = localStorage.getItem('gdcash_currency') || 'R$';
 
-function cycleCurrency() {
-  const idx = CURRENCIES.indexOf(currSym);
-  currSym = CURRENCIES[(idx + 1) % CURRENCIES.length];
+function setCurrency(sym) {
+  currSym = sym;
   localStorage.setItem('gdcash_currency', currSym);
-  document.getElementById('curr-chip').textContent = currSym;
+  const chip = document.getElementById('curr-chip');
+  if (chip) chip.textContent = currSym;
+  document.querySelectorAll('.curr-pill').forEach(btn => {
+    btn.classList.toggle('curr-pill-on', btn.dataset.cur === currSym);
+  });
   const active = document.querySelector('.page.active')?.id?.replace('page-', '');
   if (active === 'inicio')       { renderInicio(); renderInicioCards(); }
   else if (active === 'semana')  { renderSemana(); renderDayAccordion(); }
@@ -30,6 +33,11 @@ function cycleCurrency() {
   else if (active === 'reserva') renderReserva();
   else if (active === 'metas')   renderGoals();
   else if (active === 'fixos')   renderFixos();
+}
+
+function cycleCurrency() {
+  const idx = CURRENCIES.indexOf(currSym);
+  setCurrency(CURRENCIES[(idx + 1) % CURRENCIES.length]);
 }
 
 function initFirebase() {
@@ -2625,6 +2633,13 @@ function initSettingsExtras() {
       <div class="theme-toggle-row">
         <span>Notificações</span>
         <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:12px" onclick="openOverlay('modal-notif-perm')">Configurar</button>
+      </div>
+    </div>
+    <div class="sec-title">Moeda</div>
+    <div class="card" style="padding:14px 16px">
+      <div style="font-size:13px;color:var(--text-2);margin-bottom:12px">Símbolo exibido em todos os valores do app</div>
+      <div class="curr-pills">
+        ${CURRENCIES.map(c => `<button class="curr-pill${c === currSym ? ' curr-pill-on' : ''}" data-cur="${c}" onclick="setCurrency('${c}')">${c}</button>`).join('')}
       </div>
     </div>`;
 
