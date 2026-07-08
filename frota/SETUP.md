@@ -28,11 +28,36 @@ passos abaixo (uns 15 minutos, tudo gratuito no plano Spark do Firebase).
 
 ## 4. Criar os 3 usuários (os sócios)
 
+A empresa usa **um único e-mail** (ex.: `lagostransportes@gmail.com`), mas cada
+sócio precisa do seu próprio login para o app saber quem fez cada lançamento.
+O truque é o apelido com **`+`**: tudo que chega para `empresa+qualquercoisa@gmail.com`
+cai na caixa de entrada de `empresa@gmail.com`.
+
 1. Ainda em **Authentication**, aba **Usuários** → **Adicionar usuário**.
-2. Crie um usuário para cada sócio com o e-mail dele e uma senha inicial
-   (eles podem trocar depois pelo "Esqueci minha senha" na tela de login).
+2. Crie um usuário para cada sócio usando o e-mail da empresa com o apelido,
+   cada um com sua própria senha inicial:
+   - `lagostransportes+joao@gmail.com`
+   - `lagostransportes+pedro@gmail.com`
+   - `lagostransportes+carlos@gmail.com`
 3. **Importante:** o app não tem tela de cadastro de propósito — só entra quem
-   você criar aqui.
+   você criar aqui. O "Esqueci minha senha" manda o link para a caixa da empresa.
+
+## 4b. Preencher os perfis no app (tela "Quem está usando?")
+
+No topo do `app.js` existe a lista `SOCIOS`. Preencha com o nome e o e-mail de
+login de cada sócio (mesmos e-mails do passo 4):
+
+```js
+const SOCIOS = [
+  { nome: 'João',   email: 'lagostransportes+joao@gmail.com',   foto: '' },
+  { nome: 'Pedro',  email: 'lagostransportes+pedro@gmail.com',  foto: '' },
+  { nome: 'Carlos', email: 'lagostransportes+carlos@gmail.com', foto: '' },
+];
+```
+
+Com isso a tela de login vira um seletor de perfis: a pessoa toca no seu nome
+e digita só a senha (uma vez por aparelho). `foto` é opcional — sem foto,
+aparece a inicial colorida de cada um.
 
 ## 5. Criar o banco de dados (Firestore)
 

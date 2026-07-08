@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=7">
+<link rel="stylesheet" href="style.css?v=8">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -27,7 +27,31 @@
     <h1>LAGOS</h1>
     <p class="login-sub">Serviços de Transporte · Gestão da frota</p>
 
-    <div id="login-form">
+    <!-- Seletor de perfis ("Quem está usando?") -->
+    <div id="login-profiles" style="display:none">
+      <p class="lp-title">Quem está usando?</p>
+      <div class="lp-grid" id="lp-grid"></div>
+      <div id="lp-demo-note" class="demo-note" style="display:none">⚙️ Modo demonstração — dados de exemplo, salvos só neste aparelho.</div>
+    </div>
+
+    <!-- Senha do perfil escolhido -->
+    <div id="login-pass-step" style="display:none">
+      <div class="lp-selected">
+        <span class="lp-avatar lp-avatar-sm" id="lp-sel-avatar">?</span>
+        <b id="lp-sel-nome"></b>
+      </div>
+      <label class="fld">
+        <span>Senha</span>
+        <input type="password" id="lp-pass" autocomplete="current-password" placeholder="••••••••">
+      </label>
+      <div id="lp-err" class="login-err" style="display:none"></div>
+      <button class="btn btn-primary btn-block" id="lp-entrar" onclick="profileLogin()">Entrar</button>
+      <button class="btn-link" onclick="backToProfiles()">← Trocar de perfil</button>
+      <button class="btn-link" onclick="forgotPasswordProfile()">Esqueci minha senha</button>
+    </div>
+
+    <!-- Login clássico por e-mail (usado se os perfis não estiverem configurados) -->
+    <div id="login-form" style="display:none">
       <label class="fld">
         <span>E-mail</span>
         <input type="email" id="login-email" autocomplete="username" placeholder="seu@email.com" inputmode="email">
@@ -39,11 +63,6 @@
       <div id="login-err" class="login-err" style="display:none"></div>
       <button class="btn btn-primary btn-block" id="btn-login" onclick="doLogin()">Entrar</button>
       <button class="btn-link" onclick="forgotPassword()">Esqueci minha senha</button>
-    </div>
-
-    <div id="login-demo" style="display:none">
-      <div class="demo-note">⚙️ O aplicativo ainda não foi conectado ao servidor (Firebase). Enquanto isso, você pode explorar com dados de exemplo salvos apenas neste aparelho.</div>
-      <button class="btn btn-primary btn-block" onclick="enterDemo()">Explorar em modo demonstração</button>
     </div>
 
     <p class="login-foot">Acesso restrito aos sócios da empresa.</p>
@@ -310,6 +329,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

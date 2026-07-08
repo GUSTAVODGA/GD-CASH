@@ -16,6 +16,17 @@ const firebaseConfig = {
 const DEMO = firebaseConfig.apiKey === 'COLE_AQUI';
 const LS_KEY = 'lagos_demo_v1';
 
+// ── PERFIS DOS SÓCIOS (tela "Quem está usando?") ──
+// Preencher no setup: nome de cada sócio + e-mail de login criado no Firebase.
+// Dica: dá pra usar um único e-mail da empresa com apelidos "+", ex.:
+//   empresa+joao@gmail.com / empresa+pedro@gmail.com — tudo cai na mesma caixa.
+// "foto" é opcional (link ou arquivo); sem foto aparece a inicial colorida.
+const SOCIOS = [
+  // { nome: 'João',   email: 'empresa+joao@gmail.com',   foto: '' },
+  // { nome: 'Pedro',  email: 'empresa+pedro@gmail.com',  foto: '' },
+  // { nome: 'Carlos', email: 'empresa+carlos@gmail.com', foto: '' },
+];
+
 let auth = null, db = null;
 let me = null; // { uid, email, nome }
 
@@ -225,11 +236,13 @@ function stopListeners() {
 function initApp() {
   initTheme();
   if (DEMO) {
-    $('login-form').style.display = 'none';
-    $('login-demo').style.display = '';
+    renderProfilePicker();
+    $('lp-demo-note').style.display = '';
     if (localStorage.getItem('lagos_demo_active')) enterDemo(true);
     return;
   }
+  if (SOCIOS.length) renderProfilePicker();
+  else $('login-form').style.display = '';
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db = firebase.firestore();
@@ -242,6 +255,14 @@ function initApp() {
         const p = await db.collection('profiles').doc(user.uid).get();
         if (p.exists && p.data().nome) me.nome = p.data().nome;
       } catch (e) {}
+      // primeiro acesso pelo seletor de perfis: o nome já vem da lista de sócios
+      if (!me.nome) {
+        const s = SOCIOS.find(x => (x.email || '').toLowerCase() === (user.email || '').toLowerCase());
+        if (s) {
+          me.nome = s.nome;
+          dataSet('profiles', me.uid, { nome: s.nome, email: me.email }).catch(e => console.error(e));
+        }
+      }
       startListeners();
       showApp();
       if (!me.nome) openNameModal();
@@ -260,6 +281,18 @@ function loginError(msg) {
   el.style.display = '';
 }
 
+function mapAuthError(err) {
+  const map = {
+    'auth/invalid-credential': 'Senha incorreta. Tente de novo.',
+    'auth/wrong-password': 'Senha incorreta. Tente de novo.',
+    'auth/user-not-found': 'Este e-mail não tem acesso ao sistema.',
+    'auth/invalid-email': 'E-mail inválido.',
+    'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos.',
+    'auth/network-request-failed': 'Sem conexão. Verifique a internet.',
+  };
+  return map[err.code] || 'Erro ao entrar: ' + err.message;
+}
+
 function doLogin() {
   const email = $('login-email').value.trim();
   const pass = $('login-pass').value;
@@ -268,20 +301,84 @@ function doLogin() {
   $('btn-login').disabled = true;
   $('btn-login').textContent = 'Entrando…';
   auth.signInWithEmailAndPassword(email, pass)
-    .catch(err => {
-      const map = {
-        'auth/invalid-credential': 'E-mail ou senha incorretos.',
-        'auth/wrong-password': 'E-mail ou senha incorretos.',
-        'auth/user-not-found': 'Este e-mail não tem acesso ao sistema.',
-        'auth/invalid-email': 'E-mail inválido.',
-        'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos.',
-        'auth/network-request-failed': 'Sem conexão. Verifique a internet.',
-      };
-      loginError(map[err.code] || 'Erro ao entrar: ' + err.message);
-    })
+    .catch(err => loginError(mapAuthError(err)))
     .finally(() => {
       $('btn-login').disabled = false;
       $('btn-login').textContent = 'Entrar';
+    });
+}
+
+// ── Seletor de perfis (Quem está usando?) ──
+let selectedSocio = null;
+
+function socioAvatarHTML(s, small) {
+  const cls = small ? 'lp-avatar lp-avatar-sm' : 'lp-avatar';
+  if (s.foto) return `<span class="${cls}"><img src="${esc(s.foto)}" alt="${esc(s.nome)}"></span>`;
+  return `<span class="${cls}" style="background:${authorColor(s.nome)}">${esc(s.nome[0].toUpperCase())}</span>`;
+}
+
+function profilesList() {
+  return DEMO ? [{ nome: 'Sócio 1' }, { nome: 'Sócio 2' }, { nome: 'Sócio 3' }] : SOCIOS;
+}
+
+function renderProfilePicker() {
+  $('login-profiles').style.display = '';
+  $('login-pass-step').style.display = 'none';
+  $('lp-grid').innerHTML = profilesList().map((s, i) => `
+    <button class="lp-card" onclick="pickProfile(${i})">
+      ${socioAvatarHTML(s)}
+      <span class="lp-nome">${esc(s.nome)}</span>
+    </button>`).join('');
+}
+
+function pickProfile(i) {
+  const s = profilesList()[i];
+  if (!s) return;
+  if (DEMO) {
+    localStorage.setItem('lagos_demo_nome', s.nome);
+    enterDemo();
+    return;
+  }
+  selectedSocio = s;
+  $('login-profiles').style.display = 'none';
+  $('login-pass-step').style.display = '';
+  $('lp-sel-avatar').outerHTML = socioAvatarHTML(s, true).replace('<span class="lp-avatar lp-avatar-sm"', '<span class="lp-avatar lp-avatar-sm" id="lp-sel-avatar"');
+  $('lp-sel-nome').textContent = s.nome;
+  $('lp-err').style.display = 'none';
+  $('lp-pass').value = '';
+  $('lp-pass').focus();
+}
+
+function backToProfiles() {
+  selectedSocio = null;
+  renderProfilePicker();
+}
+
+function profileLogin() {
+  if (!selectedSocio) return;
+  const pass = $('lp-pass').value;
+  if (!pass) { $('lp-err').textContent = 'Digite sua senha.'; $('lp-err').style.display = ''; return; }
+  $('lp-err').style.display = 'none';
+  $('lp-entrar').disabled = true;
+  $('lp-entrar').textContent = 'Entrando…';
+  auth.signInWithEmailAndPassword(selectedSocio.email, pass)
+    .catch(err => {
+      $('lp-err').textContent = mapAuthError(err);
+      $('lp-err').style.display = '';
+    })
+    .finally(() => {
+      $('lp-entrar').disabled = false;
+      $('lp-entrar').textContent = 'Entrar';
+    });
+}
+
+function forgotPasswordProfile() {
+  if (!selectedSocio) return;
+  auth.sendPasswordResetEmail(selectedSocio.email)
+    .then(() => toast('📧 Link de nova senha enviado pro e-mail da empresa'))
+    .catch(() => {
+      $('lp-err').textContent = 'Não foi possível enviar o e-mail agora.';
+      $('lp-err').style.display = '';
     });
 }
 
@@ -1138,7 +1235,9 @@ document.addEventListener('change', e => { if (e.target.id === 'tx-veiculo') upd
 
 // Enter no login envia o formulário
 document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && (e.target.id === 'login-pass' || e.target.id === 'login-email') && !DEMO) doLogin();
+  if (e.key !== 'Enter' || DEMO) return;
+  if (e.target.id === 'login-pass' || e.target.id === 'login-email') doLogin();
+  if (e.target.id === 'lp-pass') profileLogin();
 });
 
 // fechar overlay tocando fora
