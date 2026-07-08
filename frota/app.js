@@ -22,7 +22,7 @@ const LS_KEY = 'lagos_demo_v1';
 //   empresa+joao@gmail.com / empresa+pedro@gmail.com — tudo cai na mesma caixa.
 // "foto" é opcional (link ou arquivo); sem foto aparece a inicial colorida.
 const SOCIOS = [
-  { nome: 'Luís Paulo', email: 'lagosoperacional+luispaulo@gmail.com', foto: '' },
+  { nome: 'Luís Paulo', email: 'lagosoperacional+luispaulo@gmail.com', foto: 'avatar-luispaulo.jpg' },
   { nome: 'Ygor',       email: 'lagosoperacional+ygor@gmail.com',      foto: '' },
   { nome: 'Thadeu',     email: 'lagosoperacional+thadeu@gmail.com',    foto: '' },
 ];
