@@ -1,4 +1,4 @@
-const CACHE = 'lagos-v13';
+const CACHE = 'lagos-v14';
 const ASSETS = [
   './',
   './index.html',

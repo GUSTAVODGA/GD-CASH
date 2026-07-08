@@ -5,12 +5,12 @@
 // ══════════════════════════════════════════
 
 const firebaseConfig = {
-  apiKey: "COLE_AQUI",            // ← preencher seguindo o SETUP.md
-  authDomain: "COLE_AQUI",
-  projectId: "COLE_AQUI",
-  storageBucket: "COLE_AQUI",
-  messagingSenderId: "COLE_AQUI",
-  appId: "COLE_AQUI"
+  apiKey: "AIzaSyBV0cSMImMxsS7xxQll3QdR0zY2vipRENM",
+  authDomain: "lagos-operacional.firebaseapp.com",
+  projectId: "lagos-operacional",
+  storageBucket: "lagos-operacional.firebasestorage.app",
+  messagingSenderId: "983051373757",
+  appId: "1:983051373757:web:344d2f61349afb85ec7bd4"
 };
 
 const DEMO = firebaseConfig.apiKey === 'COLE_AQUI';
