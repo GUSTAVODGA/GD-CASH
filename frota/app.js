@@ -22,9 +22,9 @@ const LS_KEY = 'lagos_demo_v1';
 //   empresa+joao@gmail.com / empresa+pedro@gmail.com — tudo cai na mesma caixa.
 // "foto" é opcional (link ou arquivo); sem foto aparece a inicial colorida.
 const SOCIOS = [
-  { nome: 'Luís Paulo', email: 'lagosoperacional+luispaulo@gmail.com', foto: 'avatar-luispaulo.jpg' },
-  { nome: 'Ygor',       email: 'lagosoperacional+ygor@gmail.com',      foto: '' },
-  { nome: 'Thadeu',     email: 'lagosoperacional+thadeu@gmail.com',    foto: '' },
+  { nome: 'Luís Paulo', sigla: 'LP', email: 'lagosoperacional+luispaulo@gmail.com', foto: '' },
+  { nome: 'Ygor',       sigla: 'YC', email: 'lagosoperacional+ygor@gmail.com',      foto: '' },
+  { nome: 'Thadeu',     sigla: 'TC', email: 'lagosoperacional+thadeu@gmail.com',    foto: '' },
 ];
 
 let auth = null, db = null;
@@ -311,10 +311,23 @@ function doLogin() {
 // ── Seletor de perfis (Quem está usando?) ──
 let selectedSocio = null;
 
-function socioAvatarHTML(s, small) {
+// Avatares desenhados (flat): silhueta branca sobre gradiente, um por sócio
+const AVATAR_GRADS = [
+  ['#1e3a8a', '#3b82f6'], // azul-marinho → azul
+  ['#166534', '#4ade80'], // verde-escuro → verde
+  ['#7c2d12', '#f59e0b'], // terra → âmbar
+  ['#0f766e', '#2dd4bf'], // petróleo → turquesa
+];
+function socioSigla(s) {
+  if (s.sigla) return s.sigla;
+  const partes = String(s.nome || '?').trim().split(/\s+/);
+  return (partes[0][0] + (partes[1] ? partes[1][0] : '')).toUpperCase();
+}
+function socioAvatarHTML(s, i, small) {
   const cls = small ? 'lp-avatar lp-avatar-sm' : 'lp-avatar';
   if (s.foto) return `<span class="${cls}"><img src="${esc(s.foto)}" alt="${esc(s.nome)}"></span>`;
-  return `<span class="${cls}" style="background:${authorColor(s.nome)}">${esc(s.nome[0].toUpperCase())}</span>`;
+  const [c1, c2] = AVATAR_GRADS[i % AVATAR_GRADS.length];
+  return `<span class="${cls} lp-monogram" style="background:linear-gradient(135deg,${c1},${c2})">${esc(socioSigla(s))}</span>`;
 }
 
 function profilesList() {
@@ -327,7 +340,7 @@ function renderProfilePicker() {
   $('login-pass-step').style.display = 'none';
   $('lp-grid').innerHTML = profilesList().map((s, i) => `
     <button class="lp-card" onclick="pickProfile(${i})">
-      ${socioAvatarHTML(s)}
+      ${socioAvatarHTML(s, i)}
       <span class="lp-nome">${esc(s.nome)}</span>
     </button>`).join('');
 }
@@ -343,7 +356,7 @@ function pickProfile(i) {
   selectedSocio = s;
   $('login-profiles').style.display = 'none';
   $('login-pass-step').style.display = '';
-  $('lp-sel-avatar').outerHTML = socioAvatarHTML(s, true).replace('<span class="lp-avatar lp-avatar-sm"', '<span class="lp-avatar lp-avatar-sm" id="lp-sel-avatar"');
+  $('lp-sel-avatar').outerHTML = socioAvatarHTML(s, i, true).replace('<span class="lp-avatar lp-avatar-sm"', '<span class="lp-avatar lp-avatar-sm" id="lp-sel-avatar"');
   $('lp-sel-nome').textContent = s.nome;
   $('lp-err').style.display = 'none';
   $('lp-pass').value = '';
