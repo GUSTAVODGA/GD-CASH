@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=12">
+<link rel="stylesheet" href="style.css?v=13">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -176,6 +176,15 @@
         <span class="row-ico">👤</span>
         <span class="row-txt"><b>Meu nome de exibição</b><small id="ajuste-nome-atual">—</small></span>
       </button>
+      <button class="row-btn" onclick="document.getElementById('foto-input').click()">
+        <span class="row-ico">🖼️</span>
+        <span class="row-txt"><b>Minha foto de perfil</b><small id="ajuste-foto-atual">Sem foto — mostrando suas iniciais</small></span>
+      </button>
+      <button class="row-btn" id="btn-remover-foto" style="display:none" onclick="removeProfilePhoto()">
+        <span class="row-ico">🚫</span>
+        <span class="row-txt"><b>Remover minha foto</b><small>Volta a mostrar as iniciais</small></span>
+      </button>
+      <input type="file" id="foto-input" accept="image/*" style="display:none">
       <button class="row-btn" onclick="toggleTheme()">
         <span class="row-ico">🌗</span>
         <span class="row-txt"><b>Tema</b><small id="theme-label">Escuro</small></span>
@@ -329,6 +338,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=12"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

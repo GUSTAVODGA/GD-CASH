@@ -137,9 +137,13 @@ function authorColor(nome) {
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
   return AUTHOR_COLORS[h % AUTHOR_COLORS.length];
 }
-function authorChip(nome) {
+function authorChip(nome, uid) {
   const n = String(nome || '?');
-  return `<span class="tx-author"><span class="au-dot" style="background:${authorColor(n)}">${esc(n[0].toUpperCase())}</span>${esc(n.split(' ')[0])}</span>`;
+  const foto = uid && S.profiles[uid]?.foto;
+  const dot = foto
+    ? `<span class="au-dot" style="background:center/cover no-repeat url(&quot;${foto}&quot;)"></span>`
+    : `<span class="au-dot" style="background:${authorColor(n)}">${esc(n[0].toUpperCase())}</span>`;
+  return `<span class="tx-author">${dot}${esc(n.split(' ')[0])}</span>`;
 }
 function diasAte(dateStr) {
   if (!dateStr) return null;
@@ -318,6 +322,53 @@ const AVATAR_GRADS = [
   ['#7c2d12', '#f59e0b'], // terra → âmbar
   ['#0f766e', '#2dd4bf'], // petróleo → turquesa
 ];
+// foto de perfil: sincronizada nos profiles + cache local p/ a tela de entrada
+function cachedFoto(email) {
+  try { return localStorage.getItem('lagos_foto_' + String(email || '').toLowerCase()) || ''; } catch (e) { return ''; }
+}
+function myPhoto() {
+  return (me && S.profiles[me.uid]?.foto) || (me && cachedFoto(me.email)) || '';
+}
+function fileToSquareDataURL(file, size) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.width, img.height);
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      resolve(c.toDataURL('image/jpeg', 0.82));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function handleFotoInput(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  try {
+    const url = await fileToSquareDataURL(file, 192);
+    await dataSet('profiles', me.uid, { ...(S.profiles[me.uid] || {}), nome: me.nome, email: me.email, foto: url });
+    if (DEMO) S.profiles[me.uid] = { ...(S.profiles[me.uid] || {}), nome: me.nome, foto: url };
+    try { localStorage.setItem('lagos_foto_' + String(me.email || '').toLowerCase(), url); } catch (e) {}
+    renderAll();
+    toast('Foto de perfil atualizada ✓');
+  } catch (e) {
+    console.error(e);
+    toast('Não foi possível usar essa imagem.');
+  }
+  input.value = '';
+}
+function removeProfilePhoto() {
+  confirmDialog('Remover foto', 'Voltar a mostrar suas iniciais?', async () => {
+    await dataSet('profiles', me.uid, { ...(S.profiles[me.uid] || {}), nome: me.nome, email: me.email, foto: '' });
+    try { localStorage.removeItem('lagos_foto_' + String(me.email || '').toLowerCase()); } catch (e) {}
+    renderAll();
+    toast('Foto removida');
+  });
+}
+
 function socioSigla(s) {
   if (s.sigla) return s.sigla;
   const partes = String(s.nome || '?').trim().split(/\s+/);
@@ -331,7 +382,7 @@ function socioAvatarHTML(s, i, small) {
 }
 
 function profilesList() {
-  if (SOCIOS.length) return SOCIOS;
+  if (SOCIOS.length) return SOCIOS.map(s => ({ ...s, foto: cachedFoto(s.email) || s.foto }));
   return DEMO ? [{ nome: 'Sócio 1' }, { nome: 'Sócio 2' }, { nome: 'Sócio 3' }] : [];
 }
 
@@ -350,6 +401,7 @@ function pickProfile(i) {
   if (!s) return;
   if (DEMO) {
     localStorage.setItem('lagos_demo_nome', s.nome);
+    if (s.email) localStorage.setItem('lagos_demo_email', s.email);
     enterDemo();
     return;
   }
@@ -406,7 +458,11 @@ function forgotPassword() {
 
 function enterDemo(silent) {
   localStorage.setItem('lagos_demo_active', '1');
-  me = { uid: 'demo', email: 'demo@lagos.app', nome: localStorage.getItem('lagos_demo_nome') || 'Você' };
+  me = {
+    uid: 'demo',
+    email: localStorage.getItem('lagos_demo_email') || 'demo@lagos.app',
+    nome: localStorage.getItem('lagos_demo_nome') || 'Você',
+  };
   if (!demoLoad()) seedDemo();
   showApp();
   if (!silent) toast('Modo demonstração — dados salvos só neste aparelho');
@@ -495,8 +551,14 @@ function renderInicio() {
   const nome = (me.nome || '').split(' ')[0];
   $('inicio-greeting').textContent = sauda + (nome ? ', ' + nome : '') + ' 👋';
   $('inicio-date').textContent = capFirst(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }));
-  $('avatar-initial').textContent = (me.nome || me.email || '?')[0].toUpperCase();
-  $('btn-avatar').style.background = authorColor(me.nome || me.email);
+  const minhaFoto = myPhoto();
+  if (minhaFoto) {
+    $('avatar-initial').textContent = '';
+    $('btn-avatar').style.background = `center/cover no-repeat url("${minhaFoto}")`;
+  } else {
+    $('avatar-initial').textContent = (me.nome || me.email || '?')[0].toUpperCase();
+    $('btn-avatar').style.background = authorColor(me.nome || me.email);
+  }
 
   const txs = txDoMes(0);
   const inc = txs.filter(t => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0);
@@ -626,7 +688,7 @@ function txItemHTML(t) {
   if (vnome) partes.push(esc(vnome));
   if (t.cat === 'combustivel' && t.litros) partes.push(t.litros.toLocaleString('pt-BR') + ' L');
   if (t.desc) partes.push(esc(t.desc));
-  const meta = `${authorChip(t.autorNome)}${partes.length ? ' · ' + partes.join(' · ') : ''}`;
+  const meta = `${authorChip(t.autorNome, t.autorUid)}${partes.length ? ' · ' + partes.join(' · ') : ''}`;
   return `
     <button class="tx-item" onclick="openTxDetail('${t.id}')">
       <div class="tx-ico">${c.ico}</div>
@@ -1082,6 +1144,9 @@ function renderMais() {
   }
   $('ajuste-nome-atual').textContent = me.nome || '—';
   $('ajuste-email-atual').textContent = me.email || '';
+  const temFoto = !!myPhoto();
+  $('ajuste-foto-atual').textContent = temFoto ? 'Toque para trocar a foto' : 'Sem foto — mostrando suas iniciais';
+  $('btn-remover-foto').style.display = temFoto ? '' : 'none';
   $('theme-label').textContent = document.documentElement.dataset.theme === 'dark' ? 'Escuro' : 'Claro';
 }
 
@@ -1245,7 +1310,10 @@ function seedDemo() {
 document.addEventListener('input', e => {
   if (e.target.id === 'tx-litros' || e.target.id === 'tx-valor') updateFuelHint();
 });
-document.addEventListener('change', e => { if (e.target.id === 'tx-veiculo') updateFuelHint(); });
+document.addEventListener('change', e => {
+  if (e.target.id === 'tx-veiculo') updateFuelHint();
+  if (e.target.id === 'foto-input') handleFotoInput(e.target);
+});
 
 // Enter no login envia o formulário
 document.addEventListener('keydown', e => {
