@@ -247,6 +247,12 @@ function initApp() {
   }
   if (SOCIOS.length) renderProfilePicker();
   else $('login-form').style.display = '';
+  if (typeof firebase === 'undefined') {
+    const nota = $('lp-demo-note');
+    nota.textContent = '⚠️ Sem conexão com o servidor. Verifique a internet e recarregue a página.';
+    nota.style.display = '';
+    return;
+  }
   firebase.initializeApp(firebaseConfig);
   auth = firebase.auth();
   db = firebase.firestore();
@@ -422,6 +428,11 @@ function backToProfiles() {
 
 function profileLogin() {
   if (!selectedSocio) return;
+  if (!auth) {
+    $('lp-err').textContent = 'Sem conexão com o servidor. Recarregue a página e tente de novo.';
+    $('lp-err').style.display = '';
+    return;
+  }
   const pass = $('lp-pass').value;
   if (!pass) { $('lp-err').textContent = 'Digite sua senha.'; $('lp-err').style.display = ''; return; }
   $('lp-err').style.display = 'none';
