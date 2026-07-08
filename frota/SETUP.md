@@ -12,7 +12,7 @@ passos abaixo (uns 15 minutos, tudo gratuito no plano Spark do Firebase).
 ## 1. Criar o projeto no Firebase
 
 1. Acesse https://console.firebase.google.com e faça login com sua conta Google.
-2. **Adicionar projeto** → nome: `lagos-transportadora` → pode desativar o Google Analytics → **Criar**.
+2. **Adicionar projeto** → nome: `lagos-operacional` → pode desativar o Google Analytics → **Criar**.
 
 ## 2. Registrar o app web
 
@@ -36,9 +36,9 @@ cai na caixa de entrada de `empresa@gmail.com`.
 1. Ainda em **Authentication**, aba **Usuários** → **Adicionar usuário**.
 2. Crie um usuário para cada sócio usando o e-mail da empresa com o apelido,
    cada um com sua própria senha inicial:
-   - `lagostransportes+joao@gmail.com`
-   - `lagostransportes+pedro@gmail.com`
-   - `lagostransportes+carlos@gmail.com`
+   - `lagosoperacional+luispaulo@gmail.com` (Luís Paulo)
+   - `lagosoperacional+ygor@gmail.com` (Ygor)
+   - `lagosoperacional+thadeu@gmail.com` (Thadeu)
 3. **Importante:** o app não tem tela de cadastro de propósito — só entra quem
    você criar aqui. O "Esqueci minha senha" manda o link para a caixa da empresa.
 
@@ -49,11 +49,13 @@ login de cada sócio (mesmos e-mails do passo 4):
 
 ```js
 const SOCIOS = [
-  { nome: 'João',   email: 'lagostransportes+joao@gmail.com',   foto: '' },
-  { nome: 'Pedro',  email: 'lagostransportes+pedro@gmail.com',  foto: '' },
-  { nome: 'Carlos', email: 'lagostransportes+carlos@gmail.com', foto: '' },
+  { nome: 'Luís Paulo', email: 'lagosoperacional+luispaulo@gmail.com', foto: '' },
+  { nome: 'Ygor',       email: 'lagosoperacional+ygor@gmail.com',      foto: '' },
+  { nome: 'Thadeu',     email: 'lagosoperacional+thadeu@gmail.com',    foto: '' },
 ];
 ```
+
+> ✅ Esta lista **já está preenchida** no `app.js` publicado — não precisa mexer.
 
 Com isso a tela de login vira um seletor de perfis: a pessoa toca no seu nome
 e digita só a senha (uma vez por aparelho). `foto` é opcional — sem foto,
@@ -75,9 +77,9 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function isSocio() {
       return request.auth != null && request.auth.token.email in [
-        'socio1@exemplo.com',
-        'socio2@exemplo.com',
-        'socio3@exemplo.com'
+        'lagosoperacional+luispaulo@gmail.com',
+        'lagosoperacional+ygor@gmail.com',
+        'lagosoperacional+thadeu@gmail.com'
       ];
     }
     match /{document=**} {

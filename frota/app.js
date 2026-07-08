@@ -22,9 +22,9 @@ const LS_KEY = 'lagos_demo_v1';
 //   empresa+joao@gmail.com / empresa+pedro@gmail.com — tudo cai na mesma caixa.
 // "foto" é opcional (link ou arquivo); sem foto aparece a inicial colorida.
 const SOCIOS = [
-  // { nome: 'João',   email: 'empresa+joao@gmail.com',   foto: '' },
-  // { nome: 'Pedro',  email: 'empresa+pedro@gmail.com',  foto: '' },
-  // { nome: 'Carlos', email: 'empresa+carlos@gmail.com', foto: '' },
+  { nome: 'Luís Paulo', email: 'lagosoperacional+luispaulo@gmail.com', foto: '' },
+  { nome: 'Ygor',       email: 'lagosoperacional+ygor@gmail.com',      foto: '' },
+  { nome: 'Thadeu',     email: 'lagosoperacional+thadeu@gmail.com',    foto: '' },
 ];
 
 let auth = null, db = null;
@@ -318,7 +318,8 @@ function socioAvatarHTML(s, small) {
 }
 
 function profilesList() {
-  return DEMO ? [{ nome: 'Sócio 1' }, { nome: 'Sócio 2' }, { nome: 'Sócio 3' }] : SOCIOS;
+  if (SOCIOS.length) return SOCIOS;
+  return DEMO ? [{ nome: 'Sócio 1' }, { nome: 'Sócio 2' }, { nome: 'Sócio 3' }] : [];
 }
 
 function renderProfilePicker() {
