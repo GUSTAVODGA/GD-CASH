@@ -31,7 +31,8 @@ let auth = null, db = null;
 let me = null; // { uid, email, nome }
 
 // Estado compartilhado (espelho do Firestore ou do localStorage no demo)
-let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {} };
+// (anexos ficam fora dos listeners: são carregados sob demanda, por item)
+let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [] };
 let unsubs = [];
 
 // Estado de UI
@@ -375,6 +376,132 @@ function removeProfilePhoto() {
   });
 }
 
+// ── arquivos: redimensionar imagem / ler cru ──
+function fileToJpegDataURL(file, maxSide) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const sc = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.width * sc));
+      c.height = Math.max(1, Math.round(img.height * sc));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', 0.78));
+      URL.revokeObjectURL(img.src);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+function fileToRawDataURL(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+function dataURLtoBlob(dataUrl) {
+  const [head, b64] = dataUrl.split(',');
+  const mime = head.match(/data:(.*?);/)[1];
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+// ══════════════════════════════════════════
+// ANEXOS (fotos e PDFs de veículos, motoristas e lançamentos)
+// Guardados no banco como dados compactados; carregados sob demanda.
+// ══════════════════════════════════════════
+let anexoCtx = null;        // { tipo, parentId, elId } de onde veio o pedido de anexar
+let _anexosVistos = {};     // cache do último carregamento (para o visualizador)
+
+async function anexosDe(parentId) {
+  if (DEMO) return (S.anexos || []).filter(a => a.parentId === parentId);
+  const snap = await db.collection('anexos').where('parentId', '==', parentId).get();
+  return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+}
+async function addAnexoRecord(tipo, parentId, obj) {
+  const id = newId();
+  const rec = { parentTipo: tipo, parentId, ...obj, ts: Date.now(), autorNome: me.nome || me.email };
+  if (DEMO) { S.anexos = S.anexos || []; S.anexos.push({ ...rec, id }); demoSave(); }
+  else await db.collection('anexos').doc(id).set(rec);
+  return id;
+}
+async function deleteAnexoRecord(id) {
+  if (DEMO) { S.anexos = (S.anexos || []).filter(a => a.id !== id); demoSave(); }
+  else await db.collection('anexos').doc(id).delete();
+}
+
+async function renderAnexosInto(elId, parentId, tipo) {
+  const el = $(elId);
+  if (!el) return;
+  el.innerHTML = '<div class="empty-mini">Carregando anexos…</div>';
+  let list = [];
+  try { list = await anexosDe(parentId); }
+  catch (e) { el.innerHTML = '<div class="empty-mini">Não deu para carregar os anexos.</div>'; return; }
+  list.forEach(a => { _anexosVistos[a.id] = a; });
+  el.innerHTML = list.map(a => `
+    <div class="anexo-chip">
+      <span>${a.mime === 'application/pdf' ? '📄' : '🖼️'}</span>
+      <button class="an-nome" onclick="openAnexoViewer('${a.id}')">${esc(a.nome)}</button>
+      <button class="x" onclick="removeAnexo('${a.id}','${elId}','${parentId}','${tipo}')">✕</button>
+    </div>`).join('') +
+    `<button class="btn btn-small" onclick="pickAnexo('${tipo}','${parentId}','${elId}')">📎 Anexar foto ou PDF</button>`;
+}
+function pickAnexo(tipo, parentId, elId) {
+  anexoCtx = { tipo, parentId, elId };
+  $('anexo-input').click();
+}
+async function handleAnexoInput(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file || !anexoCtx) return;
+  toast('Preparando anexo…');
+  try {
+    let data, mime;
+    if (file.type === 'application/pdf') {
+      data = await fileToRawDataURL(file);
+      mime = 'application/pdf';
+      if (data.length > 950000) { toast('PDF muito grande (máx. ~700 KB). Tire uma foto do documento.'); return; }
+    } else {
+      data = await fileToJpegDataURL(file, 1200);
+      mime = 'image/jpeg';
+    }
+    await addAnexoRecord(anexoCtx.tipo, anexoCtx.parentId, { nome: file.name || 'anexo', mime, data });
+    toast('Anexo salvo 📎');
+    renderAnexosInto(anexoCtx.elId, anexoCtx.parentId, anexoCtx.tipo);
+  } catch (e) {
+    console.error(e);
+    toast('Não foi possível anexar esse arquivo.');
+  }
+}
+function removeAnexo(id, elId, parentId, tipo) {
+  confirmDialog('Excluir anexo', 'Excluir este arquivo?', async () => {
+    try { await deleteAnexoRecord(id); toast('Anexo excluído'); } catch (e) { toast('Erro ao excluir.'); }
+    renderAnexosInto(elId, parentId, tipo);
+  });
+}
+function openAnexoViewer(id) {
+  const a = _anexosVistos[id];
+  if (!a) return;
+  if (a.mime === 'application/pdf') {
+    window.open(URL.createObjectURL(dataURLtoBlob(a.data)));
+    return;
+  }
+  $('anexo-title').textContent = a.nome;
+  $('anexo-img').src = a.data;
+  openOverlay('modal-anexo');
+}
+
 function socioSigla(s) {
   if (s.sigla) return s.sigla;
   const partes = String(s.nome || '?').trim().split(/\s+/);
@@ -581,6 +708,14 @@ function renderInicio() {
   $('hero-exp').textContent = R(exp);
   $('hero-inicio').className = 'hero-card' + (liq < 0 ? ' neg' : '');
 
+  // tiles de indicadores da empresa
+  const vansAtivas = S.vehicles.filter(v => v.status !== 'inativo').length;
+  const alertas = computeAlerts().length;
+  $('dash-tiles').innerHTML = `
+    <div class="tile"><b>${vansAtivas}</b><small>Veículos ativos</small></div>
+    <div class="tile"><b>${S.drivers.length}</b><small>Motoristas</small></div>
+    <div class="tile${alertas ? ' warn' : ''}"><b>${alertas}</b><small>Vencimentos</small></div>`;
+
   renderAlerts();
   renderCatBreakdown(txs);
   renderVehBreakdown(txs);
@@ -749,7 +884,11 @@ function renderLanc() {
 }
 
 // ── Formulário de lançamento ──
+let pendingAnexo = null; // nota importada aguardando o salvamento do lançamento
+
 function openTxForm(tx) {
+  pendingAnexo = null;
+  $('tx-anexo-chip').style.display = 'none';
   editingTxId = tx ? tx.id : null;
   $('tx-form-title').textContent = tx ? 'Editar lançamento' : 'Novo lançamento';
   $('tx-save-btn').textContent = tx ? 'Salvar alterações' : 'Salvar';
@@ -843,6 +982,11 @@ async function saveTx() {
   closeOverlay('modal-tx');
   try {
     await dataSet('tx', id, t);
+    // nota importada fica anexada ao lançamento
+    if (pendingAnexo) {
+      try { await addAnexoRecord('tx', id, pendingAnexo); } catch (e) { console.error(e); }
+      pendingAnexo = null;
+    }
     // abastecimento com km informado atualiza o odômetro do veículo
     if (t.km > 0 && veiculo) {
       const v = vehById(veiculo);
@@ -878,7 +1022,9 @@ function openTxDetail(id) {
   if (t.desc) rows.push(['Descrição', t.desc]);
   rows.push(['Lançado por', (t.autorNome || '—') + (t.ts ? ' · ' + fmtDataHora(t.ts) : '')]);
   $('tx-detail-body').innerHTML = '<div class="detail-rows">' +
-    rows.map(([k, v]) => `<div class="detail-row"><small>${k}</small><b>${esc(v)}</b></div>`).join('') + '</div>';
+    rows.map(([k, v]) => `<div class="detail-row"><small>${k}</small><b>${esc(v)}</b></div>`).join('') +
+    '</div><div class="anexos-list" id="tx-anexos"></div>';
+  renderAnexosInto('tx-anexos', id, 'tx');
   openOverlay('modal-tx-detail');
 }
 function editTxFromDetail() {
@@ -992,6 +1138,10 @@ function vehAlertChips(v) {
   return chips;
 }
 
+function motoristaDe(vid) {
+  return S.drivers.find(d => d.veiculoId === vid);
+}
+
 function renderFrota() {
   const el = $('veh-list');
   if (!S.vehicles.length) {
@@ -1001,7 +1151,19 @@ function renderFrota() {
   const mk = monthKey(0);
   const ordem = { ativo: 0, manutencao: 1, inativo: 2 };
   const stLabel = { ativo: '🟢 Ativo', manutencao: '🟡 Manutenção', inativo: '⚪ Inativo' };
-  el.innerHTML = [...S.vehicles]
+  const busca = ($('frota-busca')?.value || '').trim().toLowerCase();
+  let lista = [...S.vehicles];
+  if (busca) {
+    lista = lista.filter(v => {
+      const mot = motoristaDe(v.id);
+      return (v.nome || '').toLowerCase().includes(busca) ||
+             (v.placa || '').toLowerCase().includes(busca) ||
+             (v.modelo || '').toLowerCase().includes(busca) ||
+             (mot && mot.nome.toLowerCase().includes(busca));
+    });
+    if (!lista.length) { el.innerHTML = '<div class="empty-big"><span class="e-ico">🔍</span>Nada encontrado com essa busca.</div>'; return; }
+  }
+  el.innerHTML = lista
     .sort((a, b) => (ordem[a.status] ?? 0) - (ordem[b.status] ?? 0) || a.nome.localeCompare(b.nome))
     .map(v => {
       const gasto = S.tx.filter(t => t.veiculo === v.id && t.tipo === 'despesa' && (t.data || '').startsWith(mk))
@@ -1009,13 +1171,14 @@ function renderFrota() {
       const cons = consumoMedio(v.id);
       const rodou = kmRodadoMes(v.id);
       const chips = vehAlertChips(v);
+      const mot = motoristaDe(v.id);
       return `
         <button class="veh-card" onclick="openVehDetail('${v.id}')">
           <div class="veh-top">
-            <div class="veh-ico">🚐</div>
+            <div class="veh-ico">${v.foto ? `<img src="${v.foto}" alt="">` : '🚐'}</div>
             <div>
               <div class="veh-nome">${esc(v.nome)}</div>
-              <div class="veh-sub">${esc(v.placa || '')}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ano ? ' · ' + esc(v.ano) : ''}</div>
+              <div class="veh-sub">${esc(v.placa || '')}${v.modelo ? ' · ' + esc(v.modelo) : ''}${mot ? ' · 🧑‍✈️ ' + esc(mot.nome.split(' ')[0]) : ''}</div>
             </div>
             <span class="veh-status st-${v.status || 'ativo'}">${stLabel[v.status] || stLabel.ativo}</span>
           </div>
@@ -1043,6 +1206,7 @@ function openVehicleForm(v) {
   $('veh-licenc').value = v ? (v.licenciamento || '') : '';
   $('veh-seguro').value = v ? (v.seguro || '') : '';
   $('veh-status').value = v ? (v.status || 'ativo') : 'ativo';
+  $('veh-obs').value = v ? (v.observacoes || '') : '';
   $('veh-del-btn').style.display = v ? '' : 'none';
   openOverlay('modal-veh');
 }
@@ -1062,6 +1226,8 @@ async function saveVehicle() {
     licenciamento: $('veh-licenc').value || '',
     seguro: $('veh-seguro').value || '',
     status: $('veh-status').value,
+    observacoes: $('veh-obs').value.trim(),
+    foto: origV?.foto || '',
     criadoPorNome: origV?.criadoPorNome || me.nome || me.email,
     atualizadoPorNome: me.nome || me.email,
     atualizadoEm: Date.now(),
@@ -1097,9 +1263,11 @@ function openVehDetail(id) {
   const custoKm = rodou > 0 ? gastoMes / rodou : null;
   const proxOleo = (Number(v.oleoUltimaKm) || 0) + (Number(v.oleoIntervalo) || 0);
 
+  const mot = motoristaDe(id);
   const cells = [
     ['Placa', v.placa || '—'],
     ['Modelo', (v.modelo || '—') + (v.ano ? ' · ' + v.ano : '')],
+    ['Motorista atual', mot ? mot.nome : '—'],
     ['Km atual', v.km ? fmtKm(v.km) : '—'],
     ['Rodou no mês', rodou ? fmtKm(rodou) : '—'],
     ['Gasto no mês', R(gastoMes)],
@@ -1113,10 +1281,17 @@ function openVehDetail(id) {
     .sort((a, b) => b.data.localeCompare(a.data) || b.km - a.km).slice(0, 5);
   $('veh-detail-body').innerHTML = `
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    ${v.observacoes ? `<div class="vd-obs">📝 ${esc(v.observacoes)}</div>` : ''}
     <div class="fld-row">
       <button class="btn btn-secondary" onclick="openKmForm('${id}')">📍 Registrar km</button>
       <button class="btn btn-secondary" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar</button>
     </div>
+    <div class="fld-row" style="margin-top:8px">
+      <button class="btn btn-secondary" onclick="pickVehFoto('${id}')">📷 ${v.foto ? 'Trocar foto' : 'Foto da van'}</button>
+      <button class="btn btn-secondary" onclick="verHistoricoCompleto('${id}')">📜 Histórico completo</button>
+    </div>
+    <h2 class="sec-title">Documentos e fotos (CRLV, seguro…)</h2>
+    <div class="anexos-list" id="veh-anexos"></div>
     ${kmLogs.length ? '<h2 class="sec-title">Leituras de km registradas</h2><div class="card">' + kmLogs.map(l => `
       <div class="row-btn">
         <span class="row-ico">📍</span>
@@ -1126,7 +1301,38 @@ function openVehDetail(id) {
     <h2 class="sec-title">Últimos lançamentos deste veículo</h2>
     ${txsV.length ? txsV.slice(0, 6).map(txItemHTML).join('') : '<div class="empty-mini">Nenhum lançamento ainda.</div>'}
   `;
+  renderAnexosInto('veh-anexos', id, 'vehicle');
   openOverlay('modal-veh-detail');
+}
+
+// histórico completo = aba Lançamentos já filtrada neste veículo
+function verHistoricoCompleto(vid) {
+  closeOverlay('modal-veh-detail');
+  monthOffset = 0;
+  lancFilter = 'todos';
+  goTab('lanc');
+  document.querySelectorAll('#lanc-type-chips .chip').forEach(c => c.classList.toggle('chip-on', c.dataset.f === 'todos'));
+  $('lanc-veh-filter').value = vid;
+  renderLanc();
+}
+
+// foto do veículo (aparece no card da frota)
+let vehFotoId = null;
+function pickVehFoto(vid) {
+  vehFotoId = vid;
+  $('veh-foto-input').click();
+}
+async function handleVehFotoInput(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  const v = vehById(vehFotoId);
+  if (!file || !v) return;
+  try {
+    const foto = await fileToSquareDataURL(file, 160);
+    await dataSet('vehicles', v.id, { ...stripId(v), foto });
+    toast('Foto da van salva 📷');
+    closeOverlay('modal-veh-detail');
+  } catch (e) { toast('Não foi possível usar essa imagem.'); }
 }
 
 // ══════════════════════════════════════════
@@ -1145,10 +1351,11 @@ function renderMais() {
         if (dias === null) badge = '';
         else if (dias < 0) badge = '<span class="row-badge rb-crit">CNH vencida</span>';
         else if (dias <= 30) badge = `<span class="row-badge rb-warn">CNH ${dias}d</span>`;
+        const van = S.vehicles.find(v => v.id === d.veiculoId);
         return `
           <button class="row-btn" onclick='openDriverForm(${JSON.stringify(d.id)})'>
             <span class="row-ico">🧑‍✈️</span>
-            <span class="row-txt"><b>${esc(d.nome)}</b><small>CNH ${esc(d.cnhCategoria || '—')} · válida até ${fmtData(d.cnhValidade)}${d.telefone ? ' · ' + esc(d.telefone) : ''}</small></span>
+            <span class="row-txt"><b>${esc(d.nome)}</b><small>${van ? '🚐 ' + esc(van.nome) + ' · ' : ''}CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}${d.telefone ? ' · ' + esc(d.telefone) : ''}</small></span>
             ${badge}
           </button>`;
       }).join('') + '</div>';
@@ -1169,6 +1376,15 @@ function openDriverForm(idOrNull) {
   $('drv-tel').value = d ? (d.telefone || '') : '';
   $('drv-cnh-cat').value = d ? (d.cnhCategoria || 'D') : 'D';
   $('drv-cnh-val').value = d ? (d.cnhValidade || '') : '';
+  $('drv-obs').value = d ? (d.observacoes || '') : '';
+  // vínculo com veículo
+  $('drv-veiculo').innerHTML = '<option value="">— Nenhum —</option>' +
+    S.vehicles.filter(v => v.status !== 'inativo' || (d && d.veiculoId === v.id))
+      .map(v => `<option value="${v.id}">${esc(v.nome)}${v.placa ? ' · ' + esc(v.placa) : ''}</option>`).join('');
+  $('drv-veiculo').value = d ? (d.veiculoId || '') : '';
+  // documentos só depois que o motorista existe
+  $('drv-anexos-sec').style.display = d ? '' : 'none';
+  if (d) renderAnexosInto('drv-anexos-list', d.id, 'driver');
   $('drv-del-btn').style.display = d ? '' : 'none';
   openOverlay('modal-driver');
 }
@@ -1182,6 +1398,8 @@ async function saveDriver() {
     telefone: $('drv-tel').value.trim(),
     cnhCategoria: $('drv-cnh-cat').value,
     cnhValidade: $('drv-cnh-val').value || '',
+    veiculoId: $('drv-veiculo').value || '',
+    observacoes: $('drv-obs').value.trim(),
     criadoPorNome: origD?.criadoPorNome || me.nome || me.email,
     atualizadoPorNome: me.nome || me.email,
     atualizadoEm: Date.now(),
@@ -1202,6 +1420,242 @@ function deleteDriverFromForm() {
     try { await dataDelete('drivers', id); toast('Motorista excluído'); }
     catch (e) { toast('Erro ao excluir.'); }
   });
+}
+
+// ══════════════════════════════════════════
+// RESUMO DO MÊS EM IMAGEM (formato stories 1080×1920)
+// ══════════════════════════════════════════
+function loadImg(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+
+async function buildResumoCanvas() {
+  const W = 1080, H = 1920;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+
+  // fundo azul-marinho com brilho verde
+  const bg = x.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#101f3d'); bg.addColorStop(1, '#0b1220');
+  x.fillStyle = bg; x.fillRect(0, 0, W, H);
+  const glow = x.createRadialGradient(W / 2, 0, 0, W / 2, 0, 900);
+  glow.addColorStop(0, 'rgba(63,174,76,0.14)'); glow.addColorStop(1, 'rgba(63,174,76,0)');
+  x.fillStyle = glow; x.fillRect(0, 0, W, H);
+
+  // logo + marca
+  try { x.drawImage(await loadImg('icon-192.png'), 80, 90, 120, 120); } catch (e) {}
+  x.fillStyle = '#f4f7fb'; x.font = 'italic 800 68px system-ui,sans-serif';
+  x.textAlign = 'left'; x.fillText('LAGOS', 228, 168);
+  x.fillStyle = 'rgba(244,247,251,0.5)'; x.font = '500 30px system-ui,sans-serif';
+  x.fillText('Serviços de Transporte', 230, 210);
+
+  // mês
+  const mLabel = monthLabel(0);
+  x.fillStyle = 'rgba(244,247,251,0.45)'; x.font = '600 34px system-ui,sans-serif';
+  x.fillText(mLabel.toUpperCase(), 80, 330);
+
+  const txs = txDoMes(0);
+  const inc = txs.filter(t => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0);
+  const exp = txs.filter(t => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0);
+  const liq = inc - exp;
+
+  // resultado
+  x.fillStyle = liq >= 0 ? '#4ade80' : '#f87171';
+  x.font = 'bold 110px system-ui,sans-serif';
+  x.fillText(R(liq), 80, 460);
+  x.fillStyle = 'rgba(244,247,251,0.45)'; x.font = '500 32px system-ui,sans-serif';
+  x.fillText('Resultado do mês', 80, 512);
+
+  // receitas / despesas
+  x.fillStyle = '#4ade80'; x.font = 'bold 54px system-ui,sans-serif';
+  x.fillText('▲ ' + R(inc), 80, 620);
+  x.fillStyle = 'rgba(244,247,251,0.4)'; x.font = '500 28px system-ui,sans-serif';
+  x.fillText('Receitas', 80, 662);
+  x.fillStyle = '#f87171'; x.font = 'bold 54px system-ui,sans-serif';
+  x.fillText('▼ ' + R(exp), 560, 620);
+  x.fillStyle = 'rgba(244,247,251,0.4)'; x.font = '500 28px system-ui,sans-serif';
+  x.fillText('Despesas', 560, 662);
+
+  x.fillStyle = 'rgba(255,255,255,0.08)'; x.fillRect(80, 715, W - 160, 2);
+
+  // gráfico: despesas por categoria (top 5)
+  const porCat = {};
+  txs.filter(t => t.tipo === 'despesa').forEach(t => { porCat[t.cat] = (porCat[t.cat] || 0) + t.valor; });
+  const cats = Object.entries(porCat).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  let y = 790;
+  x.fillStyle = 'rgba(244,247,251,0.45)'; x.font = '600 32px system-ui,sans-serif';
+  x.fillText('DESPESAS POR CATEGORIA', 80, y);
+  y += 60;
+  const maxCat = cats.length ? cats[0][1] : 1;
+  cats.forEach(([cat, val]) => {
+    const info = catInfo(cat);
+    x.fillStyle = '#f4f7fb'; x.font = '600 34px system-ui,sans-serif';
+    x.fillText(`${info.ico} ${info.nome}`, 80, y);
+    x.textAlign = 'right'; x.fillText(R(val), W - 80, y);
+    x.textAlign = 'left';
+    const bw = Math.max(14, (W - 160) * (val / maxCat));
+    x.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(x, 80, y + 18, W - 160, 20, 10); x.fill();
+    const bar = x.createLinearGradient(80, 0, 80 + bw, 0);
+    bar.addColorStop(0, '#2e8b3d'); bar.addColorStop(1, '#4ade80');
+    x.fillStyle = bar;
+    roundRect(x, 80, y + 18, bw, 20, 10); x.fill();
+    y += 108;
+  });
+  if (!cats.length) { x.fillStyle = 'rgba(244,247,251,0.4)'; x.font = '500 32px system-ui,sans-serif'; x.fillText('Nenhuma despesa lançada.', 80, y); y += 80; }
+
+  // custo por veículo (top 3)
+  const porVeh = {};
+  txs.filter(t => t.tipo === 'despesa' && t.veiculo).forEach(t => { porVeh[t.veiculo] = (porVeh[t.veiculo] || 0) + t.valor; });
+  const vehs = Object.entries(porVeh).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  if (vehs.length) {
+    y += 30;
+    x.fillStyle = 'rgba(255,255,255,0.08)'; x.fillRect(80, y - 60, W - 160, 2);
+    x.fillStyle = 'rgba(244,247,251,0.45)'; x.font = '600 32px system-ui,sans-serif';
+    x.fillText('CUSTO POR VEÍCULO', 80, y);
+    y += 62;
+    vehs.forEach(([vid, val]) => {
+      const rodou = vehById(vid) ? kmRodadoMes(vid) : 0;
+      x.fillStyle = '#f4f7fb'; x.font = '600 36px system-ui,sans-serif';
+      x.fillText('🚐 ' + vehNome(vid), 80, y);
+      x.textAlign = 'right';
+      x.fillText(R(val) + (rodou ? '  ·  ' + fmtKm(rodou) : ''), W - 80, y);
+      x.textAlign = 'left';
+      y += 72;
+    });
+  }
+
+  // rodapé
+  x.fillStyle = 'rgba(244,247,251,0.22)'; x.font = '500 28px system-ui,sans-serif';
+  x.fillText('Lagos Serviços de Transporte 🚐', 80, H - 70);
+  return c;
+}
+function roundRect(x, px, py, pw, ph, pr) {
+  x.beginPath();
+  x.moveTo(px + pr, py);
+  x.arcTo(px + pw, py, px + pw, py + ph, pr);
+  x.arcTo(px + pw, py + ph, px, py + ph, pr);
+  x.arcTo(px, py + ph, px, py, pr);
+  x.arcTo(px, py, px + pw, py, pr);
+  x.closePath();
+}
+
+async function shareResumoMes() {
+  toast('Gerando imagem… 🖼️');
+  const c = await buildResumoCanvas();
+  c.toBlob(blob => {
+    const file = new File([blob], 'lagos-resumo.png', { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: 'Lagos — ' + monthLabel(0) }).catch(() => {});
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'lagos-resumo.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }, 'image/png');
+}
+
+// ══════════════════════════════════════════
+// IMPORTAR NOTA DE ABASTECIMENTO (PDF/foto + OCR)
+// A leitura roda no próprio aparelho; nada é enviado a terceiros.
+// ══════════════════════════════════════════
+async function ensureTesseract() {
+  if (window.Tesseract) return;
+  await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+}
+async function ensurePdfjs() {
+  if (window.pdfjsLib) return;
+  await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+}
+async function pdfPrimeiraPagina(file) {
+  await ensurePdfjs();
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  const page = await pdf.getPage(1);
+  const vp = page.getViewport({ scale: 2 });
+  const c = document.createElement('canvas');
+  c.width = vp.width; c.height = vp.height;
+  await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+  return c.toDataURL('image/jpeg', 0.85);
+}
+async function ocrTexto(dataUrl) {
+  await ensureTesseract();
+  const worker = await window.Tesseract.createWorker('por');
+  const { data } = await worker.recognize(dataUrl);
+  await worker.terminate();
+  return data.text || '';
+}
+
+// extrai valor, litros, data e placa do texto da nota
+function parseNota(txt) {
+  const t = txt.toUpperCase();
+  const out = {};
+  const pm = t.match(/[A-Z]{3}\s?-?\s?\d[A-Z0-9]\d{2}/);
+  if (pm) out.placa = pm[0].replace(/[\s-]/g, '');
+  const lm = t.match(/(\d{1,3}[.,]\d{1,3})\s*(?:L\b|LT\b|LTS\b|LITROS?)/);
+  if (lm) out.litros = parseValor(lm[1]);
+  const dm = t.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+  if (dm) out.data = `${dm[3]}-${dm[2]}-${dm[1]}`;
+  const vm = t.match(/(?:TOTAL|VALOR)[^0-9]{0,25}(\d{1,3}(?:\.\d{3})*,\d{2})/);
+  if (vm) out.valor = parseValor(vm[1]);
+  else {
+    const todos = [...t.matchAll(/(\d{1,3}(?:\.\d{3})*,\d{2})/g)].map(m => parseValor(m[1])).filter(v => v > 5);
+    if (todos.length) out.valor = Math.max(...todos);
+  }
+  return out;
+}
+
+async function importNota(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  toast('Lendo a nota… pode levar alguns segundos ⏳');
+  let imagem = null, texto = '', anexo = null;
+  try {
+    if (file.type === 'application/pdf') {
+      imagem = await pdfPrimeiraPagina(file);
+      const raw = await fileToRawDataURL(file);
+      anexo = raw.length <= 950000
+        ? { nome: file.name || 'nota.pdf', mime: 'application/pdf', data: raw }
+        : { nome: (file.name || 'nota') + '.jpg', mime: 'image/jpeg', data: imagem };
+    } else {
+      imagem = await fileToJpegDataURL(file, 1600);
+      anexo = { nome: file.name || 'nota.jpg', mime: 'image/jpeg', data: await fileToJpegDataURL(file, 1200) };
+    }
+  } catch (e) {
+    console.error(e);
+    toast('Não consegui abrir esse arquivo.');
+    return;
+  }
+  try {
+    texto = await Promise.race([
+      ocrTexto(imagem),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado')), 25000)),
+    ]);
+  } catch (e) { console.error('OCR indisponível', e); }
+  const info = texto ? parseNota(texto) : {};
+
+  // abre o lançamento já preenchido com o que foi lido
+  openTxForm();
+  setTxTipo('despesa');
+  pickCat('combustivel');
+  if (info.valor) $('tx-valor').value = info.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  if (info.litros) $('tx-litros').value = String(info.litros).replace('.', ',');
+  if (info.data) $('tx-data').value = info.data;
+  if (info.placa) {
+    const v = S.vehicles.find(x => (x.placa || '').replace(/-/g, '') === info.placa);
+    if (v) $('tx-veiculo').value = v.id;
+  }
+  updateFuelExtra();
+  updateFuelHint();
+  pendingAnexo = anexo;
+  $('tx-anexo-chip').style.display = '';
+  const leu = info.valor || info.litros || info.placa;
+  toast(leu ? 'Nota lida! Confere os valores e salva 👇' : 'Não consegui ler os valores — preencha e a nota fica anexada 📎');
 }
 
 // ══════════════════════════════════════════
@@ -1324,6 +1778,9 @@ document.addEventListener('input', e => {
 document.addEventListener('change', e => {
   if (e.target.id === 'tx-veiculo') updateFuelHint();
   if (e.target.id === 'foto-input') handleFotoInput(e.target);
+  if (e.target.id === 'anexo-input') handleAnexoInput(e.target);
+  if (e.target.id === 'veh-foto-input') handleVehFotoInput(e.target);
+  if (e.target.id === 'nota-input') importNota(e.target);
 });
 
 // Enter no login envia o formulário

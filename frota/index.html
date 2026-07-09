@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=15">
+<link rel="stylesheet" href="style.css?v=16">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -83,6 +83,7 @@
     </header>
 
     <div class="hero-card" id="hero-inicio">
+      <button class="hero-share" onclick="shareResumoMes()" title="Compartilhar resumo do mês">📤</button>
       <div class="hero-label">Resultado de <span id="hero-month"></span></div>
       <div class="hero-value" id="hero-liq">R$ 0,00</div>
       <div class="hero-row">
@@ -90,6 +91,8 @@
         <div class="hero-mini neg"><span class="hero-mini-lbl">▼ Despesas</span><span id="hero-exp">R$ 0,00</span></div>
       </div>
     </div>
+
+    <div class="dash-tiles" id="dash-tiles"></div>
 
     <div id="alert-section" style="display:none">
       <h2 class="sec-title">⚠️ Atenção</h2>
@@ -147,6 +150,7 @@
       <h1 class="page-title">Frota</h1>
       <button class="btn btn-small" onclick="openVehicleForm()">+ Veículo</button>
     </header>
+    <input class="veh-filter" id="frota-busca" placeholder="🔍 Buscar por apelido, placa ou motorista" oninput="renderFrota()" autocomplete="off">
     <div id="veh-list"></div>
   </section>
 
@@ -162,12 +166,21 @@
     </div>
     <div id="driver-list"></div>
 
-    <h2 class="sec-title">Relatórios</h2>
+    <h2 class="sec-title">Notas e relatórios</h2>
     <div class="card">
+      <button class="row-btn" onclick="document.getElementById('nota-input').click()">
+        <span class="row-ico">🧾</span>
+        <span class="row-txt"><b>Importar nota de abastecimento</b><small>PDF ou foto — leitura automática dos valores</small></span>
+      </button>
+      <button class="row-btn" onclick="shareResumoMes()">
+        <span class="row-ico">📤</span>
+        <span class="row-txt"><b>Compartilhar resumo do mês</b><small>Imagem pronta pra stories / WhatsApp</small></span>
+      </button>
       <button class="row-btn" onclick="exportCSV()">
         <span class="row-ico">📊</span>
         <span class="row-txt"><b>Exportar lançamentos (CSV)</b><small>Abre no Excel / Google Planilhas</small></span>
       </button>
+      <input type="file" id="nota-input" accept="image/*,application/pdf" style="display:none">
     </div>
 
     <h2 class="sec-title">Ajustes</h2>
@@ -195,7 +208,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.2 🚐</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.3 🚐</p>
   </section>
 
   <!-- ── NAV INFERIOR ── -->
@@ -231,6 +244,7 @@
       <div class="fuel-hint" id="tx-fuel-hint"></div>
     </div>
     <label class="fld"><span>Descrição <small>(opcional)</small></span><input type="text" id="tx-desc" placeholder="Ex.: troca de óleo, repasse da prefeitura…"></label>
+    <div id="tx-anexo-chip" class="fuel-hint" style="display:none">📎 A nota ficará anexada a este lançamento</div>
     <button class="btn btn-primary btn-block" id="tx-save-btn" onclick="saveTx()">Salvar</button>
   </div>
 </div>
@@ -273,6 +287,7 @@
         <option value="inativo">⚪ Inativo</option>
       </select>
     </label>
+    <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="veh-obs" rows="2" placeholder="Anotações sobre o veículo…"></textarea></label>
     <button class="btn btn-primary btn-block" onclick="saveVehicle()">Salvar</button>
     <button class="btn btn-danger btn-block" id="veh-del-btn" style="display:none" onclick="deleteVehicleFromForm()">🗑 Excluir veículo</button>
   </div>
@@ -309,6 +324,12 @@
       </label>
       <label class="fld"><span>Validade CNH</span><input type="date" id="drv-cnh-val"></label>
     </div>
+    <label class="fld"><span>Veículo atual</span><select id="drv-veiculo"><option value="">— Nenhum —</option></select></label>
+    <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="drv-obs" rows="2" placeholder="Anotações sobre o motorista…"></textarea></label>
+    <div id="drv-anexos-sec" style="display:none">
+      <h2 class="sec-title" style="margin-top:4px">Documentos (CNH, exames…)</h2>
+      <div id="drv-anexos-list" class="anexos-list"></div>
+    </div>
     <button class="btn btn-primary btn-block" onclick="saveDriver()">Salvar</button>
     <button class="btn btn-danger btn-block" id="drv-del-btn" style="display:none" onclick="deleteDriverFromForm()">🗑 Excluir motorista</button>
   </div>
@@ -336,8 +357,18 @@
   </div>
 </div>
 
+<!-- Visualizador de anexo (imagem) -->
+<div class="overlay" id="modal-anexo">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="anexo-title">Anexo</h3><button class="x" onclick="closeOverlay('modal-anexo')">✕</button></div>
+    <img id="anexo-img" style="max-width:100%;border-radius:14px" alt="Anexo">
+  </div>
+</div>
+<input type="file" id="anexo-input" accept="image/*,application/pdf" style="display:none">
+<input type="file" id="veh-foto-input" accept="image/*" style="display:none">
+
 <div id="toast"></div>
 
-<script src="app.js?v=15"></script>
+<script src="app.js?v=16"></script>
 </body>
 </html>

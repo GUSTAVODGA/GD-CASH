@@ -164,6 +164,12 @@ small { color: var(--txt3); }
   color: #e8edf7;
 }
 .hero-card.neg { background: linear-gradient(140deg, #7f1d1d 0%, #16223a 85%); border-color: #8a3434; }
+.hero-card { position: relative; }
+.hero-share {
+  position: absolute; top: 14px; right: 14px;
+  width: 42px; height: 42px; border-radius: 12px; font-size: 1.15rem;
+  background: rgba(255,255,255,.12); color: #fff;
+}
 .hero-label { font-size: .82rem; color: rgba(232,237,247,.7); text-transform: uppercase; letter-spacing: .06em; }
 .hero-value { font-size: 2.2rem; font-weight: 800; letter-spacing: -.03em; margin: 6px 0 16px; }
 .hero-row { display: flex; gap: 10px; }
@@ -408,6 +414,49 @@ small { color: var(--txt3); }
   transition: opacity .25s, transform .25s; max-width: 85vw; text-align: center;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ═══════════ PAINEL / TILES ═══════════ */
+.dash-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.tile {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 10px 6px; text-align: center;
+}
+.tile b { display: block; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
+.tile small { font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; }
+.tile.warn b { color: var(--warn); }
+
+/* ═══════════ ANEXOS ═══════════ */
+.anexos-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.anexo-chip {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 9px 12px; font-size: .85rem;
+}
+.anexo-chip .an-nome {
+  flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 600; color: var(--txt); background: none; border: none; padding: 0;
+}
+.anexo-chip .x { width: 26px; height: 26px; font-size: .7rem; flex-shrink: 0; border-radius: 50%; background: var(--card); color: var(--txt2); }
+
+.fld textarea {
+  padding: 12px 14px; border-radius: 13px; resize: vertical; min-height: 52px;
+  background: var(--card2); border: 1px solid var(--border); color: var(--txt);
+  outline: none; width: 100%; font-family: inherit; font-size: 1rem;
+}
+.fld textarea:focus { border-color: var(--accent); }
+
+#frota-busca { margin-bottom: 14px; }
+.veh-ico { overflow: hidden; }
+.veh-ico img { width: 100%; height: 100%; object-fit: cover; }
+.vd-obs { background: var(--card2); border-radius: 12px; padding: 10px 12px; font-size: .88rem; color: var(--txt2); margin-bottom: 14px; white-space: pre-wrap; }
+
+/* ═══════════ TELAS MAIORES (tablet/desktop) ═══════════ */
+@media (min-width: 760px) {
+  #app { max-width: 700px; }
+  .cat-grid { grid-template-columns: repeat(8, 1fr); }
+  .dash-tiles { grid-template-columns: repeat(3, 1fr); }
+  .sheet { max-width: 620px; }
+}
 
 /* ═══════════ ANIMAÇÕES ═══════════ */
 @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
