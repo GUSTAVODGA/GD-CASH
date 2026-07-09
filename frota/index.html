@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=17">
+<link rel="stylesheet" href="style.css?v=18">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -92,12 +92,6 @@
         <div class="hero-mini pos"><span class="hero-mini-lbl">▲ Receitas</span><span id="hero-inc">R$ 0,00</span></div>
         <div class="hero-mini neg"><span class="hero-mini-lbl">▼ Despesas</span><span id="hero-exp">R$ 0,00</span></div>
       </div>
-    </div>
-
-    <div class="quick-row">
-      <button class="qa" onclick="openTxForm()"><span>➕</span>Lançar gasto<br>ou receita</button>
-      <button class="qa" onclick="document.getElementById('nota-input').click()"><span>🧾</span>Importar<br>nota</button>
-      <button class="qa" onclick="openKmForm()"><span>📍</span>Registrar<br>km</button>
     </div>
 
     <div class="dash-tiles" id="dash-tiles"></div>
@@ -215,7 +209,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.4 🚐</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.5 🚐</p>
   </section>
 
   <!-- ── NAV INFERIOR ── -->
@@ -227,7 +221,7 @@
     <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico">⚙️</span><span>Ajustes</span></button>
   </nav>
 
-  <button id="fab" onclick="openTxForm()">+</button>
+  <button id="fab" style="display:none" onclick="openTxForm()">+</button>
 </div>
 
 <!-- ═══════════ MODAIS ═══════════ -->
@@ -383,6 +377,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=17"></script>
+<script src="app.js?v=18"></script>
 </body>
 </html>

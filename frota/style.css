@@ -183,12 +183,16 @@ small { color: var(--txt3); }
 
 /* ═══════════ ALERTAS ═══════════ */
 .alert-item {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
   background: var(--card); border: 1px solid var(--border);
   border-left: 4px solid var(--warn);
   border-radius: 14px; padding: 12px 14px; margin-bottom: 8px;
-  font-size: .9rem; line-height: 1.4;
+  font-size: .9rem; line-height: 1.4; color: var(--txt);
+  transition: transform .1s ease;
 }
+button.alert-item:active { transform: scale(.985); }
+.cat-row-btn { width: 100%; text-align: left; background: none; border: none; color: var(--txt); }
+.cat-row-btn:active { opacity: .7; }
 .alert-item.crit { border-left-color: var(--neg); }
 .alert-item .a-ico { font-size: 1.2rem; }
 .alert-item small { display: block; }
@@ -430,8 +434,10 @@ small { color: var(--txt3); }
 .dash-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 .tile {
   background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-  padding: 10px 6px; text-align: center;
+  padding: 10px 6px; text-align: center; color: var(--txt);
+  transition: transform .1s ease;
 }
+button.tile:active { transform: scale(.96); }
 .tile b { display: block; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
 .tile small { font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; }
 .tile.warn b { color: var(--warn); }

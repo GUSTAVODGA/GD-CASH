@@ -681,7 +681,7 @@ function goTab(tab) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   $('page-' + tab).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('nav-on', b.dataset.tab === tab));
-  $('fab').style.display = (tab === 'inicio' || tab === 'lanc') ? '' : 'none';
+  $('fab').style.display = tab === 'lanc' ? '' : 'none';
   window.scrollTo({ top: 0 });
   renderAll();
 }
@@ -738,13 +738,13 @@ function renderInicio() {
   $('hero-exp').textContent = R(exp);
   $('hero-inicio').className = 'hero-card' + (liq < 0 ? ' neg' : '');
 
-  // tiles de indicadores da empresa
+  // tiles de indicadores — cada um leva pro seu contexto
   const vansAtivas = S.vehicles.filter(v => v.status !== 'inativo').length;
   const alertas = computeAlerts().length;
   $('dash-tiles').innerHTML = `
-    <div class="tile"><b>${vansAtivas}</b><small>Veículos ativos</small></div>
-    <div class="tile"><b>${S.drivers.length}</b><small>Motoristas</small></div>
-    <div class="tile${alertas ? ' warn' : ''}"><b>${alertas}</b><small>Vencimentos</small></div>`;
+    <button class="tile" onclick="goTab('frota')"><b>${vansAtivas}</b><small>Veículos ativos</small></button>
+    <button class="tile" onclick="goTab('motoristas')"><b>${S.drivers.length}</b><small>Motoristas</small></button>
+    <button class="tile${alertas ? ' warn' : ''}" onclick="irParaAlertas()"><b>${alertas}</b><small>Vencimentos</small></button>`;
 
   renderAlerts();
   renderCatBreakdown(txs);
@@ -759,34 +759,40 @@ function computeAlerts() {
     [['licenciamento', 'Licenciamento', '📄'], ['seguro', 'Seguro', '🛡️']].forEach(([campo, label, ico]) => {
       const dias = diasAte(v[campo]);
       if (dias === null) return;
-      if (dias < 0) alerts.push({ crit: true, ico, txt: `${label} da ${v.nome} VENCIDO`, sub: `venceu em ${fmtData(v[campo])}` });
-      else if (dias <= 30) alerts.push({ crit: dias <= 7, ico, txt: `${label} da ${v.nome} vence em ${dias} dia${dias === 1 ? '' : 's'}`, sub: fmtData(v[campo]) });
+      if (dias < 0) alerts.push({ crit: true, ico, txt: `${label} da ${v.nome} VENCIDO`, sub: `venceu em ${fmtData(v[campo])}`, veh: v.id });
+      else if (dias <= 30) alerts.push({ crit: dias <= 7, ico, txt: `${label} da ${v.nome} vence em ${dias} dia${dias === 1 ? '' : 's'}`, sub: fmtData(v[campo]), veh: v.id });
     });
     const intervalo = Number(v.oleoIntervalo) || 0;
     const ultima = Number(v.oleoUltimaKm) || 0;
     if (intervalo > 0 && ultima > 0 && v.km > 0) {
       const rodou = v.km - ultima;
-      if (rodou >= intervalo) alerts.push({ crit: true, ico: '🛢️', txt: `Troca de óleo da ${v.nome} atrasada`, sub: `rodou ${fmtKm(rodou)} desde a última troca (limite ${fmtKm(intervalo)})` });
-      else if (rodou >= intervalo - 1000) alerts.push({ crit: false, ico: '🛢️', txt: `Troca de óleo da ${v.nome} se aproximando`, sub: `faltam ${fmtKm(intervalo - rodou)}` });
+      if (rodou >= intervalo) alerts.push({ crit: true, ico: '🛢️', txt: `Troca de óleo da ${v.nome} atrasada`, sub: `rodou ${fmtKm(rodou)} desde a última troca (limite ${fmtKm(intervalo)})`, veh: v.id });
+      else if (rodou >= intervalo - 1000) alerts.push({ crit: false, ico: '🛢️', txt: `Troca de óleo da ${v.nome} se aproximando`, sub: `faltam ${fmtKm(intervalo - rodou)}`, veh: v.id });
     }
   });
   S.drivers.forEach(d => {
     const dias = diasAte(d.cnhValidade);
     if (dias === null) return;
-    if (dias < 0) alerts.push({ crit: true, ico: '🪪', txt: `CNH de ${d.nome} VENCIDA`, sub: `venceu em ${fmtData(d.cnhValidade)}` });
-    else if (dias <= 30) alerts.push({ crit: dias <= 7, ico: '🪪', txt: `CNH de ${d.nome} vence em ${dias} dia${dias === 1 ? '' : 's'}`, sub: fmtData(d.cnhValidade) });
+    if (dias < 0) alerts.push({ crit: true, ico: '🪪', txt: `CNH de ${d.nome} VENCIDA`, sub: `venceu em ${fmtData(d.cnhValidade)}`, drv: d.id });
+    else if (dias <= 30) alerts.push({ crit: dias <= 7, ico: '🪪', txt: `CNH de ${d.nome} vence em ${dias} dia${dias === 1 ? '' : 's'}`, sub: fmtData(d.cnhValidade), drv: d.id });
   });
   return alerts.sort((a, b) => (b.crit ? 1 : 0) - (a.crit ? 1 : 0));
 }
 
+// tocar num alerta abre a ficha de quem tem o problema
 function renderAlerts() {
   const alerts = computeAlerts();
   $('alert-section').style.display = alerts.length ? '' : 'none';
   $('alert-list').innerHTML = alerts.map(a => `
-    <div class="alert-item${a.crit ? ' crit' : ''}">
+    <button class="alert-item${a.crit ? ' crit' : ''}" onclick="${a.veh ? `openVehDetail('${a.veh}')` : a.drv ? `openDrvDetail('${a.drv}')` : ''}">
       <span class="a-ico">${a.ico}</span>
       <div><b>${esc(a.txt)}</b><small>${esc(a.sub)}</small></div>
-    </div>`).join('');
+    </button>`).join('');
+}
+
+function irParaAlertas() {
+  if (!computeAlerts().length) { toast('Nenhum vencimento próximo 🎉'); return; }
+  $('alert-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderCatBreakdown(txs) {
@@ -820,15 +826,16 @@ function renderVehBreakdown(txs) {
   const max = Math.max(...Object.values(porVeh));
   const rows = Object.entries(porVeh).sort((a, b) => b[1] - a[1]).map(([vid, val]) => {
     const pct = Math.round(val / max * 100);
-    const rodou = vehById(vid) ? kmRodadoMes(vid) : 0;
+    const existe = !!vehById(vid);
+    const rodou = existe ? kmRodadoMes(vid) : 0;
     return `
-      <div class="cat-row">
+      <${existe ? `button class="cat-row cat-row-btn" onclick="openVehDetail('${vid}')"` : 'div class="cat-row"'}>
         <div class="c-ico">🚐</div>
         <div class="c-body">
           <div class="c-top"><b>${esc(vehNome(vid))}</b><span class="c-val">${R(val)}${rodou ? ' <small>· ' + fmtKm(rodou) + '</small>' : ''}</span></div>
           <div class="c-bar"><div class="c-bar-fill" style="width:${pct}%"></div></div>
         </div>
-      </div>`;
+      </${existe ? 'button' : 'div'}>`;
   });
   el.innerHTML = rows.join('');
 }
@@ -1053,7 +1060,11 @@ function openTxDetail(id) {
   rows.push(['Lançado por', (t.autorNome || '—') + (t.ts ? ' · ' + fmtDataHora(t.ts) : '')]);
   $('tx-detail-body').innerHTML = '<div class="detail-rows">' +
     rows.map(([k, v]) => `<div class="detail-row"><small>${k}</small><b>${esc(v)}</b></div>`).join('') +
-    '</div><div class="anexos-list" id="tx-anexos"></div>';
+    '</div>' +
+    (t.veiculo && vehById(t.veiculo)
+      ? `<button class="btn btn-secondary btn-block" style="margin-bottom:12px" onclick="closeOverlay('modal-tx-detail');openVehDetail('${t.veiculo}')">🚐 Abrir ficha da ${esc(vehNome(t.veiculo))}</button>`
+      : '') +
+    '<div class="anexos-list" id="tx-anexos"></div>';
   renderAnexosInto('tx-anexos', id, 'tx');
   openOverlay('modal-tx-detail');
 }
@@ -1331,7 +1342,8 @@ function openVehDetail(id) {
   $('veh-detail-body').innerHTML = `
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
     ${v.observacoes ? `<div class="vd-obs">📝 ${esc(v.observacoes)}</div>` : ''}
-    <div class="fld-row">
+    <button class="btn btn-primary btn-block" onclick="lancarParaVan('${id}')">➕ Lançar despesa/receita desta van</button>
+    <div class="fld-row" style="margin-top:8px">
       <button class="btn btn-secondary" onclick="openKmForm('${id}')">📍 Registrar km</button>
       <button class="btn btn-secondary" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar</button>
     </div>
@@ -1355,6 +1367,14 @@ function openVehDetail(id) {
   renderAnexosInto('veh-anexos', id, 'vehicle');
   renderNotasVeiculo('veh-notas', id);
   openOverlay('modal-veh-detail');
+}
+
+// lançamento nascendo de dentro da ficha: van já selecionada
+function lancarParaVan(vid) {
+  closeOverlay('modal-veh-detail');
+  openTxForm();
+  $('tx-veiculo').value = vid;
+  updateFuelHint();
 }
 
 // histórico completo = aba Lançamentos já filtrada neste veículo
