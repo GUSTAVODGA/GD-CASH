@@ -318,8 +318,9 @@ small { color: var(--txt3); }
 }
 .nav-btn {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
-  font-size: .68rem; font-weight: 600; color: var(--txt3);
-  padding: 4px 12px; border-radius: 12px; flex: 1; max-width: 110px;
+  font-size: .6rem; font-weight: 600; color: var(--txt3);
+  padding: 4px 6px; border-radius: 12px; flex: 1; max-width: 96px;
+  white-space: nowrap;
 }
 .nav-btn .nav-ico { font-size: 1.25rem; filter: grayscale(1) opacity(.6); transition: filter .15s; }
 .nav-btn.nav-on { color: var(--accent); }
@@ -414,6 +415,16 @@ small { color: var(--txt3); }
   transition: opacity .25s, transform .25s; max-width: 85vw; text-align: center;
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ═══════════ AÇÕES RÁPIDAS ═══════════ */
+.quick-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
+.qa {
+  background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+  padding: 12px 6px; text-align: center; font-size: .74rem; font-weight: 700;
+  color: var(--txt); line-height: 1.25; transition: transform .1s ease;
+}
+.qa:active { transform: scale(.96); }
+.qa span { display: block; font-size: 1.5rem; margin-bottom: 6px; }
 
 /* ═══════════ PAINEL / TILES ═══════════ */
 .dash-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }

@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=16">
+<link rel="stylesheet" href="style.css?v=17">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -44,6 +44,7 @@
         <span>Senha</span>
         <input type="password" id="lp-pass" autocomplete="current-password" placeholder="••••••••">
       </label>
+      <button class="btn-link" type="button" style="margin-top:-6px" onclick="togglePass('lp-pass', this)">👁 Mostrar senha</button>
       <div id="lp-err" class="login-err" style="display:none"></div>
       <button class="btn btn-primary btn-block" id="lp-entrar" onclick="profileLogin()">Entrar</button>
       <button class="btn-link" onclick="backToProfiles()">← Trocar de perfil</button>
@@ -60,6 +61,7 @@
         <span>Senha</span>
         <input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••">
       </label>
+      <button class="btn-link" type="button" style="margin-top:-6px" onclick="togglePass('login-pass', this)">👁 Mostrar senha</button>
       <div id="login-err" class="login-err" style="display:none"></div>
       <button class="btn btn-primary btn-block" id="btn-login" onclick="doLogin()">Entrar</button>
       <button class="btn-link" onclick="forgotPassword()">Esqueci minha senha</button>
@@ -92,6 +94,12 @@
       </div>
     </div>
 
+    <div class="quick-row">
+      <button class="qa" onclick="openTxForm()"><span>➕</span>Lançar gasto<br>ou receita</button>
+      <button class="qa" onclick="document.getElementById('nota-input').click()"><span>🧾</span>Importar<br>nota</button>
+      <button class="qa" onclick="openKmForm()"><span>📍</span>Registrar<br>km</button>
+    </div>
+
     <div class="dash-tiles" id="dash-tiles"></div>
 
     <div id="alert-section" style="display:none">
@@ -116,6 +124,7 @@
   <section class="page" id="page-lanc">
     <header class="page-head">
       <h1 class="page-title">Lançamentos</h1>
+      <button class="btn btn-small" onclick="document.getElementById('nota-input').click()">🧾 Importar nota</button>
     </header>
 
     <div class="month-nav">
@@ -154,36 +163,22 @@
     <div id="veh-list"></div>
   </section>
 
-  <!-- ── PÁGINA: MAIS ── -->
+  <!-- ── PÁGINA: MOTORISTAS ── -->
+  <section class="page" id="page-motoristas">
+    <header class="page-head">
+      <h1 class="page-title">Motoristas</h1>
+      <button class="btn btn-small" onclick="openDriverForm()">+ Motorista</button>
+    </header>
+    <div id="driver-list"></div>
+  </section>
+
+  <!-- ── PÁGINA: AJUSTES ── -->
   <section class="page" id="page-mais">
     <header class="page-head">
-      <h1 class="page-title">Mais</h1>
+      <h1 class="page-title">Ajustes</h1>
     </header>
 
-    <div class="sec-title-row">
-      <h2 class="sec-title">Motoristas</h2>
-      <button class="btn btn-small" onclick="openDriverForm()">+ Motorista</button>
-    </div>
-    <div id="driver-list"></div>
-
-    <h2 class="sec-title">Notas e relatórios</h2>
-    <div class="card">
-      <button class="row-btn" onclick="document.getElementById('nota-input').click()">
-        <span class="row-ico">🧾</span>
-        <span class="row-txt"><b>Importar nota de abastecimento</b><small>PDF ou foto — leitura automática dos valores</small></span>
-      </button>
-      <button class="row-btn" onclick="shareResumoMes()">
-        <span class="row-ico">📤</span>
-        <span class="row-txt"><b>Compartilhar resumo do mês</b><small>Imagem pronta pra stories / WhatsApp</small></span>
-      </button>
-      <button class="row-btn" onclick="exportCSV()">
-        <span class="row-ico">📊</span>
-        <span class="row-txt"><b>Exportar lançamentos (CSV)</b><small>Abre no Excel / Google Planilhas</small></span>
-      </button>
-      <input type="file" id="nota-input" accept="image/*,application/pdf" style="display:none">
-    </div>
-
-    <h2 class="sec-title">Ajustes</h2>
+    <h2 class="sec-title">Minha conta</h2>
     <div class="card">
       <button class="row-btn" onclick="openNameModal()">
         <span class="row-ico">👤</span>
@@ -197,10 +192,22 @@
         <span class="row-ico">🚫</span>
         <span class="row-txt"><b>Remover minha foto</b><small>Volta a mostrar as iniciais</small></span>
       </button>
+      <button class="row-btn" onclick="changeMyPassword()">
+        <span class="row-ico">🔑</span>
+        <span class="row-txt"><b>Trocar minha senha</b><small>Enviamos um link pro e-mail da empresa</small></span>
+      </button>
       <input type="file" id="foto-input" accept="image/*" style="display:none">
+    </div>
+
+    <h2 class="sec-title">Sistema</h2>
+    <div class="card">
       <button class="row-btn" onclick="toggleTheme()">
         <span class="row-ico">🌗</span>
-        <span class="row-txt"><b>Tema</b><small id="theme-label">Escuro</small></span>
+        <span class="row-txt"><b>Tema</b><small id="theme-label">Claro</small></span>
+      </button>
+      <button class="row-btn" onclick="exportCSV()">
+        <span class="row-ico">📊</span>
+        <span class="row-txt"><b>Exportar lançamentos (CSV)</b><small>Abre no Excel / Google Planilhas</small></span>
       </button>
       <button class="row-btn" onclick="doLogout()">
         <span class="row-ico">🚪</span>
@@ -208,15 +215,16 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.3 🚐</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.4 🚐</p>
   </section>
 
   <!-- ── NAV INFERIOR ── -->
   <nav class="bottom-nav">
     <button class="nav-btn nav-on" data-tab="inicio" onclick="goTab('inicio')"><span class="nav-ico">🏠</span><span>Início</span></button>
-    <button class="nav-btn" data-tab="lanc" onclick="goTab('lanc')"><span class="nav-ico">🧾</span><span>Lançamentos</span></button>
+    <button class="nav-btn" data-tab="lanc" onclick="goTab('lanc')"><span class="nav-ico">💰</span><span>Lançamentos</span></button>
     <button class="nav-btn" data-tab="frota" onclick="goTab('frota')"><span class="nav-ico">🚐</span><span>Frota</span></button>
-    <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico">⚙️</span><span>Mais</span></button>
+    <button class="nav-btn" data-tab="motoristas" onclick="goTab('motoristas')"><span class="nav-ico">🧑‍✈️</span><span>Motoristas</span></button>
+    <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico">⚙️</span><span>Ajustes</span></button>
   </nav>
 
   <button id="fab" onclick="openTxForm()">+</button>
@@ -305,6 +313,7 @@
 <div class="overlay" id="modal-km">
   <div class="sheet">
     <div class="sheet-head"><h3>Registrar quilometragem</h3><button class="x" onclick="closeOverlay('modal-km')">✕</button></div>
+    <label class="fld" id="km-veh-fld" style="display:none"><span>Veículo</span><select id="km-veiculo" onchange="kmVehChanged()"></select></label>
     <p class="modal-note" id="km-veh-info"></p>
     <label class="fld"><span>Km no painel</span><input type="text" id="km-valor" inputmode="numeric" placeholder="Ex.: 148900"></label>
     <label class="fld"><span>Data</span><input type="date" id="km-data"></label>
@@ -326,10 +335,6 @@
     </div>
     <label class="fld"><span>Veículo atual</span><select id="drv-veiculo"><option value="">— Nenhum —</option></select></label>
     <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="drv-obs" rows="2" placeholder="Anotações sobre o motorista…"></textarea></label>
-    <div id="drv-anexos-sec" style="display:none">
-      <h2 class="sec-title" style="margin-top:4px">Documentos (CNH, exames…)</h2>
-      <div id="drv-anexos-list" class="anexos-list"></div>
-    </div>
     <button class="btn btn-primary btn-block" onclick="saveDriver()">Salvar</button>
     <button class="btn btn-danger btn-block" id="drv-del-btn" style="display:none" onclick="deleteDriverFromForm()">🗑 Excluir motorista</button>
   </div>
@@ -366,9 +371,18 @@
 </div>
 <input type="file" id="anexo-input" accept="image/*,application/pdf" style="display:none">
 <input type="file" id="veh-foto-input" accept="image/*" style="display:none">
+<input type="file" id="nota-input" accept="image/*,application/pdf" style="display:none">
+
+<!-- Ficha do motorista -->
+<div class="overlay" id="modal-drv-detail">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="drv-detail-title">Motorista</h3><button class="x" onclick="closeOverlay('modal-drv-detail')">✕</button></div>
+    <div id="drv-detail-body"></div>
+  </div>
+</div>
 
 <div id="toast"></div>
 
-<script src="app.js?v=16"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

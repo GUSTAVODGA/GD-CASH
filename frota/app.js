@@ -432,9 +432,38 @@ async function anexosDe(parentId) {
 async function addAnexoRecord(tipo, parentId, obj) {
   const id = newId();
   const rec = { parentTipo: tipo, parentId, ...obj, ts: Date.now(), autorNome: me.nome || me.email };
+  // anexo de lançamento carrega também o veículo, para aparecer na ficha da van
+  if (tipo === 'tx' && !rec.veiculoId) {
+    const t = S.tx.find(x => x.id === parentId);
+    rec.veiculoId = t?.veiculo || '';
+  }
   if (DEMO) { S.anexos = S.anexos || []; S.anexos.push({ ...rec, id }); demoSave(); }
   else await db.collection('anexos').doc(id).set(rec);
   return id;
+}
+
+// notas fiscais de lançamentos vinculadas a um veículo
+async function notasDoVeiculo(vid) {
+  if (DEMO) return (S.anexos || []).filter(a => a.parentTipo === 'tx' && a.veiculoId === vid);
+  const snap = await db.collection('anexos')
+    .where('parentTipo', '==', 'tx').where('veiculoId', '==', vid).get();
+  return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+}
+async function renderNotasVeiculo(elId, vid) {
+  const el = $(elId);
+  if (!el) return;
+  el.innerHTML = '<div class="empty-mini">Carregando notas…</div>';
+  let list = [];
+  try { list = await notasDoVeiculo(vid); }
+  catch (e) { el.innerHTML = '<div class="empty-mini">Não deu para carregar as notas.</div>'; return; }
+  if (!list.length) { el.innerHTML = '<div class="empty-mini">Nenhuma nota fiscal ainda — use "Importar nota" nos Lançamentos.</div>'; return; }
+  list.sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach(a => { _anexosVistos[a.id] = a; });
+  el.innerHTML = list.map(a => `
+    <div class="anexo-chip">
+      <span>${a.mime === 'application/pdf' ? '📄' : '🧾'}</span>
+      <button class="an-nome" onclick="openAnexoViewer('${a.id}')">${esc(a.nome)}</button>
+      <small>${a.ts ? fmtData(new Date(a.ts).toISOString().slice(0, 10)) : ''}</small>
+    </div>`).join('');
 }
 async function deleteAnexoRecord(id) {
   if (DEMO) { S.anexos = (S.anexos || []).filter(a => a.id !== id); demoSave(); }
@@ -667,6 +696,7 @@ function renderAll() {
   if (active === 'inicio') renderInicio();
   else if (active === 'lanc') renderLanc();
   else if (active === 'frota') renderFrota();
+  else if (active === 'motoristas') renderMotoristas();
   else if (active === 'mais') renderMais();
 }
 
@@ -982,9 +1012,9 @@ async function saveTx() {
   closeOverlay('modal-tx');
   try {
     await dataSet('tx', id, t);
-    // nota importada fica anexada ao lançamento
+    // nota importada fica anexada ao lançamento E vinculada ao veículo
     if (pendingAnexo) {
-      try { await addAnexoRecord('tx', id, pendingAnexo); } catch (e) { console.error(e); }
+      try { await addAnexoRecord('tx', id, { ...pendingAnexo, veiculoId: veiculo || '' }); } catch (e) { console.error(e); }
       pendingAnexo = null;
     }
     // abastecimento com km informado atualiza o odômetro do veículo
@@ -1069,20 +1099,39 @@ function kmRodadoMes(vid, offset = 0) {
 let kmVehId = null;
 function openKmForm(vid) {
   const v = vehById(vid);
-  if (!v) return;
-  kmVehId = vid;
-  $('km-veh-info').textContent = v.nome + (v.km ? ' — última leitura: ' + fmtKm(v.km) : '');
+  if (v) {
+    // veio da ficha do veículo: já sabemos qual é
+    kmVehId = vid;
+    $('km-veh-fld').style.display = 'none';
+    $('km-veh-info').textContent = v.nome + (v.km ? ' — última leitura: ' + fmtKm(v.km) : '');
+  } else {
+    // veio do atalho do Início: escolher o veículo
+    if (!S.vehicles.length) { toast('Cadastre um veículo primeiro (aba Frota).'); return; }
+    kmVehId = null;
+    const sel = $('km-veiculo');
+    sel.innerHTML = '<option value="">— Escolha a van —</option>' +
+      S.vehicles.filter(x => x.status !== 'inativo')
+        .map(x => `<option value="${x.id}">${esc(x.nome)}${x.placa ? ' · ' + esc(x.placa) : ''}</option>`).join('');
+    sel.value = '';
+    $('km-veh-fld').style.display = '';
+    $('km-veh-info').textContent = '';
+  }
   $('km-valor').value = '';
   $('km-data').value = todayStr();
   closeOverlay('modal-veh-detail');
   openOverlay('modal-km');
+}
+function kmVehChanged() {
+  const v = vehById($('km-veiculo').value);
+  kmVehId = v ? v.id : null;
+  $('km-veh-info').textContent = v ? (v.nome + (v.km ? ' — última leitura: ' + fmtKm(v.km) : '')) : '';
 }
 
 async function saveKmLog() {
   const km = parseIntBR($('km-valor').value);
   if (km <= 0) { toast('Informe o km do painel.'); return; }
   const v = vehById(kmVehId);
-  if (!v) return;
+  if (!v) { toast('Escolha o veículo.'); return; }
   const data = $('km-data').value || todayStr();
   closeOverlay('modal-km');
   try {
@@ -1292,6 +1341,8 @@ function openVehDetail(id) {
     </div>
     <h2 class="sec-title">Documentos e fotos (CRLV, seguro…)</h2>
     <div class="anexos-list" id="veh-anexos"></div>
+    <h2 class="sec-title">Notas fiscais deste veículo</h2>
+    <div class="anexos-list" id="veh-notas"></div>
     ${kmLogs.length ? '<h2 class="sec-title">Leituras de km registradas</h2><div class="card">' + kmLogs.map(l => `
       <div class="row-btn">
         <span class="row-ico">📍</span>
@@ -1302,6 +1353,7 @@ function openVehDetail(id) {
     ${txsV.length ? txsV.slice(0, 6).map(txItemHTML).join('') : '<div class="empty-mini">Nenhum lançamento ainda.</div>'}
   `;
   renderAnexosInto('veh-anexos', id, 'vehicle');
+  renderNotasVeiculo('veh-notas', id);
   openOverlay('modal-veh-detail');
 }
 
@@ -1336,36 +1388,96 @@ async function handleVehFotoInput(input) {
 }
 
 // ══════════════════════════════════════════
-// MOTORISTAS
+// MOTORISTAS (aba própria com ficha completa)
 // ══════════════════════════════════════════
-function renderMais() {
+function cnhBadge(d) {
+  const dias = diasAte(d.cnhValidade);
+  if (dias === null) return '';
+  if (dias < 0) return '<span class="row-badge rb-crit">CNH vencida</span>';
+  if (dias <= 30) return `<span class="row-badge rb-warn">CNH vence em ${dias}d</span>`;
+  return '<span class="row-badge rb-ok">CNH em dia</span>';
+}
+
+function renderMotoristas() {
   const el = $('driver-list');
   if (!S.drivers.length) {
-    el.innerHTML = '<div class="empty-big"><span class="e-ico">🧑‍✈️</span>Nenhum motorista cadastrado.</div>';
-  } else {
-    el.innerHTML = '<div class="card">' + [...S.drivers]
-      .sort((a, b) => a.nome.localeCompare(b.nome))
-      .map(d => {
-        const dias = diasAte(d.cnhValidade);
-        let badge = '<span class="row-badge rb-ok">CNH ok</span>';
-        if (dias === null) badge = '';
-        else if (dias < 0) badge = '<span class="row-badge rb-crit">CNH vencida</span>';
-        else if (dias <= 30) badge = `<span class="row-badge rb-warn">CNH ${dias}d</span>`;
-        const van = S.vehicles.find(v => v.id === d.veiculoId);
-        return `
-          <button class="row-btn" onclick='openDriverForm(${JSON.stringify(d.id)})'>
-            <span class="row-ico">🧑‍✈️</span>
-            <span class="row-txt"><b>${esc(d.nome)}</b><small>${van ? '🚐 ' + esc(van.nome) + ' · ' : ''}CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}${d.telefone ? ' · ' + esc(d.telefone) : ''}</small></span>
-            ${badge}
-          </button>`;
-      }).join('') + '</div>';
+    el.innerHTML = '<div class="empty-big"><span class="e-ico">🧑‍✈️</span>Nenhum motorista cadastrado.<br>Toque em <b>+ Motorista</b> para adicionar o primeiro.</div>';
+    return;
   }
+  el.innerHTML = [...S.drivers]
+    .sort((a, b) => a.nome.localeCompare(b.nome))
+    .map(d => {
+      const van = S.vehicles.find(v => v.id === d.veiculoId);
+      return `
+        <button class="veh-card" onclick='openDrvDetail(${JSON.stringify(d.id)})'>
+          <div class="veh-top">
+            <div class="veh-ico">🧑‍✈️</div>
+            <div>
+              <div class="veh-nome">${esc(d.nome)}</div>
+              <div class="veh-sub">${van ? '🚐 ' + esc(van.nome) + ' · ' : ''}CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</div>
+            </div>
+            ${cnhBadge(d)}
+          </div>
+        </button>`;
+    }).join('');
+}
+
+// ficha completa do motorista
+let detailDrvId = null;
+function openDrvDetail(id) {
+  const d = S.drivers.find(x => x.id === id);
+  if (!d) return;
+  detailDrvId = id;
+  const van = S.vehicles.find(v => v.id === d.veiculoId);
+  const dias = diasAte(d.cnhValidade);
+  $('drv-detail-title').textContent = d.nome;
+  const cells = [
+    ['Telefone', d.telefone || '—'],
+    ['Veículo atual', van ? van.nome : '—'],
+    ['CNH', 'Categoria ' + (d.cnhCategoria || '—')],
+    ['Validade da CNH', fmtData(d.cnhValidade)],
+  ];
+  const alerta = dias !== null && dias <= 30
+    ? `<div class="alert-item${dias < 0 ? ' crit' : ''}"><span class="a-ico">🪪</span><div><b>${dias < 0 ? 'CNH VENCIDA' : 'CNH vence em ' + dias + ' dia' + (dias === 1 ? '' : 's')}</b><small>${fmtData(d.cnhValidade)}</small></div></div>`
+    : '';
+  $('drv-detail-body').innerHTML = `
+    <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    ${alerta}
+    ${d.observacoes ? `<div class="vd-obs">📝 ${esc(d.observacoes)}</div>` : ''}
+    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-drv-detail');openDriverForm('${id}')">✏️ Editar motorista</button>
+    <h2 class="sec-title">Documentos (CNH, exames…)</h2>
+    <div class="anexos-list" id="drv-anexos"></div>
+  `;
+  renderAnexosInto('drv-anexos', id, 'driver');
+  openOverlay('modal-drv-detail');
+}
+
+// ══════════════════════════════════════════
+// AJUSTES (só conta e sistema)
+// ══════════════════════════════════════════
+function renderMais() {
   $('ajuste-nome-atual').textContent = me.nome || '—';
   $('ajuste-email-atual').textContent = me.email || '';
   const temFoto = !!myPhoto();
   $('ajuste-foto-atual').textContent = temFoto ? 'Toque para trocar a foto' : 'Sem foto — mostrando suas iniciais';
   $('btn-remover-foto').style.display = temFoto ? '' : 'none';
   $('theme-label').textContent = document.documentElement.dataset.theme === 'dark' ? 'Escuro' : 'Claro';
+}
+
+function changeMyPassword() {
+  if (DEMO || !auth) { toast('Disponível só no modo real.'); return; }
+  confirmDialog('Trocar senha', 'Enviar o link de troca de senha para o e-mail da empresa?', () => {
+    auth.sendPasswordResetEmail(me.email)
+      .then(() => toast('📧 Link enviado! Abra o e-mail da empresa.'))
+      .catch(() => toast('Não foi possível enviar agora.'));
+  });
+}
+
+function togglePass(id, btn) {
+  const inp = $(id);
+  const mostrar = inp.type === 'password';
+  inp.type = mostrar ? 'text' : 'password';
+  btn.textContent = mostrar ? '🙈 Esconder senha' : '👁 Mostrar senha';
 }
 
 function openDriverForm(idOrNull) {
@@ -1382,9 +1494,6 @@ function openDriverForm(idOrNull) {
     S.vehicles.filter(v => v.status !== 'inativo' || (d && d.veiculoId === v.id))
       .map(v => `<option value="${v.id}">${esc(v.nome)}${v.placa ? ' · ' + esc(v.placa) : ''}</option>`).join('');
   $('drv-veiculo').value = d ? (d.veiculoId || '') : '';
-  // documentos só depois que o motorista existe
-  $('drv-anexos-sec').style.display = d ? '' : 'none';
-  if (d) renderAnexosInto('drv-anexos-list', d.id, 'driver');
   $('drv-del-btn').style.display = d ? '' : 'none';
   openOverlay('modal-driver');
 }
