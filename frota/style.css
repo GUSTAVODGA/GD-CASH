@@ -289,6 +289,11 @@ button.alert-item:active { transform: scale(.985); }
 .veh-alert-chip.crit { color: var(--neg); }
 
 /* detalhe do veículo */
+.ficha-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.ficha-foto { width: 64px; height: 64px; border-radius: 16px; font-size: 1.8rem; flex-shrink: 0; border: none; }
+.ficha-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ficha-info b { font-size: 1.1rem; }
+.ficha-info small { color: var(--txt3); font-size: .8rem; }
 .vd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
 .vd-cell { background: var(--card2); border-radius: 12px; padding: 10px 12px; }
 .vd-cell small { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }

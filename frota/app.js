@@ -452,11 +452,11 @@ async function notasDoVeiculo(vid) {
 async function renderNotasVeiculo(elId, vid) {
   const el = $(elId);
   if (!el) return;
-  el.innerHTML = '<div class="empty-mini">Carregando notas…</div>';
   let list = [];
-  try { list = await notasDoVeiculo(vid); }
-  catch (e) { el.innerHTML = '<div class="empty-mini">Não deu para carregar as notas.</div>'; return; }
-  if (!list.length) { el.innerHTML = '<div class="empty-mini">Nenhuma nota fiscal ainda — use "Importar nota" nos Lançamentos.</div>'; return; }
+  try { list = await notasDoVeiculo(vid); } catch (e) { return; }
+  const secEl = $('veh-notas-sec');
+  if (secEl) secEl.style.display = list.length ? '' : 'none';
+  if (!list.length) { el.innerHTML = ''; return; }
   list.sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach(a => { _anexosVistos[a.id] = a; });
   el.innerHTML = list.map(a => `
     <div class="anexo-chip">
@@ -681,7 +681,7 @@ function goTab(tab) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   $('page-' + tab).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('nav-on', b.dataset.tab === tab));
-  $('fab').style.display = tab === 'lanc' ? '' : 'none';
+  $('fab').style.display = (tab === 'inicio' || tab === 'lanc') ? '' : 'none';
   window.scrollTo({ top: 0 });
   renderAll();
 }
@@ -798,7 +798,8 @@ function irParaAlertas() {
 function renderCatBreakdown(txs) {
   const el = $('cat-breakdown');
   const desp = txs.filter(t => t.tipo === 'despesa');
-  if (!desp.length) { el.innerHTML = '<div class="empty-mini">Nenhuma despesa lançada neste mês.</div>'; return; }
+  $('sec-cats').style.display = desp.length ? '' : 'none';
+  if (!desp.length) { el.innerHTML = ''; return; }
   const porCat = {};
   desp.forEach(t => { porCat[t.cat] = (porCat[t.cat] || 0) + t.valor; });
   const total = desp.reduce((s, t) => s + t.valor, 0);
@@ -820,7 +821,8 @@ function renderCatBreakdown(txs) {
 function renderVehBreakdown(txs) {
   const el = $('veh-breakdown');
   const desp = txs.filter(t => t.tipo === 'despesa' && t.veiculo);
-  if (!desp.length) { el.innerHTML = '<div class="empty-mini">Nenhuma despesa vinculada a veículos.</div>'; return; }
+  $('sec-vehs').style.display = desp.length ? '' : 'none';
+  if (!desp.length) { el.innerHTML = ''; return; }
   const porVeh = {};
   desp.forEach(t => { porVeh[t.veiculo] = (porVeh[t.veiculo] || 0) + t.valor; });
   const max = Math.max(...Object.values(porVeh));
@@ -843,10 +845,9 @@ function renderVehBreakdown(txs) {
 function renderRecent() {
   const el = $('recent-list');
   const txs = [...S.tx].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 5);
-  if (!txs.length) {
-    el.innerHTML = '<div class="empty-big"><span class="e-ico">🧾</span>Nenhum lançamento ainda.<br>Toque no botão <b>+</b> para registrar o primeiro gasto ou receita.</div>';
-    return;
-  }
+  $('sec-recent').style.display = txs.length ? '' : 'none';
+  // sistema zerado: uma boa-vinda no lugar de várias seções vazias
+  $('inicio-vazio').style.display = (!txs.length && !S.vehicles.length) ? '' : 'none';
   el.innerHTML = txs.map(txItemHTML).join('');
 }
 
@@ -1324,10 +1325,11 @@ function openVehDetail(id) {
   const proxOleo = (Number(v.oleoUltimaKm) || 0) + (Number(v.oleoIntervalo) || 0);
 
   const mot = motoristaDe(id);
+  const stLabel = { ativo: '🟢 Ativo', manutencao: '🟡 Manutenção', inativo: '⚪ Inativo' };
+  const fuels = txsV.filter(t => t.cat === 'combustivel');
+  const manuts = txsV.filter(t => t.cat === 'manutencao' || t.cat === 'pneus');
+  const outros = txsV.filter(t => t.tipo === 'despesa' && !['combustivel', 'manutencao', 'pneus'].includes(t.cat));
   const cells = [
-    ['Placa', v.placa || '—'],
-    ['Modelo', (v.modelo || '—') + (v.ano ? ' · ' + v.ano : '')],
-    ['Motorista atual', mot ? mot.nome : '—'],
     ['Km atual', v.km ? fmtKm(v.km) : '—'],
     ['Rodou no mês', rodou ? fmtKm(rodou) : '—'],
     ['Gasto no mês', R(gastoMes)],
@@ -1339,30 +1341,42 @@ function openVehDetail(id) {
   ];
   const kmLogs = S.kmlog.filter(l => l.veiculo === id)
     .sort((a, b) => b.data.localeCompare(a.data) || b.km - a.km).slice(0, 5);
+  const sec = (titulo, itens) => itens.length
+    ? `<h2 class="sec-title">${titulo}</h2>` + itens.slice(0, 5).map(txItemHTML).join('')
+    : '';
   $('veh-detail-body').innerHTML = `
+    <div class="ficha-head">
+      <button class="veh-ico ficha-foto" onclick="pickVehFoto('${id}')" title="Trocar foto">${v.foto ? `<img src="${v.foto}" alt="">` : '🚐'}</button>
+      <div class="ficha-info">
+        <b>${esc(v.nome)}</b>
+        <small>${esc(v.placa || 'sem placa')}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ano ? ' · ' + esc(v.ano) : ''}</small>
+        <small>🧑‍✈️ ${mot ? esc(mot.nome) : 'Sem motorista vinculado'}</small>
+      </div>
+      <span class="veh-status st-${v.status || 'ativo'}">${stLabel[v.status] || stLabel.ativo}</span>
+    </div>
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
-    ${v.observacoes ? `<div class="vd-obs">📝 ${esc(v.observacoes)}</div>` : ''}
     <button class="btn btn-primary btn-block" onclick="lancarParaVan('${id}')">➕ Lançar despesa/receita desta van</button>
     <div class="fld-row" style="margin-top:8px">
       <button class="btn btn-secondary" onclick="openKmForm('${id}')">📍 Registrar km</button>
       <button class="btn btn-secondary" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar</button>
     </div>
-    <div class="fld-row" style="margin-top:8px">
-      <button class="btn btn-secondary" onclick="pickVehFoto('${id}')">📷 ${v.foto ? 'Trocar foto' : 'Foto da van'}</button>
-      <button class="btn btn-secondary" onclick="verHistoricoCompleto('${id}')">📜 Histórico completo</button>
-    </div>
-    <h2 class="sec-title">Documentos e fotos (CRLV, seguro…)</h2>
+    <h2 class="sec-title">📄 Documentos (CRLV, seguro, fotos…)</h2>
     <div class="anexos-list" id="veh-anexos"></div>
-    <h2 class="sec-title">Notas fiscais deste veículo</h2>
-    <div class="anexos-list" id="veh-notas"></div>
-    ${kmLogs.length ? '<h2 class="sec-title">Leituras de km registradas</h2><div class="card">' + kmLogs.map(l => `
+    <div id="veh-notas-sec" style="display:none">
+      <h2 class="sec-title">🧾 Notas fiscais</h2>
+      <div class="anexos-list" id="veh-notas"></div>
+    </div>
+    ${sec('⛽ Abastecimentos', fuels)}
+    ${sec('🛠 Manutenções', manuts)}
+    ${sec('💰 Outros gastos', outros)}
+    ${txsV.length > 5 ? `<button class="btn-link" onclick="verHistoricoCompleto('${id}')">Ver histórico completo →</button>` : ''}
+    ${kmLogs.length ? '<h2 class="sec-title">📍 Leituras de km</h2><div class="card">' + kmLogs.map(l => `
       <div class="row-btn">
         <span class="row-ico">📍</span>
         <span class="row-txt"><b>${fmtKm(l.km)}</b><small>${fmtDia(l.data)} · por ${esc((l.autorNome || '?').split(' ')[0])}</small></span>
         <button class="x" onclick="deleteKmLog('${l.id}')">✕</button>
       </div>`).join('') + '</div>' : ''}
-    <h2 class="sec-title">Últimos lançamentos deste veículo</h2>
-    ${txsV.length ? txsV.slice(0, 6).map(txItemHTML).join('') : '<div class="empty-mini">Nenhum lançamento ainda.</div>'}
+    ${v.observacoes ? `<h2 class="sec-title">📝 Observações</h2><div class="vd-obs">${esc(v.observacoes)}</div>` : ''}
   `;
   renderAnexosInto('veh-anexos', id, 'vehicle');
   renderNotasVeiculo('veh-notas', id);
@@ -1431,7 +1445,7 @@ function renderMotoristas() {
       return `
         <button class="veh-card" onclick='openDrvDetail(${JSON.stringify(d.id)})'>
           <div class="veh-top">
-            <div class="veh-ico">🧑‍✈️</div>
+            <div class="veh-ico">${d.foto ? `<img src="${d.foto}" alt="">` : '🧑‍✈️'}</div>
             <div>
               <div class="veh-nome">${esc(d.nome)}</div>
               <div class="veh-sub">${van ? '🚐 ' + esc(van.nome) + ' · ' : ''}CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</div>
@@ -1453,23 +1467,51 @@ function openDrvDetail(id) {
   $('drv-detail-title').textContent = d.nome;
   const cells = [
     ['Telefone', d.telefone || '—'],
-    ['Veículo atual', van ? van.nome : '—'],
     ['CNH', 'Categoria ' + (d.cnhCategoria || '—')],
     ['Validade da CNH', fmtData(d.cnhValidade)],
   ];
   const alerta = dias !== null && dias <= 30
-    ? `<div class="alert-item${dias < 0 ? ' crit' : ''}"><span class="a-ico">🪪</span><div><b>${dias < 0 ? 'CNH VENCIDA' : 'CNH vence em ' + dias + ' dia' + (dias === 1 ? '' : 's')}</b><small>${fmtData(d.cnhValidade)}</small></div></div>`
+    ? `<div class="alert-item${dias < 0 ? ' crit' : ''}" style="width:100%"><span class="a-ico">🪪</span><div><b>${dias < 0 ? 'CNH VENCIDA' : 'CNH vence em ' + dias + ' dia' + (dias === 1 ? '' : 's')}</b><small>${fmtData(d.cnhValidade)}</small></div></div>`
     : '';
   $('drv-detail-body').innerHTML = `
-    <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    <div class="ficha-head">
+      <button class="veh-ico ficha-foto" onclick="pickDrvFoto('${id}')" title="Trocar foto">${d.foto ? `<img src="${d.foto}" alt="">` : '🧑‍✈️'}</button>
+      <div class="ficha-info">
+        <b>${esc(d.nome)}</b>
+        <small>CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</small>
+        <small>${van ? '🚐 ' + esc(van.nome) : 'Sem veículo vinculado'}</small>
+      </div>
+      ${cnhBadge(d)}
+    </div>
     ${alerta}
-    ${d.observacoes ? `<div class="vd-obs">📝 ${esc(d.observacoes)}</div>` : ''}
+    <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    ${van ? `<button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick="closeOverlay('modal-drv-detail');openVehDetail('${van.id}')">🚐 Abrir ficha da ${esc(van.nome)}</button>` : ''}
     <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-drv-detail');openDriverForm('${id}')">✏️ Editar motorista</button>
-    <h2 class="sec-title">Documentos (CNH, exames…)</h2>
+    <h2 class="sec-title">📄 Documentos (CNH, exames…)</h2>
     <div class="anexos-list" id="drv-anexos"></div>
+    ${d.observacoes ? `<h2 class="sec-title">📝 Observações</h2><div class="vd-obs">${esc(d.observacoes)}</div>` : ''}
   `;
   renderAnexosInto('drv-anexos', id, 'driver');
   openOverlay('modal-drv-detail');
+}
+
+// foto do motorista
+let drvFotoId = null;
+function pickDrvFoto(did) {
+  drvFotoId = did;
+  $('drv-foto-input').click();
+}
+async function handleDrvFotoInput(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  const d = S.drivers.find(x => x.id === drvFotoId);
+  if (!file || !d) return;
+  try {
+    const foto = await fileToSquareDataURL(file, 160);
+    await dataSet('drivers', d.id, { ...stripId(d), foto });
+    toast('Foto salva 📷');
+    closeOverlay('modal-drv-detail');
+  } catch (e) { toast('Não foi possível usar essa imagem.'); }
 }
 
 // ══════════════════════════════════════════
@@ -1529,6 +1571,7 @@ async function saveDriver() {
     cnhValidade: $('drv-cnh-val').value || '',
     veiculoId: $('drv-veiculo').value || '',
     observacoes: $('drv-obs').value.trim(),
+    foto: origD?.foto || '',
     criadoPorNome: origD?.criadoPorNome || me.nome || me.email,
     atualizadoPorNome: me.nome || me.email,
     atualizadoEm: Date.now(),
@@ -1738,10 +1781,13 @@ function parseNota(txt) {
   return out;
 }
 
+// Anexa a nota ao lançamento ABERTO e usa a leitura só pra preencher campos vazios
 async function importNota(input) {
   const file = input.files && input.files[0];
   input.value = '';
   if (!file) return;
+  const formAberto = $('modal-tx').classList.contains('open');
+  if (!formAberto) openTxForm();
   toast('Lendo a nota… pode levar alguns segundos ⏳');
   let imagem = null, texto = '', anexo = null;
   try {
@@ -1760,6 +1806,8 @@ async function importNota(input) {
     toast('Não consegui abrir esse arquivo.');
     return;
   }
+  pendingAnexo = anexo;
+  $('tx-anexo-chip').style.display = '';
   try {
     texto = await Promise.race([
       ocrTexto(imagem),
@@ -1768,23 +1816,23 @@ async function importNota(input) {
   } catch (e) { console.error('OCR indisponível', e); }
   const info = texto ? parseNota(texto) : {};
 
-  // abre o lançamento já preenchido com o que foi lido
-  openTxForm();
-  setTxTipo('despesa');
-  pickCat('combustivel');
-  if (info.valor) $('tx-valor').value = info.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-  if (info.litros) $('tx-litros').value = String(info.litros).replace('.', ',');
+  // preenche APENAS o que o usuário ainda não preencheu
+  if (txTipo === 'despesa' && !txCat && info.litros) pickCat('combustivel');
+  if (info.valor && !parseValor($('tx-valor').value)) {
+    $('tx-valor').value = info.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  }
+  if (txCat === 'combustivel' && info.litros && !parseValor($('tx-litros').value)) {
+    $('tx-litros').value = String(info.litros).replace('.', ',');
+  }
   if (info.data) $('tx-data').value = info.data;
-  if (info.placa) {
+  if (info.placa && !$('tx-veiculo').value) {
     const v = S.vehicles.find(x => (x.placa || '').replace(/-/g, '') === info.placa);
     if (v) $('tx-veiculo').value = v.id;
   }
   updateFuelExtra();
   updateFuelHint();
-  pendingAnexo = anexo;
-  $('tx-anexo-chip').style.display = '';
   const leu = info.valor || info.litros || info.placa;
-  toast(leu ? 'Nota lida! Confere os valores e salva 👇' : 'Não consegui ler os valores — preencha e a nota fica anexada 📎');
+  toast(leu ? 'Nota lida! Confere e salva 👇' : 'Nota anexada 📎 — preencha os campos normalmente');
 }
 
 // ══════════════════════════════════════════
@@ -1909,6 +1957,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'foto-input') handleFotoInput(e.target);
   if (e.target.id === 'anexo-input') handleAnexoInput(e.target);
   if (e.target.id === 'veh-foto-input') handleVehFotoInput(e.target);
+  if (e.target.id === 'drv-foto-input') handleDrvFotoInput(e.target);
   if (e.target.id === 'nota-input') importNota(e.target);
 });
 

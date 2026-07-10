@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=18">
+<link rel="stylesheet" href="style.css?v=19">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -101,24 +101,34 @@
       <div id="alert-list"></div>
     </div>
 
-    <h2 class="sec-title">Despesas do mês por categoria</h2>
-    <div class="card" id="cat-breakdown"><div class="empty-mini">Nenhuma despesa lançada neste mês.</div></div>
-
-    <h2 class="sec-title">Custo do mês por veículo</h2>
-    <div class="card" id="veh-breakdown"><div class="empty-mini">Nenhuma despesa vinculada a veículos.</div></div>
-
-    <div class="sec-title-row">
-      <h2 class="sec-title">Atividade recente</h2>
-      <button class="btn-link" onclick="goTab('lanc')">Ver tudo →</button>
+    <div id="sec-cats" style="display:none">
+      <h2 class="sec-title">Despesas do mês por categoria</h2>
+      <div class="card" id="cat-breakdown"></div>
     </div>
-    <div id="recent-list"></div>
+
+    <div id="sec-vehs" style="display:none">
+      <h2 class="sec-title">Custo do mês por veículo</h2>
+      <div class="card" id="veh-breakdown"></div>
+    </div>
+
+    <div id="sec-recent" style="display:none">
+      <div class="sec-title-row">
+        <h2 class="sec-title">Atividade recente</h2>
+        <button class="btn-link" onclick="goTab('lanc')">Ver tudo →</button>
+      </div>
+      <div id="recent-list"></div>
+    </div>
+
+    <div id="inicio-vazio" class="empty-big" style="display:none">
+      <span class="e-ico">🚐</span>Bem-vindo ao sistema da Lagos!<br>
+      Comece cadastrando as vans na aba <b>Frota</b> e lançando o primeiro gasto no botão <b>+</b>.
+    </div>
   </section>
 
   <!-- ── PÁGINA: LANÇAMENTOS ── -->
   <section class="page" id="page-lanc">
     <header class="page-head">
       <h1 class="page-title">Lançamentos</h1>
-      <button class="btn btn-small" onclick="document.getElementById('nota-input').click()">🧾 Importar nota</button>
     </header>
 
     <div class="month-nav">
@@ -209,7 +219,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.5 🚐</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.6 🚐</p>
   </section>
 
   <!-- ── NAV INFERIOR ── -->
@@ -221,7 +231,7 @@
     <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico">⚙️</span><span>Ajustes</span></button>
   </nav>
 
-  <button id="fab" style="display:none" onclick="openTxForm()">+</button>
+  <button id="fab" onclick="openTxForm()">+</button>
 </div>
 
 <!-- ═══════════ MODAIS ═══════════ -->
@@ -246,8 +256,9 @@
       <div class="fuel-hint" id="tx-fuel-hint"></div>
     </div>
     <label class="fld"><span>Descrição <small>(opcional)</small></span><input type="text" id="tx-desc" placeholder="Ex.: troca de óleo, repasse da prefeitura…"></label>
-    <div id="tx-anexo-chip" class="fuel-hint" style="display:none">📎 A nota ficará anexada a este lançamento</div>
-    <button class="btn btn-primary btn-block" id="tx-save-btn" onclick="saveTx()">Salvar</button>
+    <button class="btn btn-secondary btn-block" id="tx-nota-btn" onclick="document.getElementById('nota-input').click()">📎 Anexar nota ou comprovante</button>
+    <div id="tx-anexo-chip" class="fuel-hint" style="display:none; margin-top:8px">📎 Nota anexada — os valores lidos preenchem os campos vazios</div>
+    <button class="btn btn-primary btn-block" id="tx-save-btn" style="margin-top:10px" onclick="saveTx()">Salvar</button>
   </div>
 </div>
 
@@ -365,6 +376,7 @@
 </div>
 <input type="file" id="anexo-input" accept="image/*,application/pdf" style="display:none">
 <input type="file" id="veh-foto-input" accept="image/*" style="display:none">
+<input type="file" id="drv-foto-input" accept="image/*" style="display:none">
 <input type="file" id="nota-input" accept="image/*,application/pdf" style="display:none">
 
 <!-- Ficha do motorista -->
@@ -377,6 +389,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=18"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>
