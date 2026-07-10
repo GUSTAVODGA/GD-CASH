@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -219,7 +219,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.8 🚐</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.9 🚐</p>
   </section>
 
   <!-- ── NAV INFERIOR: 5 módulos ── -->
@@ -339,6 +339,13 @@
       <label class="fld"><span>Validade CNH</span><input type="date" id="drv-cnh-val"></label>
     </div>
     <label class="fld"><span>Veículo atual</span><select id="drv-veiculo"><option value="">— Nenhum —</option></select></label>
+    <label class="fld"><span>Status</span>
+      <select id="drv-status">
+        <option value="ativo">🟢 Ativo</option>
+        <option value="ferias">🌴 Férias</option>
+        <option value="inativo">⚪ Inativo</option>
+      </select>
+    </label>
     <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="drv-obs" rows="2" placeholder="Anotações sobre o motorista…"></textarea></label>
     <button class="btn btn-primary btn-block" onclick="saveDriver()">Salvar</button>
     <button class="btn btn-danger btn-block" id="drv-del-btn" style="display:none" onclick="deleteDriverFromForm()">🗑 Excluir motorista</button>
@@ -379,7 +386,7 @@
 <input type="file" id="drv-foto-input" accept="image/*" style="display:none">
 <input type="file" id="nota-input" accept="image/*,application/pdf" style="display:none">
 
-<!-- Ficha do motorista -->
+<!-- Central do Motorista -->
 <div class="overlay" id="modal-drv-detail">
   <div class="sheet">
     <div class="sheet-head"><h3 id="drv-detail-title">Motorista</h3><button class="x" onclick="closeOverlay('modal-drv-detail')">✕</button></div>
@@ -387,8 +394,32 @@
   </div>
 </div>
 
+<!-- Trocar veículo do motorista -->
+<div class="overlay" id="modal-troca">
+  <div class="sheet sheet-small">
+    <h3>🔁 Trocar veículo</h3>
+    <p class="modal-note" id="troca-info"></p>
+    <label class="fld"><span>Nova van</span><select id="troca-veiculo"><option value="">— Nenhuma —</option></select></label>
+    <button class="btn btn-primary btn-block" onclick="salvarTrocaVeiculo()">Confirmar troca</button>
+  </div>
+</div>
+
+<!-- Atualizar CNH -->
+<div class="overlay" id="modal-cnh">
+  <div class="sheet sheet-small">
+    <h3>🪪 Atualizar CNH</h3>
+    <div class="fld-row">
+      <label class="fld"><span>Categoria</span>
+        <select id="cnh-cat"><option>D</option><option>E</option><option>C</option><option>B</option><option>A</option></select>
+      </label>
+      <label class="fld"><span>Nova validade</span><input type="date" id="cnh-val"></label>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="salvarCNH()">Salvar CNH</button>
+  </div>
+</div>
+
 <div id="toast"></div>
 
-<script src="app.js?v=22"></script>
+<script src="app.js?v=23"></script>
 </body>
 </html>

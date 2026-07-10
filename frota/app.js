@@ -32,7 +32,7 @@ let me = null; // { uid, email, nome }
 
 // Estado compartilhado (espelho do Firestore ou do localStorage no demo)
 // (anexos ficam fora dos listeners: são carregados sob demanda, por item)
-let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [] };
+let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [] };
 let unsubs = [];
 
 // Estado de UI
@@ -443,6 +443,29 @@ async function addAnexoRecord(tipo, parentId, obj) {
   if (DEMO) { S.anexos = S.anexos || []; S.anexos.push({ ...rec, id }); demoSave(); }
   else await db.collection('anexos').doc(id).set(rec);
   return id;
+}
+
+// ── EVENTOS: registro do que aconteceu (troca de veículo, CNH, cadastro…) ──
+async function logEvento(parentTipo, parentId, ico, titulo, detalhe) {
+  const id = newId();
+  const rec = { parentTipo, parentId, ico, titulo, detalhe: detalhe || '', autorNome: me.nome || me.email, ts: Date.now() };
+  if (DEMO) { S.eventos = S.eventos || []; S.eventos.push({ ...rec, id }); demoSave(); }
+  else await db.collection('eventos').doc(id).set(rec);
+}
+async function eventosDe(parentId) {
+  if (DEMO) return (S.eventos || []).filter(e => e.parentId === parentId);
+  const snap = await db.collection('eventos').where('parentId', '==', parentId).get();
+  return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+}
+function eventoHTML(e) {
+  return `
+    <div class="tx-item" style="cursor:default">
+      <div class="tx-ico">${e.ico || '📌'}</div>
+      <div class="tx-body">
+        <div class="tx-title">${esc(e.titulo)}</div>
+        <div class="tx-meta">${authorChip(e.autorNome)}${e.detalhe ? ' · ' + esc(e.detalhe) : ''} · ${e.ts ? fmtDia(new Date(e.ts).toISOString().slice(0, 10)) : ''}</div>
+      </div>
+    </div>`;
 }
 
 // notas fiscais de lançamentos vinculadas a um veículo
@@ -1301,6 +1324,7 @@ async function saveVehicle() {
   closeOverlay('modal-veh');
   try {
     await dataSet('vehicles', id, v);
+    if (!origV) logEvento('vehicle', id, '🚐', 'Veículo cadastrado', v.nome + (v.placa ? ' · ' + v.placa : ''));
     toast(editingVehId ? 'Veículo atualizado ✓' : 'Veículo adicionado ✓');
   } catch (e) { toast('Erro ao salvar.'); }
   editingVehId = null;
@@ -1421,6 +1445,8 @@ async function renderVanTimeline(vid, txsV) {
         </div>`,
     })),
   ];
+  // eventos da van (troca de motorista, cadastro, observações…)
+  try { (await eventosDe(vid)).forEach(e => eventos.push({ ts: e.ts || 0, html: eventoHTML(e) })); } catch (e) {}
   // documentos entram na linha do tempo assim que carregam
   const docs = await renderAnexosInto('veh-anexos', vid, 'vehicle');
   docs.forEach(a => eventos.push({
@@ -1460,8 +1486,10 @@ function registrarManutencao(vid) {
 async function salvarObsVan(vid) {
   const v = vehById(vid);
   if (!v) return;
+  const obs = $('van-obs').value.trim();
   try {
-    await dataSet('vehicles', vid, { ...stripId(v), observacoes: $('van-obs').value.trim() });
+    await dataSet('vehicles', vid, { ...stripId(v), observacoes: obs });
+    if (obs && obs !== (v.observacoes || '')) logEvento('vehicle', vid, '📝', 'Observação registrada', obs.slice(0, 80));
     toast('Observações salvas ✓');
   } catch (e) { toast('Erro ao salvar.'); }
 }
@@ -1525,13 +1553,14 @@ function renderMotoristas() {
     .sort((a, b) => a.nome.localeCompare(b.nome))
     .map(d => {
       const van = S.vehicles.find(v => v.id === d.veiculoId);
+      const stTag = d.status === 'ferias' ? '🌴 Férias · ' : d.status === 'inativo' ? '⚪ Inativo · ' : '';
       return `
         <button class="veh-card" onclick='openDrvDetail(${JSON.stringify(d.id)})'>
           <div class="veh-top">
             <div class="veh-ico">${d.foto ? `<img src="${d.foto}" alt="">` : '🧑‍✈️'}</div>
             <div>
               <div class="veh-nome">${esc(d.nome)}</div>
-              <div class="veh-sub">${van ? '🚐 ' + esc(van.nome) + ' · ' : ''}CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</div>
+              <div class="veh-sub">${stTag}${van ? '🚐 ' + esc(van.nome) + ' · ' : ''}CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</div>
             </div>
             ${cnhBadge(d)}
           </div>
@@ -1547,15 +1576,36 @@ function openDrvDetail(id) {
   detailDrvId = id;
   const van = S.vehicles.find(v => v.id === d.veiculoId);
   const dias = diasAte(d.cnhValidade);
+  const stLabelD = { ativo: '🟢 Ativo', ferias: '🌴 Férias', inativo: '⚪ Inativo' };
+  const stClsD = { ativo: 'st-ativo', ferias: 'st-manutencao', inativo: 'st-inativo' };
   $('drv-detail-title').textContent = d.nome;
+
+  // indicadores (4)
+  const rodou = d.veiculoId ? kmRodadoMes(d.veiculoId) : 0;
+  const mk = monthKey(0);
+  const gastoVan = d.veiculoId
+    ? S.tx.filter(t => t.veiculo === d.veiculoId && t.tipo === 'despesa' && (t.data || '').startsWith(mk)).reduce((s, t) => s + t.valor, 0)
+    : 0;
+  const cnhTxt = dias === null ? '—' : dias < 0 ? 'VENCIDA' : `vence em ${dias}d`;
   const cells = [
-    ['Telefone', d.telefone || '—'],
-    ['CNH', 'Categoria ' + (d.cnhCategoria || '—')],
-    ['Validade da CNH', fmtData(d.cnhValidade)],
+    ['Van atual', van ? van.nome : '—'],
+    ['CNH', cnhTxt],
+    ['Rodou no mês (van)', rodou ? fmtKm(rodou) : '—'],
+    ['Gastos da van no mês', d.veiculoId ? R(gastoVan) : '—'],
   ];
-  const alerta = dias !== null && dias <= 30
-    ? `<div class="alert-item${dias < 0 ? ' crit' : ''}" style="width:100%"><span class="a-ico">🪪</span><div><b>${dias < 0 ? 'CNH VENCIDA' : 'CNH vence em ' + dias + ' dia' + (dias === 1 ? '' : 's')}</b><small>${fmtData(d.cnhValidade)}</small></div></div>`
+  // informações completas
+  const info = [
+    ['Telefone', d.telefone || '—'],
+    ['Categoria da CNH', d.cnhCategoria || '—'],
+    ['Validade da CNH', fmtData(d.cnhValidade)],
+    ['Veículo atual', van ? van.nome : '—'],
+    ['Data de cadastro', d.criadoEm ? fmtData(new Date(d.criadoEm).toISOString().slice(0, 10)) : '—'],
+    ['Cadastrado por', d.criadoPorNome || '—'],
+  ];
+  const alertaCNH = dias !== null && dias <= 30
+    ? `<div class="venc-chips"><span class="venc-chip ${dias < 0 ? 'vc-crit' : 'vc-warn'}">🪪 CNH: ${fmtData(d.cnhValidade)} (${dias < 0 ? 'VENCIDA' : 'em ' + dias + 'd'})</span></div>`
     : '';
+
   $('drv-detail-body').innerHTML = `
     <div class="ficha-head">
       <button class="veh-ico ficha-foto" onclick="pickDrvFoto('${id}')" title="Trocar foto">${d.foto ? `<img src="${d.foto}" alt="">` : '🧑‍✈️'}</button>
@@ -1564,18 +1614,122 @@ function openDrvDetail(id) {
         <small>CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</small>
         <small>${van ? '🚐 ' + esc(van.nome) : 'Sem veículo vinculado'}</small>
       </div>
-      ${cnhBadge(d)}
+      <span class="veh-status ${stClsD[d.status] || 'st-ativo'}">${stLabelD[d.status] || stLabelD.ativo}</span>
     </div>
-    ${alerta}
+
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
-    ${van ? `<button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick="closeOverlay('modal-drv-detail');openVehDetail('${van.id}')">🚐 Abrir ficha da ${esc(van.nome)}</button>` : ''}
-    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-drv-detail');openDriverForm('${id}')">✏️ Editar motorista</button>
-    <h2 class="sec-title">📄 Documentos (CNH, exames…)</h2>
+
+    <div class="quick-row quick-2x2">
+      <button class="qa" onclick="openTrocaVeiculo('${id}')"><span>🔁</span>Trocar<br>veículo</button>
+      <button class="qa" onclick="openCNHForm('${id}')"><span>🪪</span>Atualizar<br>CNH</button>
+      <button class="qa" onclick="pickAnexo('driver','${id}','drv-anexos')"><span>📄</span>Adicionar<br>documento</button>
+      <button class="qa" onclick="focarObsMotorista()"><span>📝</span>Registrar<br>observação</button>
+    </div>
+
+    <h2 class="sec-title">📜 Histórico</h2>
+    <div id="drv-timeline"><div class="empty-mini">Carregando…</div></div>
+
+    <h2 class="sec-title">📄 Documentos (frente e verso da CNH, exames…)</h2>
+    ${alertaCNH}
     <div class="anexos-list" id="drv-anexos"></div>
-    ${d.observacoes ? `<h2 class="sec-title">📝 Observações</h2><div class="vd-obs">${esc(d.observacoes)}</div>` : ''}
+
+    <h2 class="sec-title">📝 Observações</h2>
+    <label class="fld"><textarea id="drv-obs-inline" rows="3" placeholder="Anotações livres sobre este motorista…">${esc(d.observacoes || '')}</textarea></label>
+    <button class="btn btn-small" style="margin-top:-6px" onclick="salvarObsMotorista('${id}')">Salvar observações</button>
+
+    <h2 class="sec-title">⚙️ Informações</h2>
+    <div class="vd-grid">${info.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    ${van ? `<button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick="closeOverlay('modal-drv-detail');openVehDetail('${van.id}')">🚐 Abrir Central da ${esc(van.nome)}</button>` : ''}
+    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-drv-detail');openDriverForm('${id}')">✏️ Editar dados do motorista</button>
   `;
-  renderAnexosInto('drv-anexos', id, 'driver');
+  renderDrvTimeline(id);
   openOverlay('modal-drv-detail');
+}
+
+// linha do tempo do motorista: eventos + documentos anexados
+async function renderDrvTimeline(did) {
+  let eventos = [];
+  try { eventos = (await eventosDe(did)).map(e => ({ ts: e.ts || 0, html: eventoHTML(e) })); } catch (e) {}
+  const docs = await renderAnexosInto('drv-anexos', did, 'driver');
+  docs.forEach(a => eventos.push({
+    ts: a.ts || 0,
+    html: `
+      <button class="tx-item" onclick="openAnexoViewer('${a.id}')">
+        <div class="tx-ico">${a.mime === 'application/pdf' ? '📄' : '🖼️'}</div>
+        <div class="tx-body">
+          <div class="tx-title">Documento: ${esc(a.nome)}</div>
+          <div class="tx-meta">${authorChip(a.autorNome)} · ${a.ts ? fmtDia(new Date(a.ts).toISOString().slice(0, 10)) : ''}</div>
+        </div>
+      </button>`,
+  }));
+  const el = $('drv-timeline');
+  if (!el) return;
+  eventos.sort((a, b) => b.ts - a.ts);
+  el.innerHTML = eventos.length
+    ? eventos.slice(0, 10).map(e => e.html).join('')
+    : '<div class="empty-mini">Nenhum evento ainda.</div>';
+}
+
+// ── ações rápidas da Central do Motorista ──
+let acaoDrvId = null;
+function openTrocaVeiculo(did) {
+  const d = S.drivers.find(x => x.id === did);
+  if (!d) return;
+  acaoDrvId = did;
+  $('troca-info').textContent = d.nome + ' está ' + (d.veiculoId ? 'na ' + vehNome(d.veiculoId) : 'sem van no momento') + '.';
+  $('troca-veiculo').innerHTML = '<option value="">— Nenhuma —</option>' +
+    S.vehicles.filter(v => v.status !== 'inativo')
+      .map(v => `<option value="${v.id}">${esc(v.nome)}${v.placa ? ' · ' + esc(v.placa) : ''}</option>`).join('');
+  $('troca-veiculo').value = d.veiculoId || '';
+  openOverlay('modal-troca');
+}
+async function salvarTrocaVeiculo() {
+  const d = S.drivers.find(x => x.id === acaoDrvId);
+  if (!d) return;
+  const novo = $('troca-veiculo').value || '';
+  closeOverlay('modal-troca');
+  if ((d.veiculoId || '') === novo) { toast('Nada mudou.'); return; }
+  try {
+    await dataSet('drivers', d.id, { ...stripId(d), veiculoId: novo, atualizadoPorNome: me.nome || me.email, atualizadoEm: Date.now() });
+    registrarTrocaEventos(d.id, d.nome, d.veiculoId || '', novo);
+    toast('Veículo trocado ✓');
+    closeOverlay('modal-drv-detail');
+  } catch (e) { toast('Erro ao salvar.'); }
+}
+function openCNHForm(did) {
+  const d = S.drivers.find(x => x.id === did);
+  if (!d) return;
+  acaoDrvId = did;
+  $('cnh-cat').value = d.cnhCategoria || 'D';
+  $('cnh-val').value = d.cnhValidade || '';
+  openOverlay('modal-cnh');
+}
+async function salvarCNH() {
+  const d = S.drivers.find(x => x.id === acaoDrvId);
+  if (!d) return;
+  const val = $('cnh-val').value || '';
+  const cat = $('cnh-cat').value;
+  closeOverlay('modal-cnh');
+  try {
+    await dataSet('drivers', d.id, { ...stripId(d), cnhCategoria: cat, cnhValidade: val, atualizadoPorNome: me.nome || me.email, atualizadoEm: Date.now() });
+    logEvento('driver', d.id, '🪪', 'CNH atualizada', 'categoria ' + cat + ', válida até ' + fmtData(val));
+    toast('CNH atualizada ✓');
+    closeOverlay('modal-drv-detail');
+  } catch (e) { toast('Erro ao salvar.'); }
+}
+function focarObsMotorista() {
+  const el = $('drv-obs-inline');
+  if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+}
+async function salvarObsMotorista(did) {
+  const d = S.drivers.find(x => x.id === did);
+  if (!d) return;
+  const obs = $('drv-obs-inline').value.trim();
+  try {
+    await dataSet('drivers', did, { ...stripId(d), observacoes: obs });
+    if (obs && obs !== (d.observacoes || '')) logEvento('driver', did, '📝', 'Observação registrada', obs.slice(0, 80));
+    toast('Observações salvas ✓');
+  } catch (e) { toast('Erro ao salvar.'); }
 }
 
 // foto do motorista
@@ -1639,6 +1793,7 @@ function openDriverForm(idOrNull) {
     S.vehicles.filter(v => v.status !== 'inativo' || (d && d.veiculoId === v.id))
       .map(v => `<option value="${v.id}">${esc(v.nome)}${v.placa ? ' · ' + esc(v.placa) : ''}</option>`).join('');
   $('drv-veiculo').value = d ? (d.veiculoId || '') : '';
+  $('drv-status').value = d ? (d.status || 'ativo') : 'ativo';
   $('drv-del-btn').style.display = d ? '' : 'none';
   openOverlay('modal-driver');
 }
@@ -1653,8 +1808,10 @@ async function saveDriver() {
     cnhCategoria: $('drv-cnh-cat').value,
     cnhValidade: $('drv-cnh-val').value || '',
     veiculoId: $('drv-veiculo').value || '',
+    status: $('drv-status').value,
     observacoes: $('drv-obs').value.trim(),
     foto: origD?.foto || '',
+    criadoEm: origD?.criadoEm || Date.now(),
     criadoPorNome: origD?.criadoPorNome || me.nome || me.email,
     atualizadoPorNome: me.nome || me.email,
     atualizadoEm: Date.now(),
@@ -1663,9 +1820,26 @@ async function saveDriver() {
   closeOverlay('modal-driver');
   try {
     await dataSet('drivers', id, d);
+    // eventos do histórico
+    if (!origD) {
+      logEvento('driver', id, '🧑‍✈️', 'Entrada na empresa', d.nome + ' cadastrado');
+      if (d.veiculoId) registrarTrocaEventos(id, d.nome, '', d.veiculoId);
+    } else {
+      if ((origD.veiculoId || '') !== d.veiculoId) registrarTrocaEventos(id, d.nome, origD.veiculoId || '', d.veiculoId);
+      if ((origD.cnhValidade || '') !== d.cnhValidade) logEvento('driver', id, '🪪', 'CNH atualizada', 'válida até ' + fmtData(d.cnhValidade));
+    }
     toast(editingDrvId ? 'Motorista atualizado ✓' : 'Motorista adicionado ✓');
   } catch (e) { toast('Erro ao salvar.'); }
   editingDrvId = null;
+}
+
+// eventos gerados por uma troca de veículo (no motorista e nas vans)
+function registrarTrocaEventos(did, nome, oldVid, newVid) {
+  const de = oldVid ? vehNome(oldVid) : 'nenhuma van';
+  const para = newVid ? vehNome(newVid) : 'nenhuma van';
+  logEvento('driver', did, '🔁', 'Troca de veículo', de + ' → ' + para);
+  if (oldVid) logEvento('vehicle', oldVid, '🧑‍✈️', nome + ' deixou esta van', '');
+  if (newVid) logEvento('vehicle', newVid, '🧑‍✈️', nome + ' assumiu esta van', '');
 }
 
 function deleteDriverFromForm() {
