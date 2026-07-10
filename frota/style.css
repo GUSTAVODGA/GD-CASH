@@ -435,6 +435,14 @@ button.alert-item:active { transform: scale(.985); }
 .qa:active { transform: scale(.96); }
 .qa span { display: block; font-size: 1.5rem; margin-bottom: 6px; }
 
+.quick-2x2 { grid-template-columns: repeat(2, 1fr); margin: 4px 0 6px; }
+.venc-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.venc-chip { font-size: .74rem; font-weight: 700; padding: 5px 10px; border-radius: 999px; }
+.vc-ok   { background: rgba(52,211,153,.14); color: var(--pos); }
+.vc-warn { background: rgba(251,191,36,.18); color: var(--warn); }
+.vc-crit { background: rgba(248,113,113,.16); color: var(--neg); }
+.sec-sub { font-size: .74rem; font-weight: 700; color: var(--txt3); margin: 4px 2px 6px; }
+
 /* ═══════════ PAINEL / TILES ═══════════ */
 .dash-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
 .tile {

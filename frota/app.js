@@ -457,7 +457,7 @@ async function renderNotasVeiculo(elId, vid) {
   if (!el) return;
   let list = [];
   try { list = await notasDoVeiculo(vid); } catch (e) { return; }
-  const secEl = $('veh-notas-sec');
+  const secEl = $('veh-notas-wrap');
   if (secEl) secEl.style.display = list.length ? '' : 'none';
   if (!list.length) { el.innerHTML = ''; return; }
   list.sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach(a => { _anexosVistos[a.id] = a; });
@@ -475,11 +475,11 @@ async function deleteAnexoRecord(id) {
 
 async function renderAnexosInto(elId, parentId, tipo) {
   const el = $(elId);
-  if (!el) return;
+  if (!el) return [];
   el.innerHTML = '<div class="empty-mini">Carregando anexos…</div>';
   let list = [];
   try { list = await anexosDe(parentId); }
-  catch (e) { el.innerHTML = '<div class="empty-mini">Não deu para carregar os anexos.</div>'; return; }
+  catch (e) { el.innerHTML = '<div class="empty-mini">Não deu para carregar os anexos.</div>'; return []; }
   list.forEach(a => { _anexosVistos[a.id] = a; });
   el.innerHTML = list.map(a => `
     <div class="anexo-chip">
@@ -488,6 +488,7 @@ async function renderAnexosInto(elId, parentId, tipo) {
       <button class="x" onclick="removeAnexo('${a.id}','${elId}','${parentId}','${tipo}')">✕</button>
     </div>`).join('') +
     `<button class="btn btn-small" onclick="pickAnexo('${tipo}','${parentId}','${elId}')">📎 Anexar foto ou PDF</button>`;
+  return list;
 }
 function pickAnexo(tipo, parentId, elId) {
   anexoCtx = { tipo, parentId, elId };
@@ -1329,61 +1330,140 @@ function openVehDetail(id) {
 
   const mot = motoristaDe(id);
   const stLabel = { ativo: '🟢 Ativo', manutencao: '🟡 Manutenção', inativo: '⚪ Inativo' };
-  const fuels = txsV.filter(t => t.cat === 'combustivel');
-  const manuts = txsV.filter(t => t.cat === 'manutencao' || t.cat === 'pneus');
-  const outros = txsV.filter(t => t.tipo === 'despesa' && !['combustivel', 'manutencao', 'pneus'].includes(t.cat));
+
+  // indicadores principais (4)
   const cells = [
     ['Km atual', v.km ? fmtKm(v.km) : '—'],
-    ['Rodou no mês', rodou ? fmtKm(rodou) : '—'],
     ['Gasto no mês', R(gastoMes)],
-    ['Custo por km (mês)', custoKm ? R(custoKm) : '—'],
     ['Consumo médio', cons ? cons.toFixed(1).replace('.', ',') + ' km/L' : '—'],
-    ['Próx. troca de óleo', proxOleo > (Number(v.oleoUltimaKm) || 0) ? fmtKm(proxOleo) : '—'],
+    ['Próx. manutenção', proxOleo > (Number(v.oleoUltimaKm) || 0) ? 'Óleo aos ' + fmtKm(proxOleo) : '—'],
+  ];
+  // informações técnicas (tudo do cadastro)
+  const tech = [
+    ['Placa', v.placa || '—'],
+    ['Modelo', (v.modelo || '—') + (v.ano ? ' · ' + v.ano : '')],
+    ['Rodou no mês', rodou ? fmtKm(rodou) : '—'],
+    ['Custo por km (mês)', custoKm ? R(custoKm) : '—'],
+    ['Troca de óleo a cada', v.oleoIntervalo ? fmtKm(v.oleoIntervalo) : '—'],
+    ['Última troca de óleo', v.oleoUltimaKm ? fmtKm(v.oleoUltimaKm) : '—'],
     ['Licenciamento', fmtData(v.licenciamento)],
     ['Seguro', fmtData(v.seguro)],
   ];
-  const kmLogs = S.kmlog.filter(l => l.veiculo === id)
-    .sort((a, b) => b.data.localeCompare(a.data) || b.km - a.km).slice(0, 5);
-  const sec = (titulo, itens) => itens.length
-    ? `<h2 class="sec-title">${titulo}</h2>` + itens.slice(0, 5).map(txItemHTML).join('')
-    : '';
+  // vencimentos exibidos junto dos documentos
+  const vencChip = (label, data) => {
+    const dias = diasAte(data);
+    if (dias === null) return '';
+    const cls = dias < 0 ? 'vc-crit' : dias <= 30 ? 'vc-warn' : 'vc-ok';
+    const txt = dias < 0 ? 'VENCIDO' : dias === 0 ? 'vence HOJE' : `em ${dias}d`;
+    return `<span class="venc-chip ${cls}">${label}: ${fmtData(data)} (${txt})</span>`;
+  };
+  const vencimentos = vencChip('Licenciamento', v.licenciamento) + vencChip('Seguro', v.seguro);
+
   $('veh-detail-body').innerHTML = `
     <div class="ficha-head">
       <button class="veh-ico ficha-foto" onclick="pickVehFoto('${id}')" title="Trocar foto">${v.foto ? `<img src="${v.foto}" alt="">` : '🚐'}</button>
       <div class="ficha-info">
         <b>${esc(v.nome)}</b>
-        <small>${esc(v.placa || 'sem placa')}${v.modelo ? ' · ' + esc(v.modelo) : ''}${v.ano ? ' · ' + esc(v.ano) : ''}</small>
+        <small>${esc(v.placa || 'sem placa')}${v.modelo ? ' · ' + esc(v.modelo) : ''}</small>
         <small>🧑‍✈️ ${mot ? esc(mot.nome) : 'Sem motorista vinculado'}</small>
       </div>
       <span class="veh-status st-${v.status || 'ativo'}">${stLabel[v.status] || stLabel.ativo}</span>
     </div>
+
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
-    <button class="btn btn-primary btn-block" onclick="lancarParaVan('${id}')">➕ Lançar despesa/receita desta van</button>
-    <div class="fld-row" style="margin-top:8px">
-      <button class="btn btn-secondary" onclick="openKmForm('${id}')">📍 Registrar km</button>
-      <button class="btn btn-secondary" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar</button>
+
+    <div class="quick-row quick-2x2">
+      <button class="qa" onclick="registrarAbastecimento('${id}')"><span>⛽</span>Registrar<br>abastecimento</button>
+      <button class="qa" onclick="registrarManutencao('${id}')"><span>🛠️</span>Registrar<br>manutenção</button>
+      <button class="qa" onclick="openKmForm('${id}')"><span>📍</span>Atualizar<br>KM</button>
+      <button class="qa" onclick="pickAnexo('vehicle','${id}','veh-anexos')"><span>📄</span>Adicionar<br>documento</button>
     </div>
-    <h2 class="sec-title">📄 Documentos (CRLV, seguro, fotos…)</h2>
+
+    <h2 class="sec-title">📜 Histórico</h2>
+    <div id="van-timeline"><div class="empty-mini">Carregando…</div></div>
+    <button class="btn-link" onclick="verHistoricoCompleto('${id}')">Ver todos os lançamentos →</button>
+
+    <h2 class="sec-title">📄 Documentos</h2>
+    ${vencimentos ? `<div class="venc-chips">${vencimentos}</div>` : ''}
     <div class="anexos-list" id="veh-anexos"></div>
-    <div id="veh-notas-sec" style="display:none">
-      <h2 class="sec-title">🧾 Notas fiscais</h2>
+    <div id="veh-notas-wrap" style="display:none">
+      <div class="sec-sub">Notas fiscais de lançamentos</div>
       <div class="anexos-list" id="veh-notas"></div>
     </div>
-    ${sec('⛽ Abastecimentos', fuels)}
-    ${sec('🛠 Manutenções', manuts)}
-    ${sec('💰 Outros gastos', outros)}
-    ${txsV.length > 5 ? `<button class="btn-link" onclick="verHistoricoCompleto('${id}')">Ver histórico completo →</button>` : ''}
-    ${kmLogs.length ? '<h2 class="sec-title">📍 Leituras de km</h2><div class="card">' + kmLogs.map(l => `
-      <div class="row-btn">
-        <span class="row-ico">📍</span>
-        <span class="row-txt"><b>${fmtKm(l.km)}</b><small>${fmtDia(l.data)} · por ${esc((l.autorNome || '?').split(' ')[0])}</small></span>
-        <button class="x" onclick="deleteKmLog('${l.id}')">✕</button>
-      </div>`).join('') + '</div>' : ''}
-    ${v.observacoes ? `<h2 class="sec-title">📝 Observações</h2><div class="vd-obs">${esc(v.observacoes)}</div>` : ''}
+
+    <h2 class="sec-title">📝 Observações</h2>
+    <label class="fld"><textarea id="van-obs" rows="3" placeholder="Anotações livres sobre esta van…">${esc(v.observacoes || '')}</textarea></label>
+    <button class="btn btn-small" style="margin-top:-6px" onclick="salvarObsVan('${id}')">Salvar observações</button>
+
+    <h2 class="sec-title">⚙️ Informações técnicas</h2>
+    <div class="vd-grid">${tech.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar dados do veículo</button>
   `;
-  renderAnexosInto('veh-anexos', id, 'vehicle');
+  renderVanTimeline(id, txsV);
   renderNotasVeiculo('veh-notas', id);
   openOverlay('modal-veh-detail');
+}
+
+// ── Linha do tempo da van: lançamentos + leituras de km + documentos ──
+async function renderVanTimeline(vid, txsV) {
+  const eventos = [
+    ...txsV.map(t => ({ ts: t.ts || 0, html: txItemHTML(t) })),
+    ...S.kmlog.filter(l => l.veiculo === vid).map(l => ({
+      ts: l.ts || 0,
+      html: `
+        <div class="tx-item" style="cursor:default">
+          <div class="tx-ico">📍</div>
+          <div class="tx-body">
+            <div class="tx-title">Km registrado: ${fmtKm(l.km)}</div>
+            <div class="tx-meta">${authorChip(l.autorNome)} · ${fmtDia(l.data)}</div>
+          </div>
+          <button class="x" onclick="deleteKmLog('${l.id}')">✕</button>
+        </div>`,
+    })),
+  ];
+  // documentos entram na linha do tempo assim que carregam
+  const docs = await renderAnexosInto('veh-anexos', vid, 'vehicle');
+  docs.forEach(a => eventos.push({
+    ts: a.ts || 0,
+    html: `
+      <button class="tx-item" onclick="openAnexoViewer('${a.id}')">
+        <div class="tx-ico">${a.mime === 'application/pdf' ? '📄' : '🖼️'}</div>
+        <div class="tx-body">
+          <div class="tx-title">Documento: ${esc(a.nome)}</div>
+          <div class="tx-meta">${authorChip(a.autorNome)} · ${a.ts ? fmtDia(new Date(a.ts).toISOString().slice(0, 10)) : ''}</div>
+        </div>
+      </button>`,
+  }));
+  const el = $('van-timeline');
+  if (!el) return;
+  eventos.sort((a, b) => b.ts - a.ts);
+  el.innerHTML = eventos.length
+    ? eventos.slice(0, 10).map(e => e.html).join('')
+    : '<div class="empty-mini">Nenhum evento ainda — use as ações rápidas acima.</div>';
+}
+
+// ações rápidas com contexto embutido
+function registrarAbastecimento(vid) {
+  closeOverlay('modal-veh-detail');
+  openTxForm();
+  pickCat('combustivel');
+  $('tx-veiculo').value = vid;
+  updateFuelExtra();
+  updateFuelHint();
+}
+function registrarManutencao(vid) {
+  closeOverlay('modal-veh-detail');
+  openTxForm();
+  pickCat('manutencao');
+  $('tx-veiculo').value = vid;
+}
+async function salvarObsVan(vid) {
+  const v = vehById(vid);
+  if (!v) return;
+  try {
+    await dataSet('vehicles', vid, { ...stripId(v), observacoes: $('van-obs').value.trim() });
+    toast('Observações salvas ✓');
+  } catch (e) { toast('Erro ao salvar.'); }
 }
 
 // lançamento nascendo de dentro da ficha: van já selecionada
