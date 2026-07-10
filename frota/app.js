@@ -1121,7 +1121,7 @@ function openKmForm(vid) {
     $('km-veh-info').textContent = v.nome + (v.km ? ' — última leitura: ' + fmtKm(v.km) : '');
   } else {
     // veio do atalho do Início: escolher o veículo
-    if (!S.vehicles.length) { toast('Cadastre um veículo primeiro (aba Frota).'); return; }
+    if (!S.vehicles.length) { toast('Cadastre um veículo primeiro (módulo Operação).'); return; }
     kmVehId = null;
     const sel = $('km-veiculo');
     sel.innerHTML = '<option value="">— Escolha a van —</option>' +

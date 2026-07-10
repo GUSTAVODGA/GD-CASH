@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=20">
+<link rel="stylesheet" href="style.css?v=21">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -121,14 +121,14 @@
 
     <div id="inicio-vazio" class="empty-big" style="display:none">
       <span class="e-ico">🚐</span>Bem-vindo ao sistema da Lagos!<br>
-      Comece cadastrando as vans na aba <b>Frota</b> e lançando o primeiro gasto no botão <b>+</b>.
+      Comece cadastrando as vans em <b>Operação</b> e lançando o primeiro gasto no botão <b>+</b>.
     </div>
   </section>
 
-  <!-- ── PÁGINA: LANÇAMENTOS ── -->
+  <!-- ── MÓDULO: FINANCEIRO ── -->
   <section class="page" id="page-lanc">
     <header class="page-head">
-      <h1 class="page-title">Lançamentos</h1>
+      <h1 class="page-title">Financeiro</h1>
     </header>
 
     <div class="month-nav">
@@ -157,10 +157,10 @@
     <div id="lanc-list"></div>
   </section>
 
-  <!-- ── PÁGINA: FROTA ── -->
+  <!-- ── MÓDULO: OPERAÇÃO ── -->
   <section class="page" id="page-frota">
     <header class="page-head">
-      <h1 class="page-title">Frota</h1>
+      <h1 class="page-title">Operação</h1>
       <button class="btn btn-small" onclick="openVehicleForm()">+ Veículo</button>
     </header>
     <input class="veh-filter" id="frota-busca" placeholder="🔍 Buscar por apelido, placa ou motorista" oninput="renderFrota()" autocomplete="off">
@@ -176,10 +176,10 @@
     <div id="driver-list"></div>
   </section>
 
-  <!-- ── PÁGINA: AJUSTES ── -->
+  <!-- ── MÓDULO: EMPRESA ── -->
   <section class="page" id="page-mais">
     <header class="page-head">
-      <h1 class="page-title">Ajustes</h1>
+      <h1 class="page-title">Empresa</h1>
     </header>
 
     <h2 class="sec-title">Minha conta</h2>
@@ -219,16 +219,16 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.6 🚐</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.7 🚐</p>
   </section>
 
-  <!-- ── NAV INFERIOR ── -->
+  <!-- ── NAV INFERIOR: 5 módulos ── -->
   <nav class="bottom-nav">
-    <button class="nav-btn nav-on" data-tab="inicio" onclick="goTab('inicio')"><span class="nav-ico">🏠</span><span>Início</span></button>
-    <button class="nav-btn" data-tab="lanc" onclick="goTab('lanc')"><span class="nav-ico">💰</span><span>Lançamentos</span></button>
-    <button class="nav-btn" data-tab="frota" onclick="goTab('frota')"><span class="nav-ico">🚐</span><span>Frota</span></button>
+    <button class="nav-btn nav-on" data-tab="inicio" onclick="goTab('inicio')"><span class="nav-ico">🏠</span><span>Central</span></button>
+    <button class="nav-btn" data-tab="frota" onclick="goTab('frota')"><span class="nav-ico">🚐</span><span>Operação</span></button>
     <button class="nav-btn" data-tab="motoristas" onclick="goTab('motoristas')"><span class="nav-ico">🧑‍✈️</span><span>Motoristas</span></button>
-    <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico">⚙️</span><span>Ajustes</span></button>
+    <button class="nav-btn" data-tab="lanc" onclick="goTab('lanc')"><span class="nav-ico">💰</span><span>Financeiro</span></button>
+    <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico">🏢</span><span>Empresa</span></button>
   </nav>
 
   <button id="fab" onclick="openTxForm()">+</button>
@@ -389,6 +389,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=20"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>
