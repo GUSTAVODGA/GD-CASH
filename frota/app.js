@@ -295,13 +295,16 @@ function loginError(msg) {
 function mapAuthError(err) {
   const map = {
     'auth/invalid-credential': 'Senha incorreta. Tente de novo.',
+    'auth/invalid-login-credentials': 'Senha incorreta. Tente de novo.',
     'auth/wrong-password': 'Senha incorreta. Tente de novo.',
     'auth/user-not-found': 'Este e-mail não tem acesso ao sistema.',
     'auth/invalid-email': 'E-mail inválido.',
-    'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos.',
-    'auth/network-request-failed': 'Sem conexão. Verifique a internet.',
+    'auth/user-disabled': 'Este acesso foi desativado.',
+    'auth/operation-not-allowed': 'Login por senha desativado no servidor — avise o administrador.',
+    'auth/too-many-requests': 'Muitas tentativas. Aguarde alguns minutos e tente de novo.',
+    'auth/network-request-failed': 'Sem conexão com o servidor. Verifique a internet e tente de novo.',
   };
-  return map[err.code] || 'Erro ao entrar: ' + err.message;
+  return map[err.code] || 'Erro ao entrar (' + (err.code || '?') + '). Tente fechar e abrir o app.';
 }
 
 function doLogin() {
@@ -1973,8 +1976,27 @@ document.querySelectorAll('.overlay').forEach(ov => {
   ov.addEventListener('click', e => { if (e.target === ov) ov.classList.remove('open'); });
 });
 
+// Auto-atualização: busca versão nova ao abrir e recarrega quando ela chega,
+// evitando aparelhos presos em versões antigas do app instalado
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      reg.update().catch(() => {});
+      setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+    }).catch(() => {});
+    const tinhaVersaoAntiga = !!navigator.serviceWorker.controller;
+    let recarregou = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!tinhaVersaoAntiga || recarregou) return;
+      recarregou = true;
+      location.reload();
+    });
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      navigator.serviceWorker.getRegistration().then(r => r && r.update().catch(() => {}));
+    }
+  });
 }
 
 initApp();
