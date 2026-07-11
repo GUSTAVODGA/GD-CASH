@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=30">
+<link rel="stylesheet" href="style.css?v=31">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -90,19 +90,19 @@
     <div id="status-card"></div>
 
     <!-- 3. Indicadores do mês -->
-    <div class="hero-card" id="hero-inicio">
-      <button class="hero-share" data-ic="share" onclick="shareResumoMes()" title="Compartilhar resumo do mês"></button>
+    <button class="hero-card hero-compact" id="hero-inicio" onclick="goTab('lanc')">
       <div class="hero-label">Resultado de <span id="hero-month"></span></div>
       <div class="hero-value" id="hero-liq">R$ 0,00</div>
       <div class="hero-row">
         <div class="hero-mini pos"><span class="hero-mini-lbl">▲ Receitas</span><span id="hero-inc">R$ 0,00</span></div>
         <div class="hero-mini neg"><span class="hero-mini-lbl">▼ Despesas</span><span id="hero-exp">R$ 0,00</span></div>
       </div>
-    </div>
+      <span class="hero-cta">Ver detalhes →</span>
+    </button>
     <div class="dash-tiles dash-tiles-2" id="dash-tiles"></div>
 
-    <!-- 4. Pendências -->
-    <div id="alert-section" style="display:none">
+    <!-- 4. Pendências (sempre visível — mostra estado vazio quando não há nada) -->
+    <div id="alert-section">
       <h2 class="sec-title" data-ic="alert">Pendências</h2>
       <div id="alert-list"></div>
     </div>
@@ -113,7 +113,7 @@
         <h2 class="sec-title" data-ic="history">Atividade recente</h2>
         <button class="btn-link" onclick="goTab('lanc')">Ver tudo →</button>
       </div>
-      <div id="recent-list"></div>
+      <div id="recent-list" class="feed"></div>
     </div>
 
     <!-- 6. Gráfico: frota × escritório + maiores categorias -->
@@ -121,17 +121,13 @@
       <h2 class="sec-title" data-ic="chart">Despesas do mês</h2>
       <div class="card" id="inicio-chart"></div>
     </div>
-
-    <div id="inicio-vazio" class="empty-big" style="display:none">
-      <span class="e-ico" data-ic="truck"></span>Bem-vindo ao sistema da Lagos!<br>
-      Comece cadastrando as vans em <b>Operação</b> e lançando o primeiro gasto no <b>Financeiro</b>.
-    </div>
   </section>
 
   <!-- ── MÓDULO: FINANCEIRO ── -->
   <section class="page" id="page-lanc">
     <header class="page-head">
       <h1 class="page-title">Financeiro</h1>
+      <button class="btn btn-small" data-ic="share" onclick="shareResumoMes()">Compartilhar</button>
     </header>
 
     <div class="month-nav">
@@ -240,7 +236,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.16</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.17</p>
   </section>
 
   <!-- ── NAV INFERIOR: 5 módulos ── -->
@@ -513,6 +509,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=30"></script>
+<script src="app.js?v=31"></script>
 </body>
 </html>

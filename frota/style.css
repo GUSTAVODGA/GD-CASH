@@ -177,12 +177,6 @@ small { color: var(--txt3); }
 }
 .hero-card.neg { background: linear-gradient(140deg, #7f1d1d 0%, #16223a 85%); border-color: #8a3434; }
 .hero-card { position: relative; }
-.hero-share {
-  position: absolute; top: 14px; right: 14px;
-  width: 42px; height: 42px; border-radius: 12px;
-  background: rgba(255,255,255,.12); color: #fff;
-  display: flex; align-items: center; justify-content: center;
-}
 .hero-label { font-size: .82rem; color: rgba(232,237,247,.7); text-transform: uppercase; letter-spacing: .06em; }
 .hero-value { font-size: 2.2rem; font-weight: 800; letter-spacing: -.03em; margin: 6px 0 16px; font-variant-numeric: tabular-nums; }
 .hero-row { display: flex; gap: 10px; }
@@ -193,6 +187,18 @@ small { color: var(--txt3); }
 .hero-mini-lbl { font-size: .72rem; font-weight: 600; opacity: .75; }
 .hero-mini.pos span:last-child { color: #6ee7b7; }
 .hero-mini.neg span:last-child { color: #fca5a5; }
+
+/* Central: hero mais enxuto (~22% menor) e com CTA contextual no lugar do compartilhar */
+.hero-compact { display: block; width: 100%; text-align: left; padding: 16px 18px; border-radius: 18px; }
+.hero-compact .hero-label { font-size: .74rem; }
+.hero-compact .hero-value { font-size: 1.7rem; margin: 3px 0 12px; }
+.hero-compact .hero-mini { padding: 8px 11px; font-size: .9rem; }
+.hero-compact:active { transform: scale(.99); }
+.hero-cta {
+  position: absolute; top: 16px; right: 16px;
+  font-size: .78rem; font-weight: 700; color: #cdd8ee;
+  background: rgba(255,255,255,.12); padding: 5px 11px; border-radius: 999px;
+}
 
 /* ═══════════ ALERTAS ═══════════ */
 .alert-item {
@@ -477,6 +483,45 @@ button.tile:active { transform: scale(.96); }
 .tile b { display: block; font-size: 1.2rem; font-variant-numeric: tabular-nums; }
 .tile small { font-size: .66rem; text-transform: uppercase; letter-spacing: .04em; }
 .tile.warn b { color: var(--warn); }
+/* ícone pequeno em cada indicador (Veículos / Motoristas) */
+.dash-tiles-2 .tile { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 14px 10px; text-align: left; }
+.tile-ic { display: flex; width: 34px; height: 34px; border-radius: 10px; background: var(--card2); align-items: center; justify-content: center; color: var(--accent); flex: none; }
+.dash-tiles-2 .tile b { font-size: 1.35rem; }
+.dash-tiles-2 .tile small { display: block; }
+
+/* ═══════════ PENDÊNCIAS: estado tranquilo ═══════════ */
+.pend-ok {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 13px 15px; color: var(--txt2); font-size: .9rem; font-weight: 600;
+  box-shadow: var(--shadow-card);
+}
+.pend-ok .ic { color: var(--pos); flex: none; }
+
+/* ═══════════ ATIVIDADE RECENTE (feed) ═══════════ */
+.feed { display: flex; flex-direction: column; gap: 6px; }
+.feed-item {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 11px 14px;
+  box-shadow: var(--shadow-card);
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+  transition: transform .1s ease;
+}
+button.feed-item:active { transform: scale(.985); }
+.feed-ico {
+  display: flex; width: 34px; height: 34px; border-radius: 10px; flex: none;
+  background: var(--card2); align-items: center; justify-content: center; color: var(--txt2);
+}
+.feed-ico .ic { width: 17px; height: 17px; }
+.feed-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.feed-title { font-weight: 700; font-size: .93rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-sub { font-size: .76rem; color: var(--txt3); }
+.feed-side { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; flex: none; }
+.feed-val { font-weight: 700; font-size: .92rem; font-variant-numeric: tabular-nums; }
+.feed-val.pos { color: var(--pos); }
+.feed-val.neg { color: var(--neg); }
+.feed-when { font-size: .72rem; color: var(--txt3); white-space: nowrap; }
 
 /* ═══════════ ANEXOS ═══════════ */
 .anexos-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }

@@ -894,7 +894,7 @@ function renderInicio() {
   $('hero-liq').textContent = R(liq);
   $('hero-inc').textContent = R(inc);
   $('hero-exp').textContent = R(exp);
-  $('hero-inicio').className = 'hero-card' + (liq < 0 ? ' neg' : '');
+  $('hero-inicio').className = 'hero-card hero-compact' + (liq < 0 ? ' neg' : '');
 
   const alerts = computeAlerts();
   renderSituacao(alerts);
@@ -903,8 +903,8 @@ function renderInicio() {
   const vansAtivas = S.vehicles.filter(v => v.status !== 'inativo').length;
   const motAtivos = S.drivers.filter(d => d.status !== 'inativo').length;
   $('dash-tiles').innerHTML = `
-    <button class="tile" onclick="goTab('frota')"><b>${vansAtivas}</b><small>Veículos ativos</small></button>
-    <button class="tile" onclick="goTab('motoristas')"><b>${motAtivos}</b><small>Motoristas ativos</small></button>`;
+    <button class="tile" onclick="goTab('frota')"><span class="tile-ic">${icon('truck', 18)}</span><b>${vansAtivas}</b><small>Veículos ativos</small></button>
+    <button class="tile" onclick="goTab('motoristas')"><span class="tile-ic">${icon('user', 18)}</span><b>${motAtivos}</b><small>Motoristas ativos</small></button>`;
 
   renderAlerts(alerts);
   renderRecent(txs);
@@ -954,11 +954,16 @@ function computeAlerts() {
   return alerts.sort((a, b) => (b.crit ? 1 : 0) - (a.crit ? 1 : 0));
 }
 
-// tocar num alerta abre a ficha de quem tem o problema
+// tocar num alerta abre a ficha de quem tem o problema;
+// sem pendências, um cartão pequeno mostra que a seção existe e está tranquila
 function renderAlerts(alerts) {
   alerts = alerts || computeAlerts();
-  $('alert-section').style.display = alerts.length ? '' : 'none';
-  $('alert-list').innerHTML = alerts.map(a => `
+  const el = $('alert-list');
+  if (!alerts.length) {
+    el.innerHTML = `<div class="pend-ok">${icon('check', 18)}<span>Nenhuma pendência no momento.</span></div>`;
+    return;
+  }
+  el.innerHTML = alerts.map(a => `
     <button class="alert-item${a.crit ? ' crit' : ''}" onclick="${a.veh ? `openVehDetail('${a.veh}')` : a.drv ? `openDrvDetail('${a.drv}')` : ''}">
       <span class="a-ico">${icon(a.ico)}</span>
       <div><b>${esc(a.txt)}</b><small>${esc(a.sub)}</small></div>
@@ -970,16 +975,64 @@ function irParaAlertas() {
   $('alert-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// linha do tempo geral da empresa: lançamentos + eventos (trocas, documentos, cadastros…)
+// primeiro nome, para deixar a linha do feed curta
+function primeiroNome(nome) { return String(nome || '?').split(' ')[0]; }
+
+// "Hoje 16:49" / "Ontem 09:12" / "Qua 14:20" / "03 jul" — fácil de escanear
+function fmtQuando(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const dia = new Date(d); dia.setHours(0, 0, 0, 0);
+  const diff = Math.round((hoje - dia) / 86400000);
+  const hora = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (diff === 0) return 'Hoje ' + hora;
+  if (diff === 1) return 'Ontem ' + hora;
+  if (diff > 1 && diff < 7) return capFirst(d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')) + ' ' + hora;
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+}
+
+// item do feed: lançamento (com valor) — segurável e clicável (abre detalhe)
+function feedTxHTML(t) {
+  const c = catInfo(t.cat);
+  const sinal = t.tipo === 'receita' ? '+' : '−';
+  return `
+    <button class="feed-item" data-tx="${t.id}" onclick="openTxDetail('${t.id}')">
+      <span class="feed-ico">${icon(c.ico)}</span>
+      <span class="feed-body">
+        <span class="feed-title">${c.nome}</span>
+        <span class="feed-sub">Por ${esc(primeiroNome(t.autorNome))}</span>
+      </span>
+      <span class="feed-side">
+        <span class="feed-val ${t.tipo === 'receita' ? 'pos' : 'neg'}">${sinal} ${R(t.valor)}</span>
+        <span class="feed-when">${fmtQuando(t.ts)}</span>
+      </span>
+    </button>`;
+}
+
+// item do feed: evento da linha do tempo — segurável para excluir
+function feedEvHTML(e) {
+  return `
+    <div class="feed-item"${e.id ? ` data-ev="${e.id}"` : ''}>
+      <span class="feed-ico">${evIcon(e.ico)}</span>
+      <span class="feed-body">
+        <span class="feed-title">${esc(e.titulo)}</span>
+        <span class="feed-sub">Por ${esc(primeiroNome(e.autorNome))}</span>
+      </span>
+      <span class="feed-side">
+        <span class="feed-when">${fmtQuando(e.ts)}</span>
+      </span>
+    </div>`;
+}
+
+// atividade recente = lançamentos + eventos (trocas, documentos, cadastros…)
 function renderRecent() {
   const el = $('recent-list');
   const itens = [
-    ...S.tx.map(t => ({ ts: t.ts || 0, html: txItemHTML(t) })),
-    ...(S.eventos || []).map(e => ({ ts: e.ts || 0, html: eventoHTML(e, true) })),
+    ...S.tx.map(t => ({ ts: t.ts || 0, html: feedTxHTML(t) })),
+    ...(S.eventos || []).map(e => ({ ts: e.ts || 0, html: feedEvHTML(e) })),
   ].sort((a, b) => b.ts - a.ts).slice(0, 8);
   $('sec-recent').style.display = itens.length ? '' : 'none';
-  // sistema zerado: uma boa-vinda no lugar de várias seções vazias
-  $('inicio-vazio').style.display = (!S.tx.length && !S.vehicles.length) ? '' : 'none';
   el.innerHTML = itens.map(i => i.html).join('');
 }
 
