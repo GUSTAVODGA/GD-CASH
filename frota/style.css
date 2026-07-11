@@ -634,3 +634,9 @@ button.status-card:active { transform: scale(.985); }
 .perm-note { color: var(--txt3); font-size: .76rem; line-height: 1.5; padding-top: 10px; }
 .vd-wide { grid-column: 1 / -1; }
 .vd-cell b { overflow-wrap: anywhere; }
+
+/* ═══════════ LIXEIRA (Empresa → admin) ═══════════ */
+.lix-acoes { display: flex; gap: 6px; align-items: center; flex: none; }
+.lix-acoes .btn-small { padding: 7px 10px; }
+.lix-del { color: var(--neg); border-color: rgba(248,113,113,.4); }
+.lix-del .ic { vertical-align: -2px; }

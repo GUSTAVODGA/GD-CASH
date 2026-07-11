@@ -40,7 +40,7 @@ let monthOffset = 0;
 let lancFilter = 'todos';
 let lancOrigem = 'todas';
 let txTipo = 'despesa', txCat = null, txOrigem = 'frota';
-let editingTxId = null, detailTxId = null;
+let editingTxId = null, detailTxId = null, _salvandoTx = false, _salvandoNota = false;
 let editingVehId = null, detailVehId = null;
 let editingDrvId = null;
 
@@ -496,6 +496,52 @@ function removeProfilePhoto() {
   });
 }
 
+// ── arquivos: limites e compressão ──
+// Firestore guarda cada documento até ~1 MB; a nota vira texto (base64),
+// que infla ~35%. Por isso miramos arquivos bem menores e comprimimos as fotos.
+const ARQ = {
+  imgLado: 1500,        // maior lado da foto após redução (px)
+  imgMaxChars: 900000,  // ~660 KB depois de comprimida
+  pdfMaxChars: 1000000, // ~730 KB de PDF (acima disso, pedimos foto)
+  formatos: ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf'],
+};
+
+// Comprime a foto reduzindo tamanho e qualidade até caber no limite, sem borrar demais
+function compressImage(file, maxSide, maxChars) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const qualidades = [0.82, 0.72, 0.62, 0.52, 0.42];
+      let lado = maxSide;
+      const tenta = () => {
+        for (let escala = 1; escala >= 0.5; escala -= 0.25) {
+          const alvo = lado * escala;
+          const sc = Math.min(1, alvo / Math.max(img.width, img.height));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(img.width * sc));
+          c.height = Math.max(1, Math.round(img.height * sc));
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          for (const q of qualidades) {
+            const url = c.toDataURL('image/jpeg', q);
+            if (url.length <= maxChars) { URL.revokeObjectURL(img.src); return resolve(url); }
+          }
+        }
+        // último recurso: menor versão possível
+        const c = document.createElement('canvas');
+        const sc = Math.min(1, (maxSide * 0.5) / Math.max(img.width, img.height));
+        c.width = Math.max(1, Math.round(img.width * sc));
+        c.height = Math.max(1, Math.round(img.height * sc));
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(img.src);
+        resolve(c.toDataURL('image/jpeg', 0.4));
+      };
+      tenta();
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+
 // ── arquivos: redimensionar imagem / ler cru ──
 function fileToJpegDataURL(file, maxSide) {
   return new Promise((resolve, reject) => {
@@ -643,27 +689,36 @@ async function handleAnexoInput(input) {
   const file = input.files && input.files[0];
   input.value = '';
   if (!file || !anexoCtx) return;
-  toast('Preparando anexo…');
+  const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+  const ehImg = (file.type || '').startsWith('image/');
+  if (!ehPdf && !ehImg) { toast('Envie uma foto (JPG/PNG) ou um PDF.'); return; }
+  toast('Preparando o arquivo…');
   try {
     let data, mime;
-    if (file.type === 'application/pdf') {
+    if (ehPdf) {
       data = await fileToRawDataURL(file);
       mime = 'application/pdf';
-      if (data.length > 950000) { toast('PDF muito grande (máx. ~700 KB). Tire uma foto do documento.'); return; }
+      if (data.length > ARQ.pdfMaxChars) { toast('Esse PDF é muito grande. Tire uma foto do documento no lugar.'); return; }
     } else {
-      data = await fileToJpegDataURL(file, 1200);
+      data = await compressImage(file, ARQ.imgLado, ARQ.imgMaxChars);
       mime = 'image/jpeg';
     }
+    // evita guardar o mesmo arquivo duas vezes no mesmo item
+    try {
+      const jaTem = (await anexosDe(anexoCtx.parentId)).some(a => a.data === data);
+      if (jaTem) { toast('Esse arquivo já está anexado aqui.'); return; }
+    } catch (e) {}
+    toast('Enviando…');
     await addAnexoRecord(anexoCtx.tipo, anexoCtx.parentId, { nome: file.name || 'anexo', mime, data });
     // aparece na linha do tempo geral da Central (doc:true evita duplicar na ficha)
     if (anexoCtx.tipo === 'vehicle' || anexoCtx.tipo === 'driver') {
       logEvento(anexoCtx.tipo, anexoCtx.parentId, 'paperclip', 'Documento anexado', file.name || '', { doc: true });
     }
-    toast('Anexo salvo');
+    toast('Documento salvo ✓');
     renderAnexosInto(anexoCtx.elId, anexoCtx.parentId, anexoCtx.tipo);
   } catch (e) {
     console.error(e);
-    toast('Não foi possível anexar esse arquivo.');
+    toast('Não foi possível anexar esse arquivo. Tente novamente.');
   }
 }
 function removeAnexo(id, elId, parentId, tipo) {
@@ -860,7 +915,7 @@ function renderAll() {
 
 function txDoMes(offset) {
   const mk = monthKey(offset);
-  return S.tx.filter(t => (t.data || '').startsWith(mk));
+  return S.tx.filter(t => !t.deleted && (t.data || '').startsWith(mk));
 }
 function vehById(id) { return S.vehicles.find(v => v.id === id); }
 function vehNome(id) {
@@ -1029,7 +1084,7 @@ function feedEvHTML(e) {
 function renderRecent() {
   const el = $('recent-list');
   const itens = [
-    ...S.tx.map(t => ({ ts: t.ts || 0, html: feedTxHTML(t) })),
+    ...S.tx.filter(t => !t.deleted).map(t => ({ ts: t.ts || 0, html: feedTxHTML(t) })),
     ...(S.eventos || []).map(e => ({ ts: e.ts || 0, html: feedEvHTML(e) })),
   ].sort((a, b) => b.ts - a.ts).slice(0, 8);
   $('sec-recent').style.display = itens.length ? '' : 'none';
@@ -1291,8 +1346,12 @@ async function saveTx() {
     t.editadoPorNome = me.nome || me.email;
     t.editadoEm = Date.now();
   }
-  const id = editingTxId || newId();
+  if (_salvandoTx) return;             // evita duplicar com duplo toque
+  _salvandoTx = true;
+  const id = editingTxId || newId();   // id fixo por gravação: refresh não duplica
+  const eraEdicao = !!editingTxId;
   closeOverlay('modal-tx');
+  toast(eraEdicao ? 'Salvando alterações…' : 'Salvando…');
   try {
     await dataSet('tx', id, t);
     // nota importada fica anexada ao lançamento E vinculada ao veículo
@@ -1307,12 +1366,13 @@ async function saveTx() {
         await dataSet('vehicles', v.id, { ...stripId(v), km: t.km });
       }
     }
-    toast(editingTxId ? 'Lançamento atualizado ✓' : (txTipo === 'despesa' ? 'Despesa registrada ✓' : 'Receita registrada ✓'));
+    toast(eraEdicao ? 'Lançamento atualizado ✓' : (txTipo === 'despesa' ? 'Despesa registrada ✓' : 'Receita registrada ✓'));
   } catch (e) {
     console.error(e);
-    toast('Erro ao salvar. Verifique a conexão.');
+    toast('Não foi possível salvar. Verifique a internet e tente de novo.');
   }
   editingTxId = null;
+  _salvandoTx = false;
 }
 
 function stripId(obj) { const { id, ...rest } = obj; return rest; }
@@ -1353,11 +1413,10 @@ function editTxFromDetail() {
 function deleteTxFromDetail() {
   if (!exigirEdicao()) return;
   const id = detailTxId;
-  confirmDialog('Excluir lançamento', 'Essa ação não pode ser desfeita. Excluir mesmo assim?', async () => {
-    closeOverlay('modal-tx-detail');
-    try { await dataDelete('tx', id); toast('Lançamento excluído'); }
-    catch (e) { toast('Erro ao excluir.'); }
-  });
+  const t = S.tx.find(x => x.id === id);
+  confirmDialog('Excluir lançamento',
+    `${t ? catInfo(t.cat).nome + ' de ' + R(t.valor) + '. ' : ''}Vai para a lixeira — um administrador pode recuperar depois.`,
+    async () => { closeOverlay('modal-tx-detail'); await softDeleteTx(id); });
 }
 
 // ══════════════════════════════════════════
@@ -1367,7 +1426,7 @@ function deleteTxFromDetail() {
 function kmReadings(vid) {
   const manuais = S.kmlog.filter(l => l.veiculo === vid && l.km > 0)
     .map(l => ({ data: l.data, km: l.km }));
-  const abastecidas = S.tx.filter(t => t.veiculo === vid && t.cat === 'combustivel' && t.km > 0)
+  const abastecidas = S.tx.filter(t => !t.deleted && t.veiculo === vid && t.cat === 'combustivel' && t.km > 0)
     .map(t => ({ data: t.data, km: t.km }));
   return [...manuais, ...abastecidas].sort((a, b) => a.data.localeCompare(b.data) || a.km - b.km);
 }
@@ -1448,7 +1507,7 @@ function deleteKmLog(id) {
 // ══════════════════════════════════════════
 function consumoMedio(vid) {
   // média = soma dos Δkm entre abastecimentos consecutivos / litros dos abastecimentos posteriores
-  const fills = S.tx
+  const fills = S.tx.filter(t => !t.deleted)
     .filter(t => t.veiculo === vid && t.cat === 'combustivel' && t.km > 0 && t.litros > 0)
     .sort((a, b) => a.km - b.km);
   if (fills.length < 2) return null;
@@ -1506,7 +1565,7 @@ function renderFrota() {
   el.innerHTML = lista
     .sort((a, b) => (ordem[a.status] ?? 0) - (ordem[b.status] ?? 0) || a.nome.localeCompare(b.nome))
     .map(v => {
-      const gasto = S.tx.filter(t => t.veiculo === v.id && t.tipo === 'despesa' && (t.data || '').startsWith(mk))
+      const gasto = S.tx.filter(t => !t.deleted && t.veiculo === v.id && t.tipo === 'despesa' && (t.data || '').startsWith(mk))
         .reduce((s, t) => s + t.valor, 0);
       const cons = consumoMedio(v.id);
       const rodou = kmRodadoMes(v.id);
@@ -1598,7 +1657,7 @@ function openVehDetail(id) {
   detailVehId = id;
   $('veh-detail-title').textContent = v.nome;
   const mk = monthKey(0);
-  const txsV = S.tx.filter(t => t.veiculo === id).sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  const txsV = S.tx.filter(t => !t.deleted && t.veiculo === id).sort((a, b) => (b.ts || 0) - (a.ts || 0));
   const gastoMes = txsV.filter(t => t.tipo === 'despesa' && (t.data || '').startsWith(mk)).reduce((s, t) => s + t.valor, 0);
   const cons = consumoMedio(id);
   const rodou = kmRodadoMes(id);
@@ -1839,7 +1898,7 @@ function openDrvDetail(id) {
   const rodou = d.veiculoId ? kmRodadoMes(d.veiculoId) : 0;
   const mk = monthKey(0);
   const gastoVan = d.veiculoId
-    ? S.tx.filter(t => t.veiculo === d.veiculoId && t.tipo === 'despesa' && (t.data || '').startsWith(mk)).reduce((s, t) => s + t.valor, 0)
+    ? S.tx.filter(t => !t.deleted && t.veiculo === d.veiculoId && t.tipo === 'despesa' && (t.data || '').startsWith(mk)).reduce((s, t) => s + t.valor, 0)
     : 0;
   const cnhTxt = dias === null ? '—' : dias < 0 ? 'VENCIDA' : `vence em ${dias}d`;
   const cells = [
@@ -2081,7 +2140,70 @@ function renderEmpresaAdmin() {
     <div class="card">
       ${SOCIOS.map(s => socioRow(s, E)).join('')}
       <p class="perm-note">Administrador cuida da empresa e das permissões · Pode editar lança e altera dados · Só visualiza acompanha sem mudar nada.</p>
+    </div>
+    ${admin ? blocoBackup() : ''}
+    ${admin ? blocoLixeira() : ''}`;
+}
+
+// Backup dos dados essenciais (veículos, motoristas, lançamentos, km) em um arquivo
+function blocoBackup() {
+  return `
+    <h2 class="sec-title">${icon('download', 14)} Cópia de segurança</h2>
+    <div class="card">
+      <p class="modal-note" style="margin-bottom:12px">Baixe um arquivo com veículos, motoristas, lançamentos, abastecimentos e quilometragem. Guarde num lugar seguro (e-mail, nuvem). Os documentos (fotos e PDFs) ficam no próprio sistema e podem ser baixados de cada ficha.</p>
+      <button class="btn btn-secondary btn-block" onclick="exportBackup()">${icon('download', 16)} Baixar cópia de segurança (.json)</button>
+      <button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="exportCSV()">${icon('fileText', 16)} Exportar lançamentos (.csv)</button>
     </div>`;
+}
+
+// Lixeira: lançamentos excluídos, recuperáveis pelos administradores
+function blocoLixeira() {
+  const lix = S.tx.filter(t => t.deleted).sort((a, b) => (b.deletedEm || 0) - (a.deletedEm || 0));
+  return `
+    <h2 class="sec-title">${icon('trash', 14)} Lixeira</h2>
+    <div class="card">
+      ${lix.length ? lix.map(t => {
+        const c = catInfo(t.cat);
+        return `
+        <div class="row-btn" style="cursor:default">
+          <span class="row-ico">${icon(c.ico)}</span>
+          <span class="row-txt">
+            <b>${esc(c.nome)} · ${R(t.valor)}</b>
+            <small>${fmtData(t.data)} · excluído por ${esc(t.deletedPorNome || '—')}${t.deletedEm ? ' em ' + fmtData(new Date(t.deletedEm).toISOString().slice(0,10)) : ''}</small>
+          </span>
+          <span class="lix-acoes">
+            <button class="btn btn-small" onclick="restaurarTx('${t.id}')">Recuperar</button>
+            <button class="btn btn-small lix-del" onclick="excluirDefinitivoTx('${t.id}')">${icon('trash', 14)}</button>
+          </span>
+        </div>`;
+      }).join('') : '<div class="empty-mini">A lixeira está vazia.</div>'}
+    </div>`;
+}
+
+// Cópia de segurança dos dados essenciais (inclui itens na lixeira, marcados)
+function exportBackup() {
+  if (!exigirAdmin()) return;
+  try {
+    const backup = {
+      app: 'Lagos Serviços de Transporte',
+      versao: 'v1.18',
+      geradoEm: new Date().toISOString(),
+      geradoPor: me.nome || me.email,
+      empresa: empresaDados(),
+      vehicles: S.vehicles,
+      drivers: S.drivers,
+      tx: S.tx,
+      kmlog: S.kmlog,
+      eventos: S.eventos || [],
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'lagos-backup-' + todayStr() + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('Cópia de segurança baixada ✓');
+  } catch (e) { console.error(e); toast('Não foi possível gerar o backup agora.'); }
 }
 
 function socioRow(s, E) {
@@ -2603,6 +2725,8 @@ async function confirmarNotaAbast() {
   if (valor <= 0) { toast('Confira o valor total da nota.'); return; }
   if (!veiculo) { toast('Confirme qual van foi abastecida.'); return; }
 
+  if (_salvandoNota) return;
+  _salvandoNota = true;
   const v = vehById(veiculo);
   const kmAntes = Number(v?.km) || 0;
   const t = {
@@ -2612,12 +2736,14 @@ async function confirmarNotaAbast() {
     autorNome: me.nome || me.email, autorUid: me.uid, ts: Date.now(),
   };
   const id = newId();
+  const anexo = pendingAnexo;
   closeOverlay('modal-nota-conf');
+  toast('Salvando abastecimento…');
   try {
     await dataSet('tx', id, t);
     // nota anexada ao lançamento e vinculada ao veículo (aparece na ficha da van)
-    if (pendingAnexo) {
-      try { await addAnexoRecord('tx', id, { ...pendingAnexo, veiculoId: veiculo }); } catch (e) { console.error(e); }
+    if (anexo) {
+      try { await addAnexoRecord('tx', id, { ...anexo, veiculoId: veiculo }); } catch (e) { console.error(e); }
       pendingAnexo = null;
     }
     // atualiza o odômetro da van e calcula os indicadores
@@ -2630,9 +2756,10 @@ async function confirmarNotaAbast() {
     toast(partes.join(' · '));
   } catch (e) {
     console.error(e);
-    toast('Erro ao salvar. Verifique a conexão.');
+    toast('Não foi possível salvar. Verifique a internet e tente de novo.');
   }
   notaConfInfo = null;
+  _salvandoNota = false;
 }
 
 // leitura errada? volta pro formulário normal com a nota já anexada
@@ -2659,9 +2786,10 @@ function notaConfManual() {
 // EXPORTAR CSV
 // ══════════════════════════════════════════
 function exportCSV() {
-  if (!S.tx.length) { toast('Nada para exportar ainda.'); return; }
+  const ativos = S.tx.filter(t => !t.deleted);
+  if (!ativos.length) { toast('Nada para exportar ainda.'); return; }
   const head = ['Data', 'Tipo', 'Origem', 'Categoria', 'Veículo', 'Descrição', 'Valor (R$)', 'Litros', 'Km', 'Lançado por'];
-  const lines = [...S.tx].sort((a, b) => (a.data || '').localeCompare(b.data || ''))
+  const lines = [...ativos].sort((a, b) => (a.data || '').localeCompare(b.data || ''))
     .map(t => [
       fmtData(t.data),
       t.tipo === 'receita' ? 'Receita' : 'Despesa',
@@ -2824,13 +2952,43 @@ function _lpCancel() { clearTimeout(_lp.timer); _lp.timer = null; }
 function confirmarExclusaoTx(id) {
   if (!exigirEdicao()) return;
   const t = S.tx.find(x => x.id === id);
-  if (!t) return;
+  if (!t || t.deleted) return;
   if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) {} }
   confirmDialog('Excluir lançamento',
-    `${catInfo(t.cat).nome} de ${R(t.valor)} em ${fmtData(t.data)}. Essa ação não pode ser desfeita. Excluir?`,
+    `${catInfo(t.cat).nome} de ${R(t.valor)} em ${fmtData(t.data)}. Vai para a lixeira — um administrador pode recuperar depois.`,
+    () => softDeleteTx(id));
+}
+
+// Lixeira: excluir esconde das telas e dos cálculos, mas guarda para recuperação
+async function softDeleteTx(id) {
+  const t = S.tx.find(x => x.id === id);
+  if (!t || t.deleted) return;
+  try {
+    await dataSet('tx', id, { ...stripId(t), deleted: true, deletedPorNome: me.nome || me.email, deletedEm: Date.now() });
+    toast('Lançamento movido para a lixeira');
+  } catch (e) { console.error(e); toast('Não foi possível excluir agora. Tente de novo.'); }
+}
+async function restaurarTx(id) {
+  if (!exigirAdmin()) return;
+  const t = S.tx.find(x => x.id === id);
+  if (!t) return;
+  try {
+    const limpo = stripId(t);
+    delete limpo.deleted; delete limpo.deletedPorNome; delete limpo.deletedEm;
+    await dataSet('tx', id, limpo);
+    toast('Lançamento recuperado ✓');
+    renderMais();
+  } catch (e) { toast('Não foi possível recuperar agora.'); }
+}
+function excluirDefinitivoTx(id) {
+  if (!exigirAdmin()) return;
+  const t = S.tx.find(x => x.id === id);
+  if (!t) return;
+  confirmDialog('Excluir para sempre',
+    `${catInfo(t.cat).nome} de ${R(t.valor)}. Isso apaga de vez, sem recuperação. Continuar?`,
     async () => {
-      try { await dataDelete('tx', id); toast('Lançamento excluído'); }
-      catch (e) { toast('Erro ao excluir.'); }
+      try { await dataDelete('tx', id); toast('Lançamento apagado definitivamente'); renderMais(); }
+      catch (e) { toast('Não foi possível apagar agora.'); }
     });
 }
 // eventos da linha do tempo (cadastro de veículo, troca, CNH, documento…)
