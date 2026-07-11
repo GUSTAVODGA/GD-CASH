@@ -1033,7 +1033,7 @@ function renderLanc() {
 
   const el = $('lanc-list');
   if (!txs.length) {
-    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('calendar', 40)}</span>Nada lançado com esses filtros neste mês.</div>`;
+    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('calendar')}</span>Nada lançado com esses filtros neste mês.</div>`;
     return;
   }
   // agrupa por dia (desc)
@@ -1393,7 +1393,7 @@ function motoristaDe(vid) {
 function renderFrota() {
   const el = $('veh-list');
   if (!S.vehicles.length) {
-    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('truck', 40)}</span>Nenhum veículo cadastrado.<br>Toque em <b>+ Veículo</b> para adicionar a primeira van.</div>`;
+    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('truck')}</span>Nenhum veículo cadastrado.<br>Toque em <b>+ Veículo</b> para adicionar a primeira van.</div>`;
     return;
   }
   const mk = monthKey(0);
@@ -1409,7 +1409,7 @@ function renderFrota() {
              (v.modelo || '').toLowerCase().includes(busca) ||
              (mot && mot.nome.toLowerCase().includes(busca));
     });
-    if (!lista.length) { el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('search', 40)}</span>Nada encontrado com essa busca.</div>`; return; }
+    if (!lista.length) { el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('search')}</span>Nada encontrado com essa busca.</div>`; return; }
   }
   el.innerHTML = lista
     .sort((a, b) => (ordem[a.status] ?? 0) - (ordem[b.status] ?? 0) || a.nome.localeCompare(b.nome))
@@ -1706,7 +1706,7 @@ function cnhBadge(d) {
 function renderMotoristas() {
   const el = $('driver-list');
   if (!S.drivers.length) {
-    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('user', 40)}</span>Nenhum motorista cadastrado.<br>Toque em <b>+ Motorista</b> para adicionar o primeiro.</div>`;
+    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('user')}</span>Nenhum motorista cadastrado.<br>Toque em <b>+ Motorista</b> para adicionar o primeiro.</div>`;
     return;
   }
   el.innerHTML = [...S.drivers]
