@@ -691,3 +691,7 @@ button.status-card:active { transform: scale(.985); }
 .login-err.login-ok {
   background: rgba(5,150,105,.10); border-color: rgba(5,150,105,.35); color: var(--pos);
 }
+
+/* tela de login sem símbolo (mais clean) */
+.login-card-clean { padding-top: 42px; }
+.login-card-clean h1 { font-size: 2.2rem; }
