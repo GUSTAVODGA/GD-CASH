@@ -442,7 +442,7 @@ button.alert-item:active { transform: scale(.985); }
 
 /* ═══════════ TOAST ═══════════ */
 #toast {
-  position: fixed; left: 50%; bottom: calc(104px + env(safe-area-inset-bottom)); z-index: 90;
+  position: fixed; left: 50%; bottom: calc(104px + env(safe-area-inset-bottom)); z-index: 120;
   transform: translateX(-50%) translateY(20px);
   background: var(--card); color: var(--txt); border: 1px solid var(--border);
   padding: 12px 20px; border-radius: 14px; font-size: .9rem; font-weight: 600;
@@ -686,3 +686,8 @@ button.status-card:active { transform: scale(.985); }
 .stat-top span { color: var(--txt2); }
 .stat-top b { font-weight: 700; font-variant-numeric: tabular-nums; }
 .cb-strong { background: linear-gradient(90deg, #1e3a8a, var(--accent)); }
+
+/* mensagem de sucesso na tela de login (esqueci a senha) */
+.login-err.login-ok {
+  background: rgba(5,150,105,.10); border-color: rgba(5,150,105,.35); color: var(--pos);
+}

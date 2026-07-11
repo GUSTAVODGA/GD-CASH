@@ -405,6 +405,7 @@ function initApp() {
 
 function loginError(msg) {
   const el = $('login-err');
+  el.classList.remove('login-ok');
   el.textContent = msg;
   el.style.display = '';
 }
@@ -814,22 +815,37 @@ function profileLogin() {
     });
 }
 
+// mensagem visível na tela de login (verde = sucesso, vermelho = erro)
+function lpMsg(el, texto, ok) {
+  el.textContent = texto;
+  el.classList.toggle('login-ok', !!ok);
+  el.style.display = '';
+}
+
 function forgotPasswordProfile() {
   if (!selectedSocio) return;
+  const el = $('lp-err');
+  if (!auth) { lpMsg(el, 'Sem conexão com o servidor. Recarregue a página e tente de novo.', false); return; }
+  lpMsg(el, 'Enviando o link de nova senha…', true);
   auth.sendPasswordResetEmail(selectedSocio.email)
-    .then(() => toast('Link de nova senha enviado pro e-mail da empresa'))
-    .catch(() => {
-      $('lp-err').textContent = 'Não foi possível enviar o e-mail agora.';
-      $('lp-err').style.display = '';
-    });
+    .then(() => lpMsg(el, 'Pronto! Enviamos um link para redefinir a senha no e-mail da empresa (' + baseEmail(selectedSocio.email) + '). Veja a caixa de entrada e o spam.', true))
+    .catch(err => lpMsg(el, mapAuthError(err), false));
 }
 
 function forgotPassword() {
+  const el = $('login-err');
   const email = $('login-email').value.trim();
   if (!email) { loginError('Digite seu e-mail acima e toque em "Esqueci minha senha".'); return; }
+  if (!auth) { loginError('Sem conexão com o servidor. Recarregue a página e tente de novo.'); return; }
+  lpMsg(el, 'Enviando o link…', true);
   auth.sendPasswordResetEmail(email)
-    .then(() => toast('Enviamos um link de redefinição para ' + email))
-    .catch(() => loginError('Não foi possível enviar. Confira o e-mail digitado.'));
+    .then(() => lpMsg(el, 'Pronto! Enviamos um link de redefinição para ' + email + '. Veja a caixa de entrada e o spam.', true))
+    .catch(err => loginError(mapAuthError(err)));
+}
+
+// e-mail base da empresa (tira o apelido "+algo" do endereço)
+function baseEmail(email) {
+  return String(email || '').replace(/\+[^@]*/, '');
 }
 
 function enterDemo(silent) {
