@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=33">
+<link rel="stylesheet" href="style.css?v=34">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -236,7 +236,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.19</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.20</p>
   </section>
 
   <!-- ── NAV INFERIOR: 5 módulos ── -->
@@ -427,6 +427,14 @@
   </div>
 </div>
 
+<!-- Estatísticas da van -->
+<div class="overlay" id="modal-veh-stats">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="veh-stats-title">Estatísticas</h3><button class="x" onclick="closeOverlay('modal-veh-stats')">✕</button></div>
+    <div id="veh-stats-body"></div>
+  </div>
+</div>
+
 <!-- Conferência da nota de abastecimento -->
 <div class="overlay" id="modal-nota-conf">
   <div class="sheet">
@@ -509,6 +517,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=33"></script>
+<script src="app.js?v=34"></script>
 </body>
 </html>

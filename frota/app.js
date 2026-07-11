@@ -1112,7 +1112,7 @@ function setLancFilter(f) {
   renderLanc();
 }
 
-function txItemHTML(t) {
+function txItemHTML(t, extraCls) {
   const c = catInfo(t.cat);
   const vnome = t.veiculo ? vehNome(t.veiculo) : '';
   const partes = [];
@@ -1122,7 +1122,7 @@ function txItemHTML(t) {
   if (t.desc) partes.push(esc(t.desc));
   const meta = `${authorChip(t.autorNome, t.autorUid)}${partes.length ? ' · ' + partes.join(' · ') : ''}`;
   return `
-    <button class="tx-item" data-tx="${t.id}" onclick="openTxDetail('${t.id}')">
+    <button class="tx-item${extraCls ? ' ' + extraCls : ''}" data-tx="${t.id}" onclick="openTxDetail('${t.id}')">
       <div class="tx-ico">${icon(c.ico)}</div>
       <div class="tx-body">
         <div class="tx-title">${c.nome}</div>
@@ -1186,7 +1186,7 @@ function renderLanc() {
   el.innerHTML = dias.map(dia => `
     <div class="day-group">
       <div class="day-label">${fmtDia(dia)}</div>
-      ${porDia[dia].sort((a, b) => (b.ts || 0) - (a.ts || 0)).map(txItemHTML).join('')}
+      ${porDia[dia].sort((a, b) => (b.ts || 0) - (a.ts || 0)).map(t => txItemHTML(t)).join('')}
     </div>`).join('');
 }
 
@@ -1667,12 +1667,11 @@ function openVehDetail(id) {
   const mot = motoristaDe(id);
   const stLabel = { ativo: 'Ativo', manutencao: 'Manutenção', inativo: 'Inativo' };
 
-  // indicadores principais (4)
+  // indicadores secundários (KM atual vira o principal, num cartão próprio)
   const cells = [
-    ['Km atual', v.km ? fmtKm(v.km) : '—'],
-    ['Gasto no mês', R(gastoMes)],
     ['Consumo médio', cons ? cons.toFixed(1).replace('.', ',') + ' km/L' : '—'],
-    ['Próx. manutenção', proxOleo > (Number(v.oleoUltimaKm) || 0) ? 'Óleo aos ' + fmtKm(proxOleo) : '—'],
+    ['Gasto no mês', R(gastoMes)],
+    ['Próx. manutenção', proxOleo > (Number(v.oleoUltimaKm) || 0) ? 'Óleo · ' + fmtKm(proxOleo) : '—'],
   ];
   // informações técnicas (tudo do cadastro)
   const tech = [
@@ -1696,23 +1695,32 @@ function openVehDetail(id) {
   const vencimentos = vencChip('Licenciamento', v.licenciamento) + vencChip('Seguro', v.seguro);
 
   $('veh-detail-body').innerHTML = `
-    <div class="ficha-head">
+    <div class="ficha-head vd-head">
       <button class="veh-ico ficha-foto" onclick="pickVehFoto('${id}')" title="Trocar foto">${v.foto ? `<img src="${v.foto}" alt="">` : icon('truck', 30)}</button>
       <div class="ficha-info">
-        <b>${esc(v.nome)}</b>
-        <small>${esc(v.placa || 'sem placa')}${v.modelo ? ' · ' + esc(v.modelo) : ''}</small>
-        <small>${mot ? 'Motorista: ' + esc(mot.nome) : 'Sem motorista vinculado'}</small>
+        <b class="vd-nome">${esc(v.nome)}</b>
+        <small class="vd-modelo">${esc(v.modelo || 'Modelo não informado')}${v.placa ? ' · ' + esc(v.placa) : ''}</small>
+        <small class="vd-mot">${icon('user', 13)}${mot ? esc(mot.nome) : 'Sem motorista'}</small>
       </div>
       <span class="veh-status st-${v.status || 'ativo'}">${stLabel[v.status] || stLabel.ativo}</span>
     </div>
 
-    <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    <button class="vd-km" onclick="openVehStats('${id}')">
+      <span class="vd-km-ic">${icon('road', 22)}</span>
+      <span class="vd-km-body">
+        <small>Quilometragem atual</small>
+        <span class="vd-km-val">${v.km ? fmtKm(v.km) : '—'}</span>
+      </span>
+      <span class="vd-km-cta">Estatísticas →</span>
+    </button>
 
-    <div class="quick-row quick-2x2">
-      <button class="qa" onclick="registrarAbastecimento('${id}')">${icon('fuel', 24)}Registrar<br>abastecimento</button>
-      <button class="qa" onclick="registrarManutencao('${id}')">${icon('wrench', 24)}Registrar<br>manutenção</button>
-      <button class="qa" onclick="openKmForm('${id}')">${icon('mapPin', 24)}Atualizar<br>KM</button>
-      <button class="qa" onclick="pickAnexo('vehicle','${id}','veh-anexos')">${icon('filePlus', 24)}Adicionar<br>documento</button>
+    <div class="vd-grid vd-sub">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+
+    <div class="quick-row quick-2x2 qa-slim">
+      <button class="qa" onclick="registrarAbastecimento('${id}')">${icon('fuel', 22)}Registrar<br>abastecimento</button>
+      <button class="qa" onclick="registrarManutencao('${id}')">${icon('wrench', 22)}Registrar<br>manutenção</button>
+      <button class="qa" onclick="openKmForm('${id}')">${icon('mapPin', 22)}Atualizar<br>KM</button>
+      <button class="qa" onclick="pickAnexo('vehicle','${id}','veh-anexos')">${icon('filePlus', 22)}Adicionar<br>documento</button>
     </div>
 
     <h2 class="sec-title">${icon('history', 14)} Histórico</h2>
@@ -1740,44 +1748,158 @@ function openVehDetail(id) {
   openOverlay('modal-veh-detail');
 }
 
-// ── Linha do tempo da van: lançamentos + leituras de km + documentos ──
+// dia (YYYY-MM-DD) de um item, a partir da data ou do timestamp
+function diaDe(dataStr, ts) {
+  if (dataStr) return dataStr;
+  return ts ? new Date(ts).toISOString().slice(0, 10) : todayStr();
+}
+
+// ── Timeline da van: lançamentos + km + documentos + eventos, agrupados por dia ──
 async function renderVanTimeline(vid, txsV) {
-  const eventos = [
-    ...txsV.map(t => ({ ts: t.ts || 0, html: txItemHTML(t) })),
+  const itens = [
+    ...txsV.map(t => ({
+      ts: t.ts || 0, dia: diaDe(t.data, t.ts),
+      html: txItemHTML(t, t.cat === 'combustivel' ? 'tl-fuel' : t.cat === 'manutencao' ? 'tl-wrench' : ''),
+    })),
     ...S.kmlog.filter(l => l.veiculo === vid).map(l => ({
-      ts: l.ts || 0,
+      ts: l.ts || 0, dia: diaDe(l.data, l.ts),
       html: `
         <div class="tx-item" style="cursor:default">
           <div class="tx-ico">${icon('mapPin')}</div>
           <div class="tx-body">
             <div class="tx-title">Km registrado: ${fmtKm(l.km)}</div>
-            <div class="tx-meta">${authorChip(l.autorNome)} · ${fmtDia(l.data)}</div>
+            <div class="tx-meta">${authorChip(l.autorNome)}</div>
           </div>
           <button class="x" onclick="deleteKmLog('${l.id}')">✕</button>
         </div>`,
     })),
   ];
   // eventos da van (troca de motorista, cadastro, observações…)
-  try { (await eventosDe(vid)).forEach(e => eventos.push({ ts: e.ts || 0, html: eventoHTML(e) })); } catch (e) {}
-  // documentos entram na linha do tempo assim que carregam
+  try { (await eventosDe(vid)).forEach(e => itens.push({ ts: e.ts || 0, dia: diaDe(null, e.ts), html: eventoHTML(e) })); } catch (e) {}
+  // documentos entram na timeline assim que carregam (com destaque)
   const docs = await renderAnexosInto('veh-anexos', vid, 'vehicle');
-  docs.forEach(a => eventos.push({
-    ts: a.ts || 0,
+  docs.forEach(a => itens.push({
+    ts: a.ts || 0, dia: diaDe(null, a.ts),
     html: `
-      <button class="tx-item" onclick="openAnexoViewer('${a.id}')">
+      <button class="tx-item tl-doc" onclick="openAnexoViewer('${a.id}')">
         <div class="tx-ico">${icon(a.mime === 'application/pdf' ? 'fileText' : 'image')}</div>
         <div class="tx-body">
           <div class="tx-title">Documento: ${esc(a.nome)}</div>
-          <div class="tx-meta">${authorChip(a.autorNome)} · ${a.ts ? fmtDia(new Date(a.ts).toISOString().slice(0, 10)) : ''}</div>
+          <div class="tx-meta">${authorChip(a.autorNome)}</div>
         </div>
       </button>`,
   }));
   const el = $('van-timeline');
   if (!el) return;
-  eventos.sort((a, b) => b.ts - a.ts);
-  el.innerHTML = eventos.length
-    ? eventos.slice(0, 10).map(e => e.html).join('')
-    : '<div class="empty-mini">Nenhum evento ainda — use as ações rápidas acima.</div>';
+  if (!itens.length) {
+    el.innerHTML = '<div class="empty-mini">Nenhum evento ainda — use as ações rápidas acima.</div>';
+    return;
+  }
+  // agrupa por dia (mais recentes primeiro), limitando o total exibido
+  itens.sort((a, b) => b.ts - a.ts);
+  const vistos = itens.slice(0, 12);
+  const porDia = {};
+  vistos.forEach(i => { (porDia[i.dia] = porDia[i.dia] || []).push(i); });
+  const dias = Object.keys(porDia).sort().reverse();
+  el.innerHTML = dias.map(dia => `
+    <div class="day-group">
+      <div class="day-label">${fmtDia(dia)}</div>
+      ${porDia[dia].map(i => i.html).join('')}
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════
+// ESTATÍSTICAS DA VAN (gráficos próprios do veículo)
+// ══════════════════════════════════════════
+function mesCurto(offset) {
+  const d = new Date();
+  const m = new Date(d.getFullYear(), d.getMonth() + offset, 1);
+  return capFirst(m.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''));
+}
+// barra simples reutilizando o visual dos gráficos do app
+function statBar(label, valorTxt, pct, forte) {
+  return `
+    <div class="stat-row">
+      <div class="stat-top"><span>${esc(label)}</span><b>${valorTxt}</b></div>
+      <div class="c-bar"><div class="c-bar-fill${forte ? ' cb-strong' : ''}" style="width:${Math.max(2, pct)}%"></div></div>
+    </div>`;
+}
+
+function openVehStats(id) {
+  const v = vehById(id);
+  if (!v) return;
+  const txV = S.tx.filter(t => !t.deleted && t.veiculo === id);
+  const desp = txV.filter(t => t.tipo === 'despesa');
+  const gastoTotal = desp.reduce((s, t) => s + t.valor, 0);
+  const reads = kmReadings(id);
+  const kmTotal = reads.length >= 2 ? reads[reads.length - 1].km - reads[0].km : 0;
+  const cons = consumoMedio(id);
+  const custoKm = kmTotal > 0 ? gastoTotal / kmTotal : null;
+
+  // resumo (4 indicadores gerais)
+  const resumo = [
+    ['Gasto total', R(gastoTotal)],
+    ['Km rodado', kmTotal ? fmtKm(kmTotal) : '—'],
+    ['Consumo médio', cons ? cons.toFixed(1).replace('.', ',') + ' km/L' : '—'],
+    ['Custo por km', custoKm ? R(custoKm) : '—'],
+  ];
+
+  // consumo por abastecimento (km/L entre abastecimentos consecutivos)
+  const fills = desp.filter(t => t.cat === 'combustivel' && t.km > 0 && t.litros > 0).sort((a, b) => a.km - b.km);
+  const consSerie = [];
+  for (let i = 1; i < fills.length; i++) {
+    const dkm = fills[i].km - fills[i - 1].km;
+    if (dkm > 0 && fills[i].litros > 0) consSerie.push({ data: fills[i].data, kmL: dkm / fills[i].litros });
+  }
+  const consUlt = consSerie.slice(-6);
+  const maxKmL = Math.max(1, ...consUlt.map(c => c.kmL));
+  const consHTML = consUlt.length
+    ? consUlt.map(c => statBar(fmtData(c.data), c.kmL.toFixed(1).replace('.', ',') + ' km/L', c.kmL / maxKmL * 100, true)).join('')
+    : '<div class="empty-mini">Precisa de ao menos 2 abastecimentos com km e litros.</div>';
+
+  // gasto e km por mês (últimos 6 meses)
+  const meses = [5, 4, 3, 2, 1, 0].map(o => o);
+  const gastoMesArr = meses.map(o => {
+    const mk = monthKey(-o);
+    return desp.filter(t => (t.data || '').startsWith(mk)).reduce((s, t) => s + t.valor, 0);
+  });
+  const kmMesArr = meses.map(o => kmRodadoMes(id, -o));
+  const maxGasto = Math.max(1, ...gastoMesArr);
+  const maxKm = Math.max(1, ...kmMesArr);
+  const gastoHTML = gastoMesArr.some(g => g > 0)
+    ? meses.map((o, i) => statBar(mesCurto(-o), R(gastoMesArr[i]), gastoMesArr[i] / maxGasto * 100)).join('')
+    : '<div class="empty-mini">Sem despesas registradas ainda.</div>';
+  const kmHTML = kmMesArr.some(k => k > 0)
+    ? meses.map((o, i) => statBar(mesCurto(-o), kmMesArr[i] ? fmtKm(kmMesArr[i]) : '—', kmMesArr[i] / maxKm * 100, true)).join('')
+    : '<div class="empty-mini">Registre a quilometragem para acompanhar aqui.</div>';
+
+  // histórico de manutenções
+  const manut = desp.filter(t => t.cat === 'manutencao').sort((a, b) => (b.data || '').localeCompare(a.data || ''));
+  const manutHTML = manut.length
+    ? manut.slice(0, 8).map(t => `
+        <div class="tx-item tl-wrench" style="cursor:default">
+          <div class="tx-ico">${icon('wrench')}</div>
+          <div class="tx-body">
+            <div class="tx-title">${esc(t.desc || 'Manutenção')}</div>
+            <div class="tx-meta">${fmtData(t.data)}${t.km ? ' · ' + fmtKm(t.km) : ''}</div>
+          </div>
+          <div class="tx-val neg">${R(t.valor)}</div>
+        </div>`).join('')
+    : '<div class="empty-mini">Nenhuma manutenção registrada.</div>';
+
+  $('veh-stats-title').textContent = 'Estatísticas · ' + v.nome;
+  $('veh-stats-body').innerHTML = `
+    <div class="vd-grid" style="grid-template-columns:1fr 1fr">${resumo.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
+    <h2 class="sec-title">${icon('droplet', 14)} Consumo por abastecimento</h2>
+    <div class="card">${consHTML}</div>
+    <h2 class="sec-title">${icon('coins', 14)} Gasto por mês</h2>
+    <div class="card">${gastoHTML}</div>
+    <h2 class="sec-title">${icon('road', 14)} Quilometragem por mês</h2>
+    <div class="card">${kmHTML}</div>
+    <h2 class="sec-title">${icon('wrench', 14)} Histórico de manutenções</h2>
+    <div>${manutHTML}</div>
+  `;
+  openOverlay('modal-veh-stats');
 }
 
 // ações rápidas com contexto embutido

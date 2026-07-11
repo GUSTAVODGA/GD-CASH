@@ -640,3 +640,49 @@ button.status-card:active { transform: scale(.985); }
 .lix-acoes .btn-small { padding: 7px 10px; }
 .lix-del { color: var(--neg); border-color: rgba(248,113,113,.4); }
 .lix-del .ic { vertical-align: -2px; }
+
+/* ═══════════ CENTRAL DA VAN — refinamentos ═══════════ */
+.vd-head { align-items: center; }
+.vd-nome { font-size: 1.15rem; font-weight: 800; letter-spacing: -.01em; }
+.vd-modelo { color: var(--txt2); font-size: .82rem; }
+.vd-mot { display: inline-flex; align-items: center; gap: 4px; color: var(--txt3); font-size: .8rem; }
+.vd-mot .ic { color: var(--txt3); }
+
+/* KM como indicador principal (cartão destacado, abre Estatísticas) */
+.vd-km {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, var(--card)), var(--card));
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 15px 16px; margin: 6px 0 8px; box-shadow: var(--shadow-card);
+  transition: transform .1s ease;
+}
+.vd-km:active { transform: scale(.99); }
+.vd-km-ic { display: flex; width: 42px; height: 42px; border-radius: 12px; flex: none;
+  background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--accent);
+  align-items: center; justify-content: center; }
+.vd-km-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.vd-km-body small { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--txt3); }
+.vd-km-val { font-size: 1.7rem; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.vd-km-cta { font-size: .78rem; font-weight: 700; color: var(--accent); flex: none; }
+
+/* indicadores secundários: 3 colunas menores */
+.vd-sub { grid-template-columns: repeat(3, 1fr); }
+.vd-sub .vd-cell { padding: 9px 10px; }
+.vd-sub .vd-cell small { font-size: .64rem; }
+.vd-sub .vd-cell b { font-size: .82rem; }
+
+/* ações rápidas ~12% menores */
+.qa-slim .qa { padding: 10px 6px; }
+.qa-slim .qa .ic { margin-bottom: 4px; }
+
+/* timeline: destaques por tipo (borda-guia à esquerda) */
+.tl-fuel { border-left: 3px solid var(--accent); }
+.tl-wrench { border-left: 3px solid var(--warn); }
+.tl-doc { border-left: 3px solid var(--txt3); }
+
+/* estatísticas: barras */
+.stat-row { padding: 7px 0; }
+.stat-top { display: flex; justify-content: space-between; font-size: .85rem; margin-bottom: 5px; }
+.stat-top span { color: var(--txt2); }
+.stat-top b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.cb-strong { background: linear-gradient(90deg, #1e3a8a, var(--accent)); }
