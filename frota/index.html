@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=24">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -31,7 +31,7 @@
     <div id="login-profiles" style="display:none">
       <p class="lp-title">Quem está usando?</p>
       <div class="lp-grid" id="lp-grid"></div>
-      <div id="lp-demo-note" class="demo-note" style="display:none">⚙️ Modo demonstração — dados de exemplo, salvos só neste aparelho.</div>
+      <div id="lp-demo-note" class="demo-note" style="display:none">Modo demonstração — dados de exemplo, salvos só neste aparelho.</div>
     </div>
 
     <!-- Senha do perfil escolhido -->
@@ -44,7 +44,7 @@
         <span>Senha</span>
         <input type="password" id="lp-pass" autocomplete="current-password" placeholder="••••••••">
       </label>
-      <button class="btn-link" type="button" style="margin-top:-6px" onclick="togglePass('lp-pass', this)">👁 Mostrar senha</button>
+      <button class="btn-link" type="button" style="margin-top:-6px" onclick="togglePass('lp-pass', this)">Mostrar senha</button>
       <div id="lp-err" class="login-err" style="display:none"></div>
       <button class="btn btn-primary btn-block" id="lp-entrar" onclick="profileLogin()">Entrar</button>
       <button class="btn-link" onclick="backToProfiles()">← Trocar de perfil</button>
@@ -61,7 +61,7 @@
         <span>Senha</span>
         <input type="password" id="login-pass" autocomplete="current-password" placeholder="••••••••">
       </label>
-      <button class="btn-link" type="button" style="margin-top:-6px" onclick="togglePass('login-pass', this)">👁 Mostrar senha</button>
+      <button class="btn-link" type="button" style="margin-top:-6px" onclick="togglePass('login-pass', this)">Mostrar senha</button>
       <div id="login-err" class="login-err" style="display:none"></div>
       <button class="btn btn-primary btn-block" id="btn-login" onclick="doLogin()">Entrar</button>
       <button class="btn-link" onclick="forgotPassword()">Esqueci minha senha</button>
@@ -78,14 +78,14 @@
   <section class="page active" id="page-inicio">
     <header class="page-head">
       <div>
-        <div class="head-greet" id="inicio-greeting">Olá 👋</div>
+        <div class="head-greet" id="inicio-greeting">Olá</div>
         <div class="head-sub" id="inicio-date"></div>
       </div>
       <button class="avatar-btn" id="btn-avatar" onclick="openAjustes()"><span id="avatar-initial">?</span></button>
     </header>
 
     <div class="hero-card" id="hero-inicio">
-      <button class="hero-share" onclick="shareResumoMes()" title="Compartilhar resumo do mês">📤</button>
+      <button class="hero-share" data-ic="share" onclick="shareResumoMes()" title="Compartilhar resumo do mês"></button>
       <div class="hero-label">Resultado de <span id="hero-month"></span></div>
       <div class="hero-value" id="hero-liq">R$ 0,00</div>
       <div class="hero-row">
@@ -97,7 +97,7 @@
     <div class="dash-tiles" id="dash-tiles"></div>
 
     <div id="alert-section" style="display:none">
-      <h2 class="sec-title">⚠️ Atenção</h2>
+      <h2 class="sec-title" data-ic="alert">Atenção</h2>
       <div id="alert-list"></div>
     </div>
 
@@ -120,7 +120,7 @@
     </div>
 
     <div id="inicio-vazio" class="empty-big" style="display:none">
-      <span class="e-ico">🚐</span>Bem-vindo ao sistema da Lagos!<br>
+      <span class="e-ico" data-ic="truck"></span>Bem-vindo ao sistema da Lagos!<br>
       Comece cadastrando as vans em <b>Operação</b> e lançando o primeiro gasto no botão <b>+</b>.
     </div>
   </section>
@@ -149,11 +149,27 @@
         <button class="chip" data-f="despesa" onclick="setLancFilter('despesa')">Despesas</button>
         <button class="chip" data-f="receita" onclick="setLancFilter('receita')">Receitas</button>
       </div>
-      <select class="veh-filter" id="lanc-veh-filter" onchange="renderLanc()">
-        <option value="">Todos os veículos</option>
-      </select>
+      <div class="chips" id="lanc-orig-chips">
+        <button class="chip chip-on" data-o="todas" onclick="setLancOrigem('todas')">Tudo</button>
+        <button class="chip" data-o="frota" onclick="setLancOrigem('frota')">Frota</button>
+        <button class="chip" data-o="escritorio" onclick="setLancOrigem('escritorio')">Escritório</button>
+      </div>
+      <div class="fld-row">
+        <select class="veh-filter" id="lanc-cat-filter" onchange="renderLanc()">
+          <option value="">Todas as categorias</option>
+        </select>
+        <select class="veh-filter" id="lanc-veh-filter" onchange="renderLanc()">
+          <option value="">Todos os veículos</option>
+        </select>
+      </div>
     </div>
 
+    <div id="lanc-charts" style="display:none">
+      <h2 class="sec-title" data-ic="chart">Para onde foi o dinheiro</h2>
+      <div class="card" id="lanc-charts-body"></div>
+    </div>
+
+    <h2 class="sec-title" data-ic="receipt">Lançamentos</h2>
     <div id="lanc-list"></div>
   </section>
 
@@ -163,7 +179,7 @@
       <h1 class="page-title">Operação</h1>
       <button class="btn btn-small" onclick="openVehicleForm()">+ Veículo</button>
     </header>
-    <input class="veh-filter" id="frota-busca" placeholder="🔍 Buscar por apelido, placa ou motorista" oninput="renderFrota()" autocomplete="off">
+    <input class="veh-filter" id="frota-busca" placeholder="Buscar por apelido, placa ou motorista" oninput="renderFrota()" autocomplete="off">
     <div id="veh-list"></div>
   </section>
 
@@ -185,19 +201,19 @@
     <h2 class="sec-title">Minha conta</h2>
     <div class="card">
       <button class="row-btn" onclick="openNameModal()">
-        <span class="row-ico">👤</span>
+        <span class="row-ico" data-ic="user"></span>
         <span class="row-txt"><b>Meu nome de exibição</b><small id="ajuste-nome-atual">—</small></span>
       </button>
       <button class="row-btn" onclick="document.getElementById('foto-input').click()">
-        <span class="row-ico">🖼️</span>
+        <span class="row-ico" data-ic="image"></span>
         <span class="row-txt"><b>Minha foto de perfil</b><small id="ajuste-foto-atual">Sem foto — mostrando suas iniciais</small></span>
       </button>
       <button class="row-btn" id="btn-remover-foto" style="display:none" onclick="removeProfilePhoto()">
-        <span class="row-ico">🚫</span>
+        <span class="row-ico" data-ic="trash"></span>
         <span class="row-txt"><b>Remover minha foto</b><small>Volta a mostrar as iniciais</small></span>
       </button>
       <button class="row-btn" onclick="changeMyPassword()">
-        <span class="row-ico">🔑</span>
+        <span class="row-ico" data-ic="key"></span>
         <span class="row-txt"><b>Trocar minha senha</b><small>Enviamos um link pro e-mail da empresa</small></span>
       </button>
       <input type="file" id="foto-input" accept="image/*" style="display:none">
@@ -206,29 +222,29 @@
     <h2 class="sec-title">Sistema</h2>
     <div class="card">
       <button class="row-btn" onclick="toggleTheme()">
-        <span class="row-ico">🌗</span>
+        <span class="row-ico" data-ic="moon"></span>
         <span class="row-txt"><b>Tema</b><small id="theme-label">Claro</small></span>
       </button>
       <button class="row-btn" onclick="exportCSV()">
-        <span class="row-ico">📊</span>
+        <span class="row-ico" data-ic="download"></span>
         <span class="row-txt"><b>Exportar lançamentos (CSV)</b><small>Abre no Excel / Google Planilhas</small></span>
       </button>
       <button class="row-btn" onclick="doLogout()">
-        <span class="row-ico">🚪</span>
+        <span class="row-ico" data-ic="logOut"></span>
         <span class="row-txt"><b>Sair</b><small id="ajuste-email-atual"></small></span>
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.9 🚐</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.10</p>
   </section>
 
   <!-- ── NAV INFERIOR: 5 módulos ── -->
   <nav class="bottom-nav">
-    <button class="nav-btn nav-on" data-tab="inicio" onclick="goTab('inicio')"><span class="nav-ico">🏠</span><span>Central</span></button>
-    <button class="nav-btn" data-tab="frota" onclick="goTab('frota')"><span class="nav-ico">🚐</span><span>Operação</span></button>
-    <button class="nav-btn" data-tab="motoristas" onclick="goTab('motoristas')"><span class="nav-ico">🧑‍✈️</span><span>Motoristas</span></button>
-    <button class="nav-btn" data-tab="lanc" onclick="goTab('lanc')"><span class="nav-ico">💰</span><span>Financeiro</span></button>
-    <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico">🏢</span><span>Empresa</span></button>
+    <button class="nav-btn nav-on" data-tab="inicio" onclick="goTab('inicio')"><span class="nav-ico" data-ic="home"></span><span>Central</span></button>
+    <button class="nav-btn" data-tab="frota" onclick="goTab('frota')"><span class="nav-ico" data-ic="truck"></span><span>Operação</span></button>
+    <button class="nav-btn" data-tab="motoristas" onclick="goTab('motoristas')"><span class="nav-ico" data-ic="users"></span><span>Motoristas</span></button>
+    <button class="nav-btn" data-tab="lanc" onclick="goTab('lanc')"><span class="nav-ico" data-ic="coins"></span><span>Financeiro</span></button>
+    <button class="nav-btn" data-tab="mais" onclick="goTab('mais')"><span class="nav-ico" data-ic="building"></span><span>Empresa</span></button>
   </nav>
 
   <button id="fab" onclick="openTxForm()">+</button>
@@ -244,10 +260,14 @@
       <button id="seg-despesa" class="seg-btn seg-on" onclick="setTxTipo('despesa')">Despesa</button>
       <button id="seg-receita" class="seg-btn" onclick="setTxTipo('receita')">Receita</button>
     </div>
+    <div class="seg seg-sub" id="tx-orig-seg">
+      <button id="seg-frota" class="seg-btn seg-on" onclick="setTxOrigem('frota')">Da frota</button>
+      <button id="seg-escritorio" class="seg-btn" onclick="setTxOrigem('escritorio')">Do escritório</button>
+    </div>
     <label class="fld"><span>Valor (R$)</span><input type="text" id="tx-valor" inputmode="decimal" placeholder="0,00"></label>
     <label class="fld"><span>Data</span><input type="date" id="tx-data"></label>
     <div class="fld"><span>Categoria</span><div class="cat-grid" id="tx-cat-grid"></div></div>
-    <label class="fld"><span>Veículo</span><select id="tx-veiculo"><option value="">— Nenhum / geral —</option></select></label>
+    <label class="fld" id="tx-veh-fld"><span>Veículo</span><select id="tx-veiculo"><option value="">— Nenhum / geral —</option></select></label>
     <div id="tx-fuel-extra" style="display:none">
       <div class="fld-row">
         <label class="fld"><span>Litros</span><input type="text" id="tx-litros" inputmode="decimal" placeholder="0,0"></label>
@@ -256,8 +276,8 @@
       <div class="fuel-hint" id="tx-fuel-hint"></div>
     </div>
     <label class="fld"><span>Descrição <small>(opcional)</small></span><input type="text" id="tx-desc" placeholder="Ex.: troca de óleo, repasse da prefeitura…"></label>
-    <button class="btn btn-secondary btn-block" id="tx-nota-btn" onclick="document.getElementById('nota-input').click()">📎 Anexar nota ou comprovante</button>
-    <div id="tx-anexo-chip" class="fuel-hint" style="display:none; margin-top:8px">📎 Nota anexada — os valores lidos preenchem os campos vazios</div>
+    <button class="btn btn-secondary btn-block" id="tx-nota-btn" onclick="document.getElementById('nota-input').click()" data-ic="paperclip">Anexar nota ou comprovante</button>
+    <div id="tx-anexo-chip" class="fuel-hint" style="display:none; margin-top:8px">Nota anexada — os valores lidos preenchem os campos vazios</div>
     <button class="btn btn-primary btn-block" id="tx-save-btn" style="margin-top:10px" onclick="saveTx()">Salvar</button>
   </div>
 </div>
@@ -268,8 +288,8 @@
     <div class="sheet-head"><h3>Lançamento</h3><button class="x" onclick="closeOverlay('modal-tx-detail')">✕</button></div>
     <div id="tx-detail-body"></div>
     <div class="fld-row">
-      <button class="btn btn-secondary" onclick="editTxFromDetail()">✏️ Editar</button>
-      <button class="btn btn-danger" onclick="deleteTxFromDetail()">🗑 Excluir</button>
+      <button class="btn btn-secondary" data-ic="pencil" onclick="editTxFromDetail()">Editar</button>
+      <button class="btn btn-danger" data-ic="trash" onclick="deleteTxFromDetail()">Excluir</button>
     </div>
   </div>
 </div>
@@ -295,14 +315,14 @@
     </div>
     <label class="fld"><span>Status</span>
       <select id="veh-status">
-        <option value="ativo">🟢 Ativo</option>
-        <option value="manutencao">🟡 Em manutenção</option>
-        <option value="inativo">⚪ Inativo</option>
+        <option value="ativo">Ativo</option>
+        <option value="manutencao">Em manutenção</option>
+        <option value="inativo">Inativo</option>
       </select>
     </label>
     <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="veh-obs" rows="2" placeholder="Anotações sobre o veículo…"></textarea></label>
     <button class="btn btn-primary btn-block" onclick="saveVehicle()">Salvar</button>
-    <button class="btn btn-danger btn-block" id="veh-del-btn" style="display:none" onclick="deleteVehicleFromForm()">🗑 Excluir veículo</button>
+    <button class="btn btn-danger btn-block" id="veh-del-btn" style="display:none" data-ic="trash" onclick="deleteVehicleFromForm()">Excluir veículo</button>
   </div>
 </div>
 
@@ -341,14 +361,14 @@
     <label class="fld"><span>Veículo atual</span><select id="drv-veiculo"><option value="">— Nenhum —</option></select></label>
     <label class="fld"><span>Status</span>
       <select id="drv-status">
-        <option value="ativo">🟢 Ativo</option>
-        <option value="ferias">🌴 Férias</option>
-        <option value="inativo">⚪ Inativo</option>
+        <option value="ativo">Ativo</option>
+        <option value="ferias">Férias</option>
+        <option value="inativo">Inativo</option>
       </select>
     </label>
     <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="drv-obs" rows="2" placeholder="Anotações sobre o motorista…"></textarea></label>
     <button class="btn btn-primary btn-block" onclick="saveDriver()">Salvar</button>
-    <button class="btn btn-danger btn-block" id="drv-del-btn" style="display:none" onclick="deleteDriverFromForm()">🗑 Excluir motorista</button>
+    <button class="btn btn-danger btn-block" id="drv-del-btn" style="display:none" data-ic="trash" onclick="deleteDriverFromForm()">Excluir motorista</button>
   </div>
 </div>
 
@@ -397,7 +417,7 @@
 <!-- Trocar veículo do motorista -->
 <div class="overlay" id="modal-troca">
   <div class="sheet sheet-small">
-    <h3>🔁 Trocar veículo</h3>
+    <h3 data-ic="refresh">Trocar veículo</h3>
     <p class="modal-note" id="troca-info"></p>
     <label class="fld"><span>Nova van</span><select id="troca-veiculo"><option value="">— Nenhuma —</option></select></label>
     <button class="btn btn-primary btn-block" onclick="salvarTrocaVeiculo()">Confirmar troca</button>
@@ -407,7 +427,7 @@
 <!-- Atualizar CNH -->
 <div class="overlay" id="modal-cnh">
   <div class="sheet sheet-small">
-    <h3>🪪 Atualizar CNH</h3>
+    <h3 data-ic="idCard">Atualizar CNH</h3>
     <div class="fld-row">
       <label class="fld"><span>Categoria</span>
         <select id="cnh-cat"><option>D</option><option>E</option><option>C</option><option>B</option><option>A</option></select>
@@ -420,6 +440,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=23"></script>
+<script src="app.js?v=24"></script>
 </body>
 </html>

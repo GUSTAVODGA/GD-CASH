@@ -38,33 +38,120 @@ let unsubs = [];
 // Estado de UI
 let monthOffset = 0;
 let lancFilter = 'todos';
-let txTipo = 'despesa', txCat = null;
+let lancOrigem = 'todas';
+let txTipo = 'despesa', txCat = null, txOrigem = 'frota';
 let editingTxId = null, detailTxId = null;
 let editingVehId = null, detailVehId = null;
 let editingDrvId = null;
 
 // ══════════════════════════════════════════
+// ÍCONES — biblioteca única (SVG inline, traço consistente)
+// ══════════════════════════════════════════
+const _svg = (p) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const I = {
+  home: _svg('<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/>'),
+  truck: _svg('<path d="M1 7h13v10H1z"/><path d="M14 10h4l3 3v4h-7z"/><circle cx="6" cy="17" r="2"/><circle cx="17" cy="17" r="2"/>'),
+  user: _svg('<circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5"/>'),
+  users: _svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1.2-3 3.7-4.5 6.5-4.5s5.3 1.5 6.5 4.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8"/><path d="M17.5 15.7c2 .7 3.4 2.1 4 4.3"/>'),
+  coins: _svg('<circle cx="8" cy="8" r="6"/><path d="M18.1 9.9a6 6 0 1 1-8.2 8.2"/><path d="M8 6v4"/><path d="M6 8h4"/>'),
+  building: _svg('<rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 21v-4h6v4"/><path d="M8 7h2M14 7h2M8 11h2M14 11h2"/>'),
+  plus: _svg('<path d="M12 5v14M5 12h14"/>'),
+  x: _svg('<path d="M18 6 6 18M6 6l12 12"/>'),
+  check: _svg('<path d="M20 6 9 17l-5-5"/>'),
+  pencil: _svg('<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/>'),
+  trash: _svg('<path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M6 6l1 15h10l1-15"/><path d="M10 11v6M14 11v6"/>'),
+  camera: _svg('<path d="M4 8h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="13" r="3.5"/>'),
+  image: _svg('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5-8 8"/>'),
+  fileText: _svg('<path d="M14 2H6v20h12V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/>'),
+  filePlus: _svg('<path d="M14 2H6v20h12V8z"/><path d="M14 2v6h6"/><path d="M12 12v6M9 15h6"/>'),
+  paperclip: _svg('<path d="m21 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8L13 3.9a3.7 3.7 0 0 1 5.2 5.2L10 17.3a1.8 1.8 0 0 1-2.6-2.6l7.8-7.8"/>'),
+  fuel: _svg('<path d="M4 21V6a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2v15"/><path d="M2 21h13"/><path d="M13 10h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0v-8l-3-3"/><path d="M6 8h5"/>'),
+  wrench: _svg('<path d="M14.5 6.5a4.5 4.5 0 0 0-6 6L3 18l3 3 5.5-5.5a4.5 4.5 0 0 0 6-6L14 13l-3-3z"/>'),
+  disc: _svg('<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/>'),
+  road: _svg('<path d="M5 21 10 3M19 21 14 3"/><path d="M12 8v2M12 14v3"/>'),
+  shield: _svg('<path d="M12 3l8 3v5.5c0 4.5-3.2 7.8-8 9.5-4.8-1.7-8-5-8-9.5V6z"/>'),
+  package: _svg('<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>'),
+  mapPin: _svg('<path d="M12 21s-7-6-7-11a7 7 0 0 1 14 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>'),
+  refresh: _svg('<path d="M21 12a9 9 0 1 1-2.6-6.4"/><path d="M21 3v6h-6"/>'),
+  idCard: _svg('<rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="8" cy="11" r="2"/><path d="M5 16c.7-1.5 1.7-2.2 3-2.2s2.3.7 3 2.2"/><path d="M14 9h5M14 13h5"/>'),
+  clock: _svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>'),
+  eye: _svg('<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>'),
+  sliders: _svg('<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor"/><circle cx="15" cy="12" r="2" fill="currentColor"/><circle cx="7" cy="18" r="2" fill="currentColor"/>'),
+  calendar: _svg('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>'),
+  alert: _svg('<path d="M12 3 2 20h20z"/><path d="M12 9v5"/><path d="M12 17.5v.5"/>'),
+  logOut: _svg('<path d="M9 21H4V3h5"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>'),
+  moon: _svg('<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z"/>'),
+  key: _svg('<circle cx="8" cy="15" r="4.5"/><path d="M11 12 20 3"/><path d="M17 6l3 3M15 8l2 2"/>'),
+  search: _svg('<circle cx="10.5" cy="10.5" r="7"/><path d="m21 21-5.5-5.5"/>'),
+  chart: _svg('<path d="M3 21h18"/><path d="M7 21v-8M12 21V7M17 21v-5"/>'),
+  receipt: _svg('<path d="M6 2h12v20l-2-1.5L14 22l-2-1.5L10 22l-2-1.5L6 22z"/><path d="M9 7h6M9 11h6"/>'),
+  calculator: _svg('<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M8 6h8"/><path d="M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h.01M12 19h.01M16 19h.01"/>'),
+  percent: _svg('<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>'),
+  landmark: _svg('<path d="M3 9 12 3l9 6"/><path d="M5 9v9M9.5 9v9M14.5 9v9M19 9v9"/><path d="M3 21h18M3 18h18"/>'),
+  droplet: _svg('<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>'),
+  phone: _svg('<path d="M5 3h4l2 5-2.5 1.5a12 12 0 0 0 6 6L16 13l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2z"/>'),
+  download: _svg('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/>'),
+  share: _svg('<path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M4 13v8h16v-8"/>'),
+  history: _svg('<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 12H1.5M3 12l2.5 2.5"/><path d="M12 7v5l3 3"/>'),
+  folder: _svg('<path d="M3 5h6l2 2h10v13H3z"/>'),
+  note: _svg('<path d="M4 4h16v12l-4 4H4z"/><path d="M16 20v-4h4"/><path d="M8 9h8M8 13h5"/>'),
+  info: _svg('<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8v.5"/>'),
+};
+function icon(nome, tam) {
+  return `<span class="ic"${tam ? ` style="width:${tam}px;height:${tam}px"` : ''}>${I[nome] || I.info}</span>`;
+}
+// injeta ícones nos elementos estáticos do HTML (data-ic="nome")
+function injetarIcones() {
+  document.querySelectorAll('[data-ic]').forEach(el => {
+    if (!el.querySelector('.ic')) el.insertAdjacentHTML('afterbegin', icon(el.dataset.ic));
+  });
+}
+// eventos antigos foram salvos com emoji no campo ico — converte para a biblioteca
+const LEGACY_ICO = { '🚐': 'truck', '🧑‍✈️': 'user', '🪪': 'idCard', '📝': 'note', '🔁': 'refresh', '📌': 'mapPin', '📄': 'fileText' };
+function evIcon(ico) {
+  return icon(I[ico] ? ico : (LEGACY_ICO[ico] || 'mapPin'));
+}
+
+// ══════════════════════════════════════════
 // CATEGORIAS
 // ══════════════════════════════════════════
 const CATS = {
+  // despesas da frota (vinculadas às vans)
   despesa: [
-    { id: 'combustivel', nome: 'Combustível', ico: '⛽' },
-    { id: 'manutencao',  nome: 'Manutenção',  ico: '🔧' },
-    { id: 'pneus',       nome: 'Pneus',       ico: '🛞' },
-    { id: 'pedagio',     nome: 'Pedágio',     ico: '🛣️' },
-    { id: 'documentos',  nome: 'Documentos',  ico: '📄' },
-    { id: 'seguro',      nome: 'Seguro',      ico: '🛡️' },
-    { id: 'salarios',    nome: 'Salários',    ico: '👥' },
-    { id: 'outros',      nome: 'Outros',      ico: '📦' },
+    { id: 'combustivel', nome: 'Combustível', ico: 'fuel' },
+    { id: 'manutencao',  nome: 'Manutenção',  ico: 'wrench' },
+    { id: 'pneus',       nome: 'Pneus',       ico: 'disc' },
+    { id: 'pedagio',     nome: 'Pedágio',     ico: 'road' },
+    { id: 'documentos',  nome: 'Documentos',  ico: 'fileText' },
+    { id: 'seguro',      nome: 'Seguro',      ico: 'shield' },
+    { id: 'salarios',    nome: 'Salários',    ico: 'users' },
+    { id: 'outros',      nome: 'Outros',      ico: 'package' },
+  ],
+  // despesas do escritório (administração da empresa, sem veículo)
+  escritorio: [
+    { id: 'aluguel',       nome: 'Aluguel',      ico: 'home' },
+    { id: 'contas',        nome: 'Água/Luz/Net', ico: 'droplet' },
+    { id: 'telefone',      nome: 'Telefone',     ico: 'phone' },
+    { id: 'contabilidade', nome: 'Contador',     ico: 'calculator' },
+    { id: 'impostos',      nome: 'Impostos',     ico: 'percent' },
+    { id: 'material',      nome: 'Material',     ico: 'folder' },
+    { id: 'salarios_adm',  nome: 'Salários adm.', ico: 'users' },
+    { id: 'outros_esc',    nome: 'Outros',       ico: 'package' },
   ],
   receita: [
-    { id: 'contrato',  nome: 'Prefeitura',   ico: '🏛️' },
-    { id: 'frete',     nome: 'Frete extra',  ico: '🚐' },
-    { id: 'outros_r',  nome: 'Outros',       ico: '💰' },
+    { id: 'contrato',  nome: 'Prefeitura',   ico: 'landmark' },
+    { id: 'frete',     nome: 'Frete extra',  ico: 'truck' },
+    { id: 'outros_r',  nome: 'Outros',       ico: 'coins' },
   ]
 };
 function catInfo(id) {
-  return CATS.despesa.find(c => c.id === id) || CATS.receita.find(c => c.id === id) || { id, nome: 'Outros', ico: '📦' };
+  return CATS.despesa.find(c => c.id === id) || CATS.escritorio.find(c => c.id === id) ||
+    CATS.receita.find(c => c.id === id) || { id, nome: 'Outros', ico: 'package' };
+}
+// origem de um lançamento: registros antigos não têm o campo — deduz pela categoria
+function origemDe(t) {
+  if (t.origem) return t.origem;
+  return CATS.escritorio.some(c => c.id === t.cat) ? 'escritorio' : 'frota';
 }
 
 // ══════════════════════════════════════════
@@ -250,7 +337,7 @@ function initApp() {
   else $('login-form').style.display = '';
   if (typeof firebase === 'undefined') {
     const nota = $('lp-demo-note');
-    nota.textContent = '⚠️ Sem conexão com o servidor. Verifique a internet e recarregue a página.';
+    nota.textContent = 'Sem conexão com o servidor. Verifique a internet e recarregue a página.';
     nota.style.display = '';
     return;
   }
@@ -460,7 +547,7 @@ async function eventosDe(parentId) {
 function eventoHTML(e) {
   return `
     <div class="tx-item" style="cursor:default">
-      <div class="tx-ico">${e.ico || '📌'}</div>
+      <div class="tx-ico">${evIcon(e.ico)}</div>
       <div class="tx-body">
         <div class="tx-title">${esc(e.titulo)}</div>
         <div class="tx-meta">${authorChip(e.autorNome)}${e.detalhe ? ' · ' + esc(e.detalhe) : ''} · ${e.ts ? fmtDia(new Date(e.ts).toISOString().slice(0, 10)) : ''}</div>
@@ -486,7 +573,7 @@ async function renderNotasVeiculo(elId, vid) {
   list.sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach(a => { _anexosVistos[a.id] = a; });
   el.innerHTML = list.map(a => `
     <div class="anexo-chip">
-      <span>${a.mime === 'application/pdf' ? '📄' : '🧾'}</span>
+      ${icon(a.mime === 'application/pdf' ? 'fileText' : 'receipt', 16)}
       <button class="an-nome" onclick="openAnexoViewer('${a.id}')">${esc(a.nome)}</button>
       <small>${a.ts ? fmtData(new Date(a.ts).toISOString().slice(0, 10)) : ''}</small>
     </div>`).join('');
@@ -506,11 +593,11 @@ async function renderAnexosInto(elId, parentId, tipo) {
   list.forEach(a => { _anexosVistos[a.id] = a; });
   el.innerHTML = list.map(a => `
     <div class="anexo-chip">
-      <span>${a.mime === 'application/pdf' ? '📄' : '🖼️'}</span>
+      ${icon(a.mime === 'application/pdf' ? 'fileText' : 'image', 16)}
       <button class="an-nome" onclick="openAnexoViewer('${a.id}')">${esc(a.nome)}</button>
       <button class="x" onclick="removeAnexo('${a.id}','${elId}','${parentId}','${tipo}')">✕</button>
     </div>`).join('') +
-    `<button class="btn btn-small" onclick="pickAnexo('${tipo}','${parentId}','${elId}')">📎 Anexar foto ou PDF</button>`;
+    `<button class="btn btn-small" onclick="pickAnexo('${tipo}','${parentId}','${elId}')">${icon('paperclip', 14)} Anexar foto ou PDF</button>`;
   return list;
 }
 function pickAnexo(tipo, parentId, elId) {
@@ -533,7 +620,7 @@ async function handleAnexoInput(input) {
       mime = 'image/jpeg';
     }
     await addAnexoRecord(anexoCtx.tipo, anexoCtx.parentId, { nome: file.name || 'anexo', mime, data });
-    toast('Anexo salvo 📎');
+    toast('Anexo salvo');
     renderAnexosInto(anexoCtx.elId, anexoCtx.parentId, anexoCtx.tipo);
   } catch (e) {
     console.error(e);
@@ -635,7 +722,7 @@ function profileLogin() {
 function forgotPasswordProfile() {
   if (!selectedSocio) return;
   auth.sendPasswordResetEmail(selectedSocio.email)
-    .then(() => toast('📧 Link de nova senha enviado pro e-mail da empresa'))
+    .then(() => toast('Link de nova senha enviado pro e-mail da empresa'))
     .catch(() => {
       $('lp-err').textContent = 'Não foi possível enviar o e-mail agora.';
       $('lp-err').style.display = '';
@@ -646,7 +733,7 @@ function forgotPassword() {
   const email = $('login-email').value.trim();
   if (!email) { loginError('Digite seu e-mail acima e toque em "Esqueci minha senha".'); return; }
   auth.sendPasswordResetEmail(email)
-    .then(() => toast('📧 Enviamos um link de redefinição para ' + email))
+    .then(() => toast('Enviamos um link de redefinição para ' + email))
     .catch(() => loginError('Não foi possível enviar. Confira o e-mail digitado.'));
 }
 
@@ -698,7 +785,7 @@ function saveProfileName() {
   }
   closeOverlay('modal-name');
   renderAll();
-  toast('Nome salvo 👍');
+  toast('Nome salvo');
 }
 
 // ══════════════════════════════════════════
@@ -744,7 +831,7 @@ function renderInicio() {
   const hour = new Date().getHours();
   const sauda = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = (me.nome || '').split(' ')[0];
-  $('inicio-greeting').textContent = sauda + (nome ? ', ' + nome : '') + ' 👋';
+  $('inicio-greeting').textContent = sauda + (nome ? ', ' + nome : '');
   $('inicio-date').textContent = capFirst(new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }));
   const minhaFoto = myPhoto();
   if (minhaFoto) {
@@ -783,7 +870,7 @@ function computeAlerts() {
   const alerts = [];
   S.vehicles.forEach(v => {
     if (v.status === 'inativo') return;
-    [['licenciamento', 'Licenciamento', '📄'], ['seguro', 'Seguro', '🛡️']].forEach(([campo, label, ico]) => {
+    [['licenciamento', 'Licenciamento', 'fileText'], ['seguro', 'Seguro', 'shield']].forEach(([campo, label, ico]) => {
       const dias = diasAte(v[campo]);
       if (dias === null) return;
       if (dias < 0) alerts.push({ crit: true, ico, txt: `${label} da ${v.nome} VENCIDO`, sub: `venceu em ${fmtData(v[campo])}`, veh: v.id });
@@ -793,15 +880,15 @@ function computeAlerts() {
     const ultima = Number(v.oleoUltimaKm) || 0;
     if (intervalo > 0 && ultima > 0 && v.km > 0) {
       const rodou = v.km - ultima;
-      if (rodou >= intervalo) alerts.push({ crit: true, ico: '🛢️', txt: `Troca de óleo da ${v.nome} atrasada`, sub: `rodou ${fmtKm(rodou)} desde a última troca (limite ${fmtKm(intervalo)})`, veh: v.id });
-      else if (rodou >= intervalo - 1000) alerts.push({ crit: false, ico: '🛢️', txt: `Troca de óleo da ${v.nome} se aproximando`, sub: `faltam ${fmtKm(intervalo - rodou)}`, veh: v.id });
+      if (rodou >= intervalo) alerts.push({ crit: true, ico: 'droplet', txt: `Troca de óleo da ${v.nome} atrasada`, sub: `rodou ${fmtKm(rodou)} desde a última troca (limite ${fmtKm(intervalo)})`, veh: v.id });
+      else if (rodou >= intervalo - 1000) alerts.push({ crit: false, ico: 'droplet', txt: `Troca de óleo da ${v.nome} se aproximando`, sub: `faltam ${fmtKm(intervalo - rodou)}`, veh: v.id });
     }
   });
   S.drivers.forEach(d => {
     const dias = diasAte(d.cnhValidade);
     if (dias === null) return;
-    if (dias < 0) alerts.push({ crit: true, ico: '🪪', txt: `CNH de ${d.nome} VENCIDA`, sub: `venceu em ${fmtData(d.cnhValidade)}`, drv: d.id });
-    else if (dias <= 30) alerts.push({ crit: dias <= 7, ico: '🪪', txt: `CNH de ${d.nome} vence em ${dias} dia${dias === 1 ? '' : 's'}`, sub: fmtData(d.cnhValidade), drv: d.id });
+    if (dias < 0) alerts.push({ crit: true, ico: 'idCard', txt: `CNH de ${d.nome} VENCIDA`, sub: `venceu em ${fmtData(d.cnhValidade)}`, drv: d.id });
+    else if (dias <= 30) alerts.push({ crit: dias <= 7, ico: 'idCard', txt: `CNH de ${d.nome} vence em ${dias} dia${dias === 1 ? '' : 's'}`, sub: fmtData(d.cnhValidade), drv: d.id });
   });
   return alerts.sort((a, b) => (b.crit ? 1 : 0) - (a.crit ? 1 : 0));
 }
@@ -812,13 +899,13 @@ function renderAlerts() {
   $('alert-section').style.display = alerts.length ? '' : 'none';
   $('alert-list').innerHTML = alerts.map(a => `
     <button class="alert-item${a.crit ? ' crit' : ''}" onclick="${a.veh ? `openVehDetail('${a.veh}')` : a.drv ? `openDrvDetail('${a.drv}')` : ''}">
-      <span class="a-ico">${a.ico}</span>
+      <span class="a-ico">${icon(a.ico)}</span>
       <div><b>${esc(a.txt)}</b><small>${esc(a.sub)}</small></div>
     </button>`).join('');
 }
 
 function irParaAlertas() {
-  if (!computeAlerts().length) { toast('Nenhum vencimento próximo 🎉'); return; }
+  if (!computeAlerts().length) { toast('Nenhum vencimento próximo!'); return; }
   $('alert-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
@@ -835,7 +922,7 @@ function renderCatBreakdown(txs) {
     const pct = Math.round(val / total * 100);
     return `
       <div class="cat-row">
-        <div class="c-ico">${c.ico}</div>
+        <div class="c-ico">${icon(c.ico, 18)}</div>
         <div class="c-body">
           <div class="c-top"><b>${c.nome}</b><span class="c-val">${R(val)} <small>· ${pct}%</small></span></div>
           <div class="c-bar"><div class="c-bar-fill" style="width:${pct}%"></div></div>
@@ -859,7 +946,7 @@ function renderVehBreakdown(txs) {
     const rodou = existe ? kmRodadoMes(vid) : 0;
     return `
       <${existe ? `button class="cat-row cat-row-btn" onclick="openVehDetail('${vid}')"` : 'div class="cat-row"'}>
-        <div class="c-ico">🚐</div>
+        <div class="c-ico">${icon('truck', 18)}</div>
         <div class="c-body">
           <div class="c-top"><b>${esc(vehNome(vid))}</b><span class="c-val">${R(val)}${rodou ? ' <small>· ' + fmtKm(rodou) + '</small>' : ''}</span></div>
           <div class="c-bar"><div class="c-bar-fill" style="width:${pct}%"></div></div>
@@ -896,19 +983,26 @@ function txItemHTML(t) {
   const c = catInfo(t.cat);
   const vnome = t.veiculo ? vehNome(t.veiculo) : '';
   const partes = [];
+  if (t.tipo === 'despesa' && origemDe(t) === 'escritorio') partes.push('Escritório');
   if (vnome) partes.push(esc(vnome));
   if (t.cat === 'combustivel' && t.litros) partes.push(t.litros.toLocaleString('pt-BR') + ' L');
   if (t.desc) partes.push(esc(t.desc));
   const meta = `${authorChip(t.autorNome, t.autorUid)}${partes.length ? ' · ' + partes.join(' · ') : ''}`;
   return `
     <button class="tx-item" onclick="openTxDetail('${t.id}')">
-      <div class="tx-ico">${c.ico}</div>
+      <div class="tx-ico">${icon(c.ico)}</div>
       <div class="tx-body">
         <div class="tx-title">${c.nome}</div>
         <div class="tx-meta">${meta}</div>
       </div>
       <div class="tx-val ${t.tipo === 'receita' ? 'pos' : 'neg'}">${t.tipo === 'receita' ? '+' : '−'} ${R(t.valor)}</div>
     </button>`;
+}
+
+function setLancOrigem(o) {
+  lancOrigem = o;
+  document.querySelectorAll('#lanc-orig-chips .chip').forEach(c => c.classList.toggle('chip-on', c.dataset.o === o));
+  renderLanc();
 }
 
 function renderLanc() {
@@ -921,20 +1015,35 @@ function renderLanc() {
     S.vehicles.map(v => `<option value="${v.id}">${esc(v.nome)}</option>`).join('');
   sel.value = cur;
 
-  let txs = txDoMes(monthOffset);
-  const inc = txs.filter(t => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0);
-  const exp = txs.filter(t => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0);
+  // popula filtro de categorias (agrupado por origem)
+  const catSel = $('lanc-cat-filter');
+  const curCat = catSel.value;
+  const opt = c => `<option value="${c.id}">${c.nome}</option>`;
+  catSel.innerHTML = '<option value="">Todas as categorias</option>' +
+    `<optgroup label="Frota">${CATS.despesa.map(opt).join('')}</optgroup>` +
+    `<optgroup label="Escritório">${CATS.escritorio.map(opt).join('')}</optgroup>` +
+    `<optgroup label="Receitas">${CATS.receita.map(opt).join('')}</optgroup>`;
+  catSel.value = curCat;
+
+  const mes = txDoMes(monthOffset);
+  const inc = mes.filter(t => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0);
+  const exp = mes.filter(t => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0);
   $('lanc-sum-inc').textContent = R(inc);
   $('lanc-sum-exp').textContent = R(exp);
   $('lanc-sum-liq').textContent = '= ' + R(inc - exp);
   $('lanc-sum-liq').style.color = inc - exp < 0 ? 'var(--neg)' : 'var(--pos)';
 
+  renderLancCharts(mes);
+
+  let txs = mes;
   if (lancFilter !== 'todos') txs = txs.filter(t => t.tipo === lancFilter);
+  if (lancOrigem !== 'todas') txs = txs.filter(t => t.tipo === 'despesa' && origemDe(t) === lancOrigem);
+  if (catSel.value) txs = txs.filter(t => t.cat === catSel.value);
   if (sel.value) txs = txs.filter(t => t.veiculo === sel.value);
 
   const el = $('lanc-list');
   if (!txs.length) {
-    el.innerHTML = '<div class="empty-big"><span class="e-ico">🗓️</span>Nada lançado com esses filtros neste mês.</div>';
+    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('calendar', 40)}</span>Nada lançado com esses filtros neste mês.</div>`;
     return;
   }
   // agrupa por dia (desc)
@@ -948,6 +1057,43 @@ function renderLanc() {
     </div>`).join('');
 }
 
+// ── Gráficos do mês: frota × escritório + maiores categorias ──
+function renderLancCharts(mes) {
+  const wrap = $('lanc-charts');
+  if (!wrap) return;
+  const desp = mes.filter(t => t.tipo === 'despesa');
+  if (!desp.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+
+  const total = desp.reduce((s, t) => s + t.valor, 0);
+  const escr = desp.filter(t => origemDe(t) === 'escritorio').reduce((s, t) => s + t.valor, 0);
+  const frota = total - escr;
+  const row = (ic, nome, val, pct, onclick) => `
+    <${onclick ? `button class="cat-row cat-row-btn" onclick="${onclick}"` : 'div class="cat-row"'}>
+      <div class="c-ico">${icon(ic, 18)}</div>
+      <div class="c-body">
+        <div class="c-top"><b>${nome}</b><span class="c-val">${R(val)} <small>· ${pct}%</small></span></div>
+        <div class="c-bar"><div class="c-bar-fill" style="width:${pct}%"></div></div>
+      </div>
+    </${onclick ? 'button' : 'div'}>`;
+
+  // divisão frota × escritório (só aparece quando o escritório tem gastos)
+  let html = '';
+  if (escr > 0) {
+    html += row('truck', 'Frota', frota, Math.round(frota / total * 100), "setLancFilter('despesa');setLancOrigem('frota')") +
+            row('building', 'Escritório', escr, Math.round(escr / total * 100), "setLancFilter('despesa');setLancOrigem('escritorio')") +
+            '<div class="chart-sep"></div>';
+  }
+  // maiores categorias do mês
+  const porCat = {};
+  desp.forEach(t => { porCat[t.cat] = (porCat[t.cat] || 0) + t.valor; });
+  html += Object.entries(porCat).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([cat, val]) => {
+    const c = catInfo(cat);
+    return row(c.ico, c.nome, val, Math.round(val / total * 100));
+  }).join('');
+  $('lanc-charts-body').innerHTML = html;
+}
+
 // ── Formulário de lançamento ──
 let pendingAnexo = null; // nota importada aguardando o salvamento do lançamento
 
@@ -959,6 +1105,7 @@ function openTxForm(tx) {
   $('tx-save-btn').textContent = tx ? 'Salvar alterações' : 'Salvar';
   txTipo = tx ? tx.tipo : 'despesa';
   txCat = tx ? tx.cat : null;
+  txOrigem = tx ? origemDe(tx) : 'frota';
   $('tx-valor').value = tx ? tx.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
   $('tx-data').value = tx ? tx.data : todayStr();
   $('tx-desc').value = tx ? (tx.desc || '') : '';
@@ -986,14 +1133,30 @@ function setTxTipo(tipo) {
   renderCatGrid();
   updateFuelExtra();
 }
+function setTxOrigem(origem) {
+  txOrigem = origem;
+  txCat = null;
+  updateTipoSeg();
+  renderCatGrid();
+  updateFuelExtra();
+}
 function updateTipoSeg() {
   $('seg-despesa').classList.toggle('seg-on', txTipo === 'despesa');
   $('seg-receita').classList.toggle('seg-on', txTipo === 'receita');
+  // origem só faz sentido para despesa; escritório dispensa o campo de veículo
+  $('tx-orig-seg').style.display = txTipo === 'despesa' ? '' : 'none';
+  $('seg-frota').classList.toggle('seg-on', txOrigem === 'frota');
+  $('seg-escritorio').classList.toggle('seg-on', txOrigem === 'escritorio');
+  $('tx-veh-fld').style.display = (txTipo === 'despesa' && txOrigem === 'escritorio') ? 'none' : '';
+}
+function catsAtuais() {
+  if (txTipo === 'receita') return CATS.receita;
+  return txOrigem === 'escritorio' ? CATS.escritorio : CATS.despesa;
 }
 function renderCatGrid() {
-  $('tx-cat-grid').innerHTML = CATS[txTipo].map(c => `
+  $('tx-cat-grid').innerHTML = catsAtuais().map(c => `
     <button type="button" class="cat-pill${txCat === c.id ? ' cp-on' : ''}" onclick="pickCat('${c.id}')">
-      <span class="cp-ico">${c.ico}</span>${c.nome}
+      <span class="cp-ico">${icon(c.ico, 20)}</span>${c.nome}
     </button>`).join('');
 }
 function pickCat(id) {
@@ -1021,7 +1184,8 @@ async function saveTx() {
   if (valor <= 0) { toast('Informe o valor.'); return; }
   if (!txCat) { toast('Escolha uma categoria.'); return; }
   const data = $('tx-data').value || todayStr();
-  const veiculo = $('tx-veiculo').value || '';
+  const origem = txTipo === 'despesa' ? txOrigem : '';
+  const veiculo = origem === 'escritorio' ? '' : ($('tx-veiculo').value || '');
   if (txCat === 'combustivel' && !veiculo) { toast('Selecione o veículo abastecido.'); return; }
 
   const original = editingTxId ? S.tx.find(x => x.id === editingTxId) : null;
@@ -1031,6 +1195,7 @@ async function saveTx() {
     valor,
     data,
     veiculo,
+    origem,
     desc: $('tx-desc').value.trim(),
     litros: txCat === 'combustivel' ? parseValor($('tx-litros').value) : 0,
     km: txCat === 'combustivel' ? parseIntBR($('tx-km').value) : 0,
@@ -1077,10 +1242,11 @@ function openTxDetail(id) {
   const c = catInfo(t.cat);
   const rows = [
     ['Tipo', t.tipo === 'receita' ? '▲ Receita' : '▼ Despesa'],
-    ['Categoria', c.ico + ' ' + c.nome],
+    ['Categoria', c.nome],
     ['Valor', R(t.valor)],
     ['Data', fmtData(t.data)],
   ];
+  if (t.tipo === 'despesa') rows.splice(1, 0, ['Origem', origemDe(t) === 'escritorio' ? 'Escritório' : 'Frota']);
   if (t.veiculo) rows.push(['Veículo', vehNome(t.veiculo)]);
   if (t.litros) rows.push(['Litros', t.litros.toLocaleString('pt-BR') + ' L (' + R(t.valor / t.litros) + '/L)']);
   if (t.km) rows.push(['Km no painel', fmtKm(t.km)]);
@@ -1090,7 +1256,7 @@ function openTxDetail(id) {
     rows.map(([k, v]) => `<div class="detail-row"><small>${k}</small><b>${esc(v)}</b></div>`).join('') +
     '</div>' +
     (t.veiculo && vehById(t.veiculo)
-      ? `<button class="btn btn-secondary btn-block" style="margin-bottom:12px" onclick="closeOverlay('modal-tx-detail');openVehDetail('${t.veiculo}')">🚐 Abrir ficha da ${esc(vehNome(t.veiculo))}</button>`
+      ? `<button class="btn btn-secondary btn-block" style="margin-bottom:12px" onclick="closeOverlay('modal-tx-detail');openVehDetail('${t.veiculo}')">${icon('truck', 16)} Abrir ficha da ${esc(vehNome(t.veiculo))}</button>`
       : '') +
     '<div class="anexos-list" id="tx-anexos"></div>';
   renderAnexosInto('tx-anexos', id, 'tx');
@@ -1214,14 +1380,14 @@ function vehAlertChips(v) {
   [['licenciamento', 'Licenciamento'], ['seguro', 'Seguro']].forEach(([campo, label]) => {
     const dias = diasAte(v[campo]);
     if (dias === null) return;
-    if (dias < 0) chips.push({ crit: true, txt: `⚠️ ${label} vencido` });
-    else if (dias <= 30) chips.push({ crit: false, txt: `📅 ${label} vence em ${dias}d` });
+    if (dias < 0) chips.push({ crit: true, txt: `${label} vencido` });
+    else if (dias <= 30) chips.push({ crit: false, txt: `${label} vence em ${dias}d` });
   });
   const intervalo = Number(v.oleoIntervalo) || 0, ultima = Number(v.oleoUltimaKm) || 0;
   if (intervalo > 0 && ultima > 0 && v.km > 0) {
     const rodou = v.km - ultima;
-    if (rodou >= intervalo) chips.push({ crit: true, txt: '🛢️ Troca de óleo atrasada' });
-    else if (rodou >= intervalo - 1000) chips.push({ crit: false, txt: `🛢️ Óleo: faltam ${fmtKm(intervalo - rodou)}` });
+    if (rodou >= intervalo) chips.push({ crit: true, txt: 'Troca de óleo atrasada' });
+    else if (rodou >= intervalo - 1000) chips.push({ crit: false, txt: `Óleo: faltam ${fmtKm(intervalo - rodou)}` });
   }
   return chips;
 }
@@ -1233,12 +1399,12 @@ function motoristaDe(vid) {
 function renderFrota() {
   const el = $('veh-list');
   if (!S.vehicles.length) {
-    el.innerHTML = '<div class="empty-big"><span class="e-ico">🚐</span>Nenhum veículo cadastrado.<br>Toque em <b>+ Veículo</b> para adicionar a primeira van.</div>';
+    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('truck', 40)}</span>Nenhum veículo cadastrado.<br>Toque em <b>+ Veículo</b> para adicionar a primeira van.</div>`;
     return;
   }
   const mk = monthKey(0);
   const ordem = { ativo: 0, manutencao: 1, inativo: 2 };
-  const stLabel = { ativo: '🟢 Ativo', manutencao: '🟡 Manutenção', inativo: '⚪ Inativo' };
+  const stLabel = { ativo: 'Ativo', manutencao: 'Manutenção', inativo: 'Inativo' };
   const busca = ($('frota-busca')?.value || '').trim().toLowerCase();
   let lista = [...S.vehicles];
   if (busca) {
@@ -1249,7 +1415,7 @@ function renderFrota() {
              (v.modelo || '').toLowerCase().includes(busca) ||
              (mot && mot.nome.toLowerCase().includes(busca));
     });
-    if (!lista.length) { el.innerHTML = '<div class="empty-big"><span class="e-ico">🔍</span>Nada encontrado com essa busca.</div>'; return; }
+    if (!lista.length) { el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('search', 40)}</span>Nada encontrado com essa busca.</div>`; return; }
   }
   el.innerHTML = lista
     .sort((a, b) => (ordem[a.status] ?? 0) - (ordem[b.status] ?? 0) || a.nome.localeCompare(b.nome))
@@ -1263,10 +1429,10 @@ function renderFrota() {
       return `
         <button class="veh-card" onclick="openVehDetail('${v.id}')">
           <div class="veh-top">
-            <div class="veh-ico">${v.foto ? `<img src="${v.foto}" alt="">` : '🚐'}</div>
+            <div class="veh-ico">${v.foto ? `<img src="${v.foto}" alt="">` : icon('truck', 24)}</div>
             <div>
               <div class="veh-nome">${esc(v.nome)}</div>
-              <div class="veh-sub">${esc(v.placa || '')}${v.modelo ? ' · ' + esc(v.modelo) : ''}${mot ? ' · 🧑‍✈️ ' + esc(mot.nome.split(' ')[0]) : ''}</div>
+              <div class="veh-sub">${esc(v.placa || '')}${v.modelo ? ' · ' + esc(v.modelo) : ''}${mot ? ' · ' + esc(mot.nome.split(' ')[0]) : ''}</div>
             </div>
             <span class="veh-status st-${v.status || 'ativo'}">${stLabel[v.status] || stLabel.ativo}</span>
           </div>
@@ -1324,7 +1490,7 @@ async function saveVehicle() {
   closeOverlay('modal-veh');
   try {
     await dataSet('vehicles', id, v);
-    if (!origV) logEvento('vehicle', id, '🚐', 'Veículo cadastrado', v.nome + (v.placa ? ' · ' + v.placa : ''));
+    if (!origV) logEvento('vehicle', id, 'truck', 'Veículo cadastrado', v.nome + (v.placa ? ' · ' + v.placa : ''));
     toast(editingVehId ? 'Veículo atualizado ✓' : 'Veículo adicionado ✓');
   } catch (e) { toast('Erro ao salvar.'); }
   editingVehId = null;
@@ -1353,7 +1519,7 @@ function openVehDetail(id) {
   const proxOleo = (Number(v.oleoUltimaKm) || 0) + (Number(v.oleoIntervalo) || 0);
 
   const mot = motoristaDe(id);
-  const stLabel = { ativo: '🟢 Ativo', manutencao: '🟡 Manutenção', inativo: '⚪ Inativo' };
+  const stLabel = { ativo: 'Ativo', manutencao: 'Manutenção', inativo: 'Inativo' };
 
   // indicadores principais (4)
   const cells = [
@@ -1385,11 +1551,11 @@ function openVehDetail(id) {
 
   $('veh-detail-body').innerHTML = `
     <div class="ficha-head">
-      <button class="veh-ico ficha-foto" onclick="pickVehFoto('${id}')" title="Trocar foto">${v.foto ? `<img src="${v.foto}" alt="">` : '🚐'}</button>
+      <button class="veh-ico ficha-foto" onclick="pickVehFoto('${id}')" title="Trocar foto">${v.foto ? `<img src="${v.foto}" alt="">` : icon('truck', 30)}</button>
       <div class="ficha-info">
         <b>${esc(v.nome)}</b>
         <small>${esc(v.placa || 'sem placa')}${v.modelo ? ' · ' + esc(v.modelo) : ''}</small>
-        <small>🧑‍✈️ ${mot ? esc(mot.nome) : 'Sem motorista vinculado'}</small>
+        <small>${mot ? 'Motorista: ' + esc(mot.nome) : 'Sem motorista vinculado'}</small>
       </div>
       <span class="veh-status st-${v.status || 'ativo'}">${stLabel[v.status] || stLabel.ativo}</span>
     </div>
@@ -1397,17 +1563,17 @@ function openVehDetail(id) {
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
 
     <div class="quick-row quick-2x2">
-      <button class="qa" onclick="registrarAbastecimento('${id}')"><span>⛽</span>Registrar<br>abastecimento</button>
-      <button class="qa" onclick="registrarManutencao('${id}')"><span>🛠️</span>Registrar<br>manutenção</button>
-      <button class="qa" onclick="openKmForm('${id}')"><span>📍</span>Atualizar<br>KM</button>
-      <button class="qa" onclick="pickAnexo('vehicle','${id}','veh-anexos')"><span>📄</span>Adicionar<br>documento</button>
+      <button class="qa" onclick="registrarAbastecimento('${id}')">${icon('fuel', 24)}Registrar<br>abastecimento</button>
+      <button class="qa" onclick="registrarManutencao('${id}')">${icon('wrench', 24)}Registrar<br>manutenção</button>
+      <button class="qa" onclick="openKmForm('${id}')">${icon('mapPin', 24)}Atualizar<br>KM</button>
+      <button class="qa" onclick="pickAnexo('vehicle','${id}','veh-anexos')">${icon('filePlus', 24)}Adicionar<br>documento</button>
     </div>
 
-    <h2 class="sec-title">📜 Histórico</h2>
+    <h2 class="sec-title">${icon('history', 14)} Histórico</h2>
     <div id="van-timeline"><div class="empty-mini">Carregando…</div></div>
     <button class="btn-link" onclick="verHistoricoCompleto('${id}')">Ver todos os lançamentos →</button>
 
-    <h2 class="sec-title">📄 Documentos</h2>
+    <h2 class="sec-title">${icon('fileText', 14)} Documentos</h2>
     ${vencimentos ? `<div class="venc-chips">${vencimentos}</div>` : ''}
     <div class="anexos-list" id="veh-anexos"></div>
     <div id="veh-notas-wrap" style="display:none">
@@ -1415,13 +1581,13 @@ function openVehDetail(id) {
       <div class="anexos-list" id="veh-notas"></div>
     </div>
 
-    <h2 class="sec-title">📝 Observações</h2>
+    <h2 class="sec-title">${icon('note', 14)} Observações</h2>
     <label class="fld"><textarea id="van-obs" rows="3" placeholder="Anotações livres sobre esta van…">${esc(v.observacoes || '')}</textarea></label>
     <button class="btn btn-small" style="margin-top:-6px" onclick="salvarObsVan('${id}')">Salvar observações</button>
 
-    <h2 class="sec-title">⚙️ Informações técnicas</h2>
+    <h2 class="sec-title">${icon('sliders', 14)} Informações técnicas</h2>
     <div class="vd-grid">${tech.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
-    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">✏️ Editar dados do veículo</button>
+    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-veh-detail');openVehicleForm(vehById('${id}'))">${icon('pencil', 16)} Editar dados do veículo</button>
   `;
   renderVanTimeline(id, txsV);
   renderNotasVeiculo('veh-notas', id);
@@ -1436,7 +1602,7 @@ async function renderVanTimeline(vid, txsV) {
       ts: l.ts || 0,
       html: `
         <div class="tx-item" style="cursor:default">
-          <div class="tx-ico">📍</div>
+          <div class="tx-ico">${icon('mapPin')}</div>
           <div class="tx-body">
             <div class="tx-title">Km registrado: ${fmtKm(l.km)}</div>
             <div class="tx-meta">${authorChip(l.autorNome)} · ${fmtDia(l.data)}</div>
@@ -1453,7 +1619,7 @@ async function renderVanTimeline(vid, txsV) {
     ts: a.ts || 0,
     html: `
       <button class="tx-item" onclick="openAnexoViewer('${a.id}')">
-        <div class="tx-ico">${a.mime === 'application/pdf' ? '📄' : '🖼️'}</div>
+        <div class="tx-ico">${icon(a.mime === 'application/pdf' ? 'fileText' : 'image')}</div>
         <div class="tx-body">
           <div class="tx-title">Documento: ${esc(a.nome)}</div>
           <div class="tx-meta">${authorChip(a.autorNome)} · ${a.ts ? fmtDia(new Date(a.ts).toISOString().slice(0, 10)) : ''}</div>
@@ -1489,7 +1655,7 @@ async function salvarObsVan(vid) {
   const obs = $('van-obs').value.trim();
   try {
     await dataSet('vehicles', vid, { ...stripId(v), observacoes: obs });
-    if (obs && obs !== (v.observacoes || '')) logEvento('vehicle', vid, '📝', 'Observação registrada', obs.slice(0, 80));
+    if (obs && obs !== (v.observacoes || '')) logEvento('vehicle', vid, 'note', 'Observação registrada', obs.slice(0, 80));
     toast('Observações salvas ✓');
   } catch (e) { toast('Erro ao salvar.'); }
 }
@@ -1527,7 +1693,7 @@ async function handleVehFotoInput(input) {
   try {
     const foto = await fileToSquareDataURL(file, 160);
     await dataSet('vehicles', v.id, { ...stripId(v), foto });
-    toast('Foto da van salva 📷');
+    toast('Foto da van salva ✓');
     closeOverlay('modal-veh-detail');
   } catch (e) { toast('Não foi possível usar essa imagem.'); }
 }
@@ -1546,21 +1712,21 @@ function cnhBadge(d) {
 function renderMotoristas() {
   const el = $('driver-list');
   if (!S.drivers.length) {
-    el.innerHTML = '<div class="empty-big"><span class="e-ico">🧑‍✈️</span>Nenhum motorista cadastrado.<br>Toque em <b>+ Motorista</b> para adicionar o primeiro.</div>';
+    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('user', 40)}</span>Nenhum motorista cadastrado.<br>Toque em <b>+ Motorista</b> para adicionar o primeiro.</div>`;
     return;
   }
   el.innerHTML = [...S.drivers]
     .sort((a, b) => a.nome.localeCompare(b.nome))
     .map(d => {
       const van = S.vehicles.find(v => v.id === d.veiculoId);
-      const stTag = d.status === 'ferias' ? '🌴 Férias · ' : d.status === 'inativo' ? '⚪ Inativo · ' : '';
+      const stTag = d.status === 'ferias' ? 'Férias · ' : d.status === 'inativo' ? 'Inativo · ' : '';
       return `
         <button class="veh-card" onclick='openDrvDetail(${JSON.stringify(d.id)})'>
           <div class="veh-top">
-            <div class="veh-ico">${d.foto ? `<img src="${d.foto}" alt="">` : '🧑‍✈️'}</div>
+            <div class="veh-ico">${d.foto ? `<img src="${d.foto}" alt="">` : icon('user', 24)}</div>
             <div>
               <div class="veh-nome">${esc(d.nome)}</div>
-              <div class="veh-sub">${stTag}${van ? '🚐 ' + esc(van.nome) + ' · ' : ''}CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</div>
+              <div class="veh-sub">${stTag}${van ? esc(van.nome) + ' · ' : ''}CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</div>
             </div>
             ${cnhBadge(d)}
           </div>
@@ -1576,7 +1742,7 @@ function openDrvDetail(id) {
   detailDrvId = id;
   const van = S.vehicles.find(v => v.id === d.veiculoId);
   const dias = diasAte(d.cnhValidade);
-  const stLabelD = { ativo: '🟢 Ativo', ferias: '🌴 Férias', inativo: '⚪ Inativo' };
+  const stLabelD = { ativo: 'Ativo', ferias: 'Férias', inativo: 'Inativo' };
   const stClsD = { ativo: 'st-ativo', ferias: 'st-manutencao', inativo: 'st-inativo' };
   $('drv-detail-title').textContent = d.nome;
 
@@ -1603,16 +1769,16 @@ function openDrvDetail(id) {
     ['Cadastrado por', d.criadoPorNome || '—'],
   ];
   const alertaCNH = dias !== null && dias <= 30
-    ? `<div class="venc-chips"><span class="venc-chip ${dias < 0 ? 'vc-crit' : 'vc-warn'}">🪪 CNH: ${fmtData(d.cnhValidade)} (${dias < 0 ? 'VENCIDA' : 'em ' + dias + 'd'})</span></div>`
+    ? `<div class="venc-chips"><span class="venc-chip ${dias < 0 ? 'vc-crit' : 'vc-warn'}">CNH: ${fmtData(d.cnhValidade)} (${dias < 0 ? 'VENCIDA' : 'em ' + dias + 'd'})</span></div>`
     : '';
 
   $('drv-detail-body').innerHTML = `
     <div class="ficha-head">
-      <button class="veh-ico ficha-foto" onclick="pickDrvFoto('${id}')" title="Trocar foto">${d.foto ? `<img src="${d.foto}" alt="">` : '🧑‍✈️'}</button>
+      <button class="veh-ico ficha-foto" onclick="pickDrvFoto('${id}')" title="Trocar foto">${d.foto ? `<img src="${d.foto}" alt="">` : icon('user', 30)}</button>
       <div class="ficha-info">
         <b>${esc(d.nome)}</b>
         <small>CNH ${esc(d.cnhCategoria || '—')} · até ${fmtData(d.cnhValidade)}</small>
-        <small>${van ? '🚐 ' + esc(van.nome) : 'Sem veículo vinculado'}</small>
+        <small>${van ? 'Van: ' + esc(van.nome) : 'Sem veículo vinculado'}</small>
       </div>
       <span class="veh-status ${stClsD[d.status] || 'st-ativo'}">${stLabelD[d.status] || stLabelD.ativo}</span>
     </div>
@@ -1620,27 +1786,27 @@ function openDrvDetail(id) {
     <div class="vd-grid">${cells.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
 
     <div class="quick-row quick-2x2">
-      <button class="qa" onclick="openTrocaVeiculo('${id}')"><span>🔁</span>Trocar<br>veículo</button>
-      <button class="qa" onclick="openCNHForm('${id}')"><span>🪪</span>Atualizar<br>CNH</button>
-      <button class="qa" onclick="pickAnexo('driver','${id}','drv-anexos')"><span>📄</span>Adicionar<br>documento</button>
-      <button class="qa" onclick="focarObsMotorista()"><span>📝</span>Registrar<br>observação</button>
+      <button class="qa" onclick="openTrocaVeiculo('${id}')">${icon('refresh', 24)}Trocar<br>veículo</button>
+      <button class="qa" onclick="openCNHForm('${id}')">${icon('idCard', 24)}Atualizar<br>CNH</button>
+      <button class="qa" onclick="pickAnexo('driver','${id}','drv-anexos')">${icon('filePlus', 24)}Adicionar<br>documento</button>
+      <button class="qa" onclick="focarObsMotorista()">${icon('note', 24)}Registrar<br>observação</button>
     </div>
 
-    <h2 class="sec-title">📜 Histórico</h2>
+    <h2 class="sec-title">${icon('history', 14)} Histórico</h2>
     <div id="drv-timeline"><div class="empty-mini">Carregando…</div></div>
 
-    <h2 class="sec-title">📄 Documentos (frente e verso da CNH, exames…)</h2>
+    <h2 class="sec-title">${icon('fileText', 14)} Documentos (frente e verso da CNH, exames…)</h2>
     ${alertaCNH}
     <div class="anexos-list" id="drv-anexos"></div>
 
-    <h2 class="sec-title">📝 Observações</h2>
+    <h2 class="sec-title">${icon('note', 14)} Observações</h2>
     <label class="fld"><textarea id="drv-obs-inline" rows="3" placeholder="Anotações livres sobre este motorista…">${esc(d.observacoes || '')}</textarea></label>
     <button class="btn btn-small" style="margin-top:-6px" onclick="salvarObsMotorista('${id}')">Salvar observações</button>
 
-    <h2 class="sec-title">⚙️ Informações</h2>
+    <h2 class="sec-title">${icon('sliders', 14)} Informações</h2>
     <div class="vd-grid">${info.map(([k, val]) => `<div class="vd-cell"><small>${k}</small><b>${esc(val)}</b></div>`).join('')}</div>
-    ${van ? `<button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick="closeOverlay('modal-drv-detail');openVehDetail('${van.id}')">🚐 Abrir Central da ${esc(van.nome)}</button>` : ''}
-    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-drv-detail');openDriverForm('${id}')">✏️ Editar dados do motorista</button>
+    ${van ? `<button class="btn btn-secondary btn-block" style="margin-bottom:8px" onclick="closeOverlay('modal-drv-detail');openVehDetail('${van.id}')">${icon('truck', 16)} Abrir Central da ${esc(van.nome)}</button>` : ''}
+    <button class="btn btn-secondary btn-block" onclick="closeOverlay('modal-drv-detail');openDriverForm('${id}')">${icon('pencil', 16)} Editar dados do motorista</button>
   `;
   renderDrvTimeline(id);
   openOverlay('modal-drv-detail');
@@ -1655,7 +1821,7 @@ async function renderDrvTimeline(did) {
     ts: a.ts || 0,
     html: `
       <button class="tx-item" onclick="openAnexoViewer('${a.id}')">
-        <div class="tx-ico">${a.mime === 'application/pdf' ? '📄' : '🖼️'}</div>
+        <div class="tx-ico">${icon(a.mime === 'application/pdf' ? 'fileText' : 'image')}</div>
         <div class="tx-body">
           <div class="tx-title">Documento: ${esc(a.nome)}</div>
           <div class="tx-meta">${authorChip(a.autorNome)} · ${a.ts ? fmtDia(new Date(a.ts).toISOString().slice(0, 10)) : ''}</div>
@@ -1712,7 +1878,7 @@ async function salvarCNH() {
   closeOverlay('modal-cnh');
   try {
     await dataSet('drivers', d.id, { ...stripId(d), cnhCategoria: cat, cnhValidade: val, atualizadoPorNome: me.nome || me.email, atualizadoEm: Date.now() });
-    logEvento('driver', d.id, '🪪', 'CNH atualizada', 'categoria ' + cat + ', válida até ' + fmtData(val));
+    logEvento('driver', d.id, 'idCard', 'CNH atualizada', 'categoria ' + cat + ', válida até ' + fmtData(val));
     toast('CNH atualizada ✓');
     closeOverlay('modal-drv-detail');
   } catch (e) { toast('Erro ao salvar.'); }
@@ -1727,7 +1893,7 @@ async function salvarObsMotorista(did) {
   const obs = $('drv-obs-inline').value.trim();
   try {
     await dataSet('drivers', did, { ...stripId(d), observacoes: obs });
-    if (obs && obs !== (d.observacoes || '')) logEvento('driver', did, '📝', 'Observação registrada', obs.slice(0, 80));
+    if (obs && obs !== (d.observacoes || '')) logEvento('driver', did, 'note', 'Observação registrada', obs.slice(0, 80));
     toast('Observações salvas ✓');
   } catch (e) { toast('Erro ao salvar.'); }
 }
@@ -1746,7 +1912,7 @@ async function handleDrvFotoInput(input) {
   try {
     const foto = await fileToSquareDataURL(file, 160);
     await dataSet('drivers', d.id, { ...stripId(d), foto });
-    toast('Foto salva 📷');
+    toast('Foto salva ✓');
     closeOverlay('modal-drv-detail');
   } catch (e) { toast('Não foi possível usar essa imagem.'); }
 }
@@ -1767,7 +1933,7 @@ function changeMyPassword() {
   if (DEMO || !auth) { toast('Disponível só no modo real.'); return; }
   confirmDialog('Trocar senha', 'Enviar o link de troca de senha para o e-mail da empresa?', () => {
     auth.sendPasswordResetEmail(me.email)
-      .then(() => toast('📧 Link enviado! Abra o e-mail da empresa.'))
+      .then(() => toast('Link enviado! Abra o e-mail da empresa.'))
       .catch(() => toast('Não foi possível enviar agora.'));
   });
 }
@@ -1776,7 +1942,7 @@ function togglePass(id, btn) {
   const inp = $(id);
   const mostrar = inp.type === 'password';
   inp.type = mostrar ? 'text' : 'password';
-  btn.textContent = mostrar ? '🙈 Esconder senha' : '👁 Mostrar senha';
+  btn.textContent = mostrar ? 'Esconder senha' : 'Mostrar senha';
 }
 
 function openDriverForm(idOrNull) {
@@ -1822,11 +1988,11 @@ async function saveDriver() {
     await dataSet('drivers', id, d);
     // eventos do histórico
     if (!origD) {
-      logEvento('driver', id, '🧑‍✈️', 'Entrada na empresa', d.nome + ' cadastrado');
+      logEvento('driver', id, 'user', 'Entrada na empresa', d.nome + ' cadastrado');
       if (d.veiculoId) registrarTrocaEventos(id, d.nome, '', d.veiculoId);
     } else {
       if ((origD.veiculoId || '') !== d.veiculoId) registrarTrocaEventos(id, d.nome, origD.veiculoId || '', d.veiculoId);
-      if ((origD.cnhValidade || '') !== d.cnhValidade) logEvento('driver', id, '🪪', 'CNH atualizada', 'válida até ' + fmtData(d.cnhValidade));
+      if ((origD.cnhValidade || '') !== d.cnhValidade) logEvento('driver', id, 'idCard', 'CNH atualizada', 'válida até ' + fmtData(d.cnhValidade));
     }
     toast(editingDrvId ? 'Motorista atualizado ✓' : 'Motorista adicionado ✓');
   } catch (e) { toast('Erro ao salvar.'); }
@@ -1837,9 +2003,9 @@ async function saveDriver() {
 function registrarTrocaEventos(did, nome, oldVid, newVid) {
   const de = oldVid ? vehNome(oldVid) : 'nenhuma van';
   const para = newVid ? vehNome(newVid) : 'nenhuma van';
-  logEvento('driver', did, '🔁', 'Troca de veículo', de + ' → ' + para);
-  if (oldVid) logEvento('vehicle', oldVid, '🧑‍✈️', nome + ' deixou esta van', '');
-  if (newVid) logEvento('vehicle', newVid, '🧑‍✈️', nome + ' assumiu esta van', '');
+  logEvento('driver', did, 'refresh', 'Troca de veículo', de + ' → ' + para);
+  if (oldVid) logEvento('vehicle', oldVid, 'user', nome + ' deixou esta van', '');
+  if (newVid) logEvento('vehicle', newVid, 'user', nome + ' assumiu esta van', '');
 }
 
 function deleteDriverFromForm() {
@@ -1920,7 +2086,7 @@ async function buildResumoCanvas() {
   cats.forEach(([cat, val]) => {
     const info = catInfo(cat);
     x.fillStyle = '#f4f7fb'; x.font = '600 34px system-ui,sans-serif';
-    x.fillText(`${info.ico} ${info.nome}`, 80, y);
+    x.fillText(info.nome, 80, y);
     x.textAlign = 'right'; x.fillText(R(val), W - 80, y);
     x.textAlign = 'left';
     const bw = Math.max(14, (W - 160) * (val / maxCat));
@@ -1947,7 +2113,7 @@ async function buildResumoCanvas() {
     vehs.forEach(([vid, val]) => {
       const rodou = vehById(vid) ? kmRodadoMes(vid) : 0;
       x.fillStyle = '#f4f7fb'; x.font = '600 36px system-ui,sans-serif';
-      x.fillText('🚐 ' + vehNome(vid), 80, y);
+      x.fillText(vehNome(vid), 80, y);
       x.textAlign = 'right';
       x.fillText(R(val) + (rodou ? '  ·  ' + fmtKm(rodou) : ''), W - 80, y);
       x.textAlign = 'left';
@@ -1957,7 +2123,7 @@ async function buildResumoCanvas() {
 
   // rodapé
   x.fillStyle = 'rgba(244,247,251,0.22)'; x.font = '500 28px system-ui,sans-serif';
-  x.fillText('Lagos Serviços de Transporte 🚐', 80, H - 70);
+  x.fillText('Lagos Serviços de Transporte', 80, H - 70);
   return c;
 }
 function roundRect(x, px, py, pw, ph, pr) {
@@ -1971,7 +2137,7 @@ function roundRect(x, px, py, pw, ph, pr) {
 }
 
 async function shareResumoMes() {
-  toast('Gerando imagem… 🖼️');
+  toast('Gerando imagem…');
   const c = await buildResumoCanvas();
   c.toBlob(blob => {
     const file = new File([blob], 'lagos-resumo.png', { type: 'image/png' });
@@ -2045,7 +2211,7 @@ async function importNota(input) {
   if (!file) return;
   const formAberto = $('modal-tx').classList.contains('open');
   if (!formAberto) openTxForm();
-  toast('Lendo a nota… pode levar alguns segundos ⏳');
+  toast('Lendo a nota… pode levar alguns segundos');
   let imagem = null, texto = '', anexo = null;
   try {
     if (file.type === 'application/pdf') {
@@ -2089,7 +2255,7 @@ async function importNota(input) {
   updateFuelExtra();
   updateFuelHint();
   const leu = info.valor || info.litros || info.placa;
-  toast(leu ? 'Nota lida! Confere e salva 👇' : 'Nota anexada 📎 — preencha os campos normalmente');
+  toast(leu ? 'Nota lida! Confere e salva.' : 'Nota anexada — preencha os campos normalmente');
 }
 
 // ══════════════════════════════════════════
@@ -2097,11 +2263,12 @@ async function importNota(input) {
 // ══════════════════════════════════════════
 function exportCSV() {
   if (!S.tx.length) { toast('Nada para exportar ainda.'); return; }
-  const head = ['Data', 'Tipo', 'Categoria', 'Veículo', 'Descrição', 'Valor (R$)', 'Litros', 'Km', 'Lançado por'];
+  const head = ['Data', 'Tipo', 'Origem', 'Categoria', 'Veículo', 'Descrição', 'Valor (R$)', 'Litros', 'Km', 'Lançado por'];
   const lines = [...S.tx].sort((a, b) => (a.data || '').localeCompare(b.data || ''))
     .map(t => [
       fmtData(t.data),
       t.tipo === 'receita' ? 'Receita' : 'Despesa',
+      t.tipo === 'despesa' ? (origemDe(t) === 'escritorio' ? 'Escritório' : 'Frota') : '',
       catInfo(t.cat).nome,
       t.veiculo ? vehNome(t.veiculo) : '',
       (t.desc || '').replace(/;/g, ','),
@@ -2118,7 +2285,7 @@ function exportCSV() {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  toast('CSV exportado 📊');
+  toast('CSV exportado ✓');
 }
 
 // ══════════════════════════════════════════
@@ -2182,6 +2349,9 @@ function seedDemo() {
     mk({ tipo: 'despesa', cat: 'documentos', valor: 310, data: dstr(12), veiculo: v2, desc: 'Licenciamento anual', litros: 0, km: 0, autorNome: autores[2] }),
     mk({ tipo: 'despesa', cat: 'outros', valor: 90, data: dstr(7), veiculo: v1, desc: 'Lavagem completa', litros: 0, km: 0, autorNome: autores[1] }),
     mk({ tipo: 'receita', cat: 'frete', valor: 900, data: dstr(8), veiculo: v2, desc: 'Fretamento fim de semana', litros: 0, km: 0, autorNome: autores[2] }),
+    mk({ tipo: 'despesa', cat: 'aluguel', origem: 'escritorio', valor: 1500, data: dstr(6), veiculo: '', desc: 'Aluguel da sala', litros: 0, km: 0, autorNome: autores[0] }),
+    mk({ tipo: 'despesa', cat: 'contabilidade', origem: 'escritorio', valor: 480, data: dstr(10), veiculo: '', desc: 'Honorários do contador', litros: 0, km: 0, autorNome: autores[2] }),
+    mk({ tipo: 'despesa', cat: 'contas', origem: 'escritorio', valor: 260, data: dstr(13), veiculo: '', desc: 'Luz + internet', litros: 0, km: 0, autorNome: autores[1] }),
     mk({ tipo: 'despesa', cat: 'combustivel', valor: 410, data: dstr(33), veiculo: v1, desc: '', litros: 69, km: 145900, autorNome: autores[0] }),
     mk({ tipo: 'receita', cat: 'contrato', valor: 14500, data: dstr(32), veiculo: '', desc: 'Repasse mensal — transporte escolar', autorNome: autores[0], litros: 0, km: 0 }),
     mk({ tipo: 'despesa', cat: 'seguro', valor: 780, data: dstr(35), veiculo: v2, desc: 'Parcela do seguro', litros: 0, km: 0, autorNome: autores[1] }),
@@ -2224,6 +2394,9 @@ document.addEventListener('keydown', e => {
   if (e.target.id === 'login-pass' || e.target.id === 'login-email') doLogin();
   if (e.target.id === 'lp-pass') profileLogin();
 });
+
+// ícones dos elementos estáticos do HTML
+injetarIcones();
 
 // fechar overlay tocando fora
 document.querySelectorAll('.overlay').forEach(ov => {
