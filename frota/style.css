@@ -535,3 +535,6 @@ button.status-card:active { transform: scale(.985); }
 .sc-warn { border-color: rgba(217,119,6,.4);   background: rgba(217,119,6,.08);  color: var(--warn); }
 .sc-crit { border-color: rgba(220,38,38,.4);   background: rgba(220,38,38,.07);  color: var(--neg); }
 .dash-tiles-2 { grid-template-columns: repeat(2, 1fr); }
+
+/* segurar um lançamento (excluir) sem o navegador selecionar texto */
+.tx-item { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }

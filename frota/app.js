@@ -979,7 +979,7 @@ function txItemHTML(t) {
   if (t.desc) partes.push(esc(t.desc));
   const meta = `${authorChip(t.autorNome, t.autorUid)}${partes.length ? ' · ' + partes.join(' · ') : ''}`;
   return `
-    <button class="tx-item" onclick="openTxDetail('${t.id}')">
+    <button class="tx-item" data-tx="${t.id}" onclick="openTxDetail('${t.id}')">
       <div class="tx-ico">${icon(c.ico)}</div>
       <div class="tx-body">
         <div class="tx-title">${c.nome}</div>
@@ -2397,6 +2397,48 @@ document.addEventListener('keydown', e => {
 
 // ícones dos elementos estáticos do HTML
 injetarIcones();
+
+// ── Pressionar e segurar um lançamento oferece excluir (igual GD Cash) ──
+// Vale em qualquer lista: Central, Financeiro e histórico das fichas.
+const _lp = { timer: null, fired: false, x: 0, y: 0 };
+function _lpCancel() { clearTimeout(_lp.timer); _lp.timer = null; }
+function confirmarExclusaoTx(id) {
+  const t = S.tx.find(x => x.id === id);
+  if (!t) return;
+  if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) {} }
+  confirmDialog('Excluir lançamento',
+    `${catInfo(t.cat).nome} de ${R(t.valor)} em ${fmtData(t.data)}. Essa ação não pode ser desfeita. Excluir?`,
+    async () => {
+      try { await dataDelete('tx', id); toast('Lançamento excluído'); }
+      catch (e) { toast('Erro ao excluir.'); }
+    });
+}
+document.addEventListener('pointerdown', e => {
+  const item = e.target.closest('[data-tx]');
+  if (!item) return;
+  _lp.fired = false; _lp.x = e.clientX; _lp.y = e.clientY;
+  _lpCancel();
+  _lp.timer = setTimeout(() => { _lp.fired = true; confirmarExclusaoTx(item.dataset.tx); }, 550);
+});
+document.addEventListener('pointermove', e => {
+  // arrastar (rolagem) cancela o segurar
+  if (_lp.timer && (Math.abs(e.clientX - _lp.x) > 12 || Math.abs(e.clientY - _lp.y) > 12)) _lpCancel();
+});
+['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, _lpCancel));
+// depois do segurar, o toque não deve abrir o detalhe
+document.addEventListener('click', e => {
+  if (_lp.fired && e.target.closest('[data-tx]')) {
+    e.preventDefault(); e.stopPropagation();
+    _lp.fired = false;
+  }
+}, true);
+// menu nativo do navegador não atrapalha (e clique direito no PC também exclui)
+document.addEventListener('contextmenu', e => {
+  const item = e.target.closest('[data-tx]');
+  if (!item) return;
+  e.preventDefault();
+  if (!_lp.fired) { _lpCancel(); confirmarExclusaoTx(item.dataset.tx); }
+});
 
 // fechar overlay tocando fora
 document.querySelectorAll('.overlay').forEach(ov => {
