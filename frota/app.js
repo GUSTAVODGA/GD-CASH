@@ -580,7 +580,7 @@ function eventoHTML(e, comDono) {
     ? (e.parentTipo === 'vehicle' ? vehNome(e.parentId) : (S.drivers.find(d => d.id === e.parentId)?.nome || ''))
     : '';
   return `
-    <div class="tx-item" style="cursor:default">
+    <div class="tx-item" style="cursor:default"${e.id ? ` data-ev="${e.id}"` : ''}>
       <div class="tx-ico">${evIcon(e.ico)}</div>
       <div class="tx-body">
         <div class="tx-title">${esc(e.titulo)}</div>
@@ -2780,10 +2780,31 @@ function confirmarExclusaoTx(id) {
       catch (e) { toast('Erro ao excluir.'); }
     });
 }
-function _lpStart(x, y, id) {
-  _lp.fired = false; _lp.x = x; _lp.y = y;
+// eventos da linha do tempo (cadastro de veículo, troca, CNH, documento…)
+// também podem ser removidos do histórico com o mesmo gesto
+function confirmarExclusaoEv(id) {
+  if (!exigirEdicao()) return;
+  const ev = (S.eventos || []).find(x => x.id === id);
+  if (!ev) return;
+  if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) {} }
+  confirmDialog('Excluir do histórico',
+    `"${ev.titulo}"${ev.detalhe ? ' — ' + ev.detalhe : ''}. Isso remove só este registro da linha do tempo. Excluir?`,
+    async () => {
+      try { await dataDelete('eventos', id); toast('Registro removido'); }
+      catch (e) { toast('Erro ao excluir.'); }
+    });
+}
+// item segurável mais próximo do toque: lançamento (data-tx) ou evento (data-ev)
+function _lpHit(target) { return target.closest('[data-tx]') || target.closest('[data-ev]'); }
+function _lpFire(hit) {
+  if (!hit) return;
+  if (hit.dataset.tx) confirmarExclusaoTx(hit.dataset.tx);
+  else if (hit.dataset.ev) confirmarExclusaoEv(hit.dataset.ev);
+}
+function _lpStart(x, y, hit) {
+  _lp.fired = false; _lp.x = x; _lp.y = y; _lp.hit = hit;
   _lpCancel();
-  _lp.timer = setTimeout(() => { _lp.fired = true; confirmarExclusaoTx(id); }, 500);
+  _lp.timer = setTimeout(() => { _lp.fired = true; _lpFire(hit); }, 500);
 }
 function _lpMove(x, y) {
   // arrastar (rolagem) cancela o segurar
@@ -2791,8 +2812,8 @@ function _lpMove(x, y) {
 }
 // celular: eventos de toque (iOS/Android cancelam pointer events no toque longo)
 document.addEventListener('touchstart', e => {
-  const item = e.target.closest('[data-tx]');
-  if (item) _lpStart(e.touches[0].clientX, e.touches[0].clientY, item.dataset.tx);
+  const item = _lpHit(e.target);
+  if (item) _lpStart(e.touches[0].clientX, e.touches[0].clientY, item);
 }, { passive: true });
 document.addEventListener('touchmove', e => {
   if (e.touches.length) _lpMove(e.touches[0].clientX, e.touches[0].clientY);
@@ -2801,8 +2822,8 @@ document.addEventListener('touchmove', e => {
 // computador: mouse segurando também funciona
 document.addEventListener('pointerdown', e => {
   if (e.pointerType === 'touch') return; // o toque já é tratado acima
-  const item = e.target.closest('[data-tx]');
-  if (item) _lpStart(e.clientX, e.clientY, item.dataset.tx);
+  const item = _lpHit(e.target);
+  if (item) _lpStart(e.clientX, e.clientY, item);
 });
 document.addEventListener('pointermove', e => {
   if (e.pointerType !== 'touch') _lpMove(e.clientX, e.clientY);
@@ -2820,10 +2841,10 @@ document.addEventListener('click', e => {
 }, true);
 // menu nativo do navegador não atrapalha (e clique direito no PC também exclui)
 document.addEventListener('contextmenu', e => {
-  const item = e.target.closest('[data-tx]');
+  const item = _lpHit(e.target);
   if (!item) return;
   e.preventDefault();
-  if (!_lp.fired) { _lpCancel(); confirmarExclusaoTx(item.dataset.tx); }
+  if (!_lp.fired) { _lpCancel(); _lpFire(item); }
 });
 
 // fechar overlay tocando fora
