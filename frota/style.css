@@ -573,3 +573,19 @@ button.status-card:active { transform: scale(.985); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ═══════════ ADMINISTRAÇÃO DA EMPRESA ═══════════ */
+.socio-av {
+  width: 38px; height: 38px; border-radius: 50%; overflow: hidden; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 800; font-size: .8rem; font-style: italic;
+}
+.socio-av img { width: 100%; height: 100%; object-fit: cover; }
+.papel-sel {
+  padding: 7px 8px; border-radius: 10px; max-width: 138px; flex: none;
+  background: var(--card2); border: 1px solid var(--border); color: var(--txt);
+  font-size: .78rem; font-weight: 600;
+}
+.perm-note { color: var(--txt3); font-size: .76rem; line-height: 1.5; padding-top: 10px; }
+.vd-wide { grid-column: 1 / -1; }
+.vd-cell b { overflow-wrap: anywhere; }

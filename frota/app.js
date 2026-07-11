@@ -32,7 +32,7 @@ let me = null; // { uid, email, nome }
 
 // Estado compartilhado (espelho do Firestore ou do localStorage no demo)
 // (anexos ficam fora dos listeners: são carregados sob demanda, por item)
-let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [] };
+let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [], empresa: [] };
 let unsubs = [];
 
 // Estado de UI
@@ -302,9 +302,39 @@ async function dataDelete(coll, id) {
   await db.collection(coll).doc(id).delete();
 }
 
+// ══════════════════════════════════════════
+// EMPRESA: dados cadastrais + papéis de acesso
+// ══════════════════════════════════════════
+const PAPEL_LABEL = { admin: 'Administrador', editor: 'Pode editar', leitor: 'Só visualiza' };
+function empresaDados() { return (S.empresa || []).find(d => d.id === 'dados') || {}; }
+// chave segura pro mapa de permissões (evita caracteres especiais do e-mail)
+function permKey(email) { return String(email || '').replace(/[.#$/\[\]]/g, '_'); }
+function meuPapel() {
+  if (!me) return 'leitor';
+  const perm = empresaDados().permissoes || {};
+  return perm[permKey(me.email)] || 'admin';
+}
+function podeEditar() { return meuPapel() !== 'leitor'; }
+function isAdmin() { return meuPapel() === 'admin'; }
+function exigirEdicao() {
+  if (podeEditar()) return true;
+  toast('Seu acesso é somente visualização.');
+  return false;
+}
+function exigirAdmin() {
+  if (isAdmin()) return true;
+  toast('Só administradores alteram os dados da empresa.');
+  return false;
+}
+function salvarEmpresaDoc(patch) {
+  const E = empresaDados();
+  const { id, ...resto } = E;
+  return dataSet('empresa', 'dados', { ...resto, ...patch, atualizadoPorNome: me.nome || me.email, atualizadoEm: Date.now() });
+}
+
 function startListeners() {
   stopListeners();
-  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos'].forEach(coll => {
+  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa'].forEach(coll => {
     unsubs.push(db.collection(coll).onSnapshot(snap => {
       S[coll] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
       renderAll();
@@ -605,6 +635,7 @@ async function renderAnexosInto(elId, parentId, tipo) {
   return list;
 }
 function pickAnexo(tipo, parentId, elId) {
+  if (!exigirEdicao()) return;
   anexoCtx = { tipo, parentId, elId };
   $('anexo-input').click();
 }
@@ -636,6 +667,7 @@ async function handleAnexoInput(input) {
   }
 }
 function removeAnexo(id, elId, parentId, tipo) {
+  if (!exigirEdicao()) return;
   confirmDialog('Excluir anexo', 'Excluir este arquivo?', async () => {
     try { await deleteAnexoRecord(id); toast('Anexo excluído'); } catch (e) { toast('Erro ao excluir.'); }
     renderAnexosInto(elId, parentId, tipo);
@@ -804,7 +836,7 @@ function goTab(tab) {
   $('page-' + tab).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('nav-on', b.dataset.tab === tab));
   // a Central é painel executivo: sem botão de cadastro nela
-  $('fab').style.display = (tab === 'lanc') ? '' : 'none';
+  $('fab').style.display = (tab === 'lanc' && podeEditar()) ? '' : 'none';
   window.scrollTo({ top: 0 });
   renderAll();
 }
@@ -815,6 +847,9 @@ function openAjustes() { goTab('mais'); }
 // ══════════════════════════════════════════
 function renderAll() {
   if (!me) return;
+  // quem só visualiza não vê botões de cadastro
+  const edita = podeEditar();
+  ['btn-add-veh', 'btn-add-drv'].forEach(id => { const b = $(id); if (b) b.style.display = edita ? '' : 'none'; });
   const active = document.querySelector('.page.active')?.id?.replace('page-', '');
   if (active === 'inicio') renderInicio();
   else if (active === 'lanc') renderLanc();
@@ -1092,6 +1127,7 @@ function renderLancCharts(mes) {
 let pendingAnexo = null; // nota importada aguardando o salvamento do lançamento
 
 function openTxForm(tx) {
+  if (!exigirEdicao()) return;
   pendingAnexo = null;
   $('tx-anexo-chip').style.display = 'none';
   editingTxId = tx ? tx.id : null;
@@ -1262,6 +1298,7 @@ function editTxFromDetail() {
   if (t) openTxForm(t);
 }
 function deleteTxFromDetail() {
+  if (!exigirEdicao()) return;
   const id = detailTxId;
   confirmDialog('Excluir lançamento', 'Essa ação não pode ser desfeita. Excluir mesmo assim?', async () => {
     closeOverlay('modal-tx-detail');
@@ -1297,6 +1334,7 @@ function kmRodadoMes(vid, offset = 0) {
 
 let kmVehId = null;
 function openKmForm(vid) {
+  if (!exigirEdicao()) return;
   const v = vehById(vid);
   if (v) {
     // veio da ficha do veículo: já sabemos qual é
@@ -1344,6 +1382,7 @@ async function saveKmLog() {
 }
 
 function deleteKmLog(id) {
+  if (!exigirEdicao()) return;
   confirmDialog('Excluir leitura de km', 'Excluir este registro de quilometragem?', async () => {
     try { await dataDelete('kmlog', id); toast('Registro excluído'); }
     catch (e) { toast('Erro ao excluir.'); }
@@ -1442,6 +1481,7 @@ function renderFrota() {
 }
 
 function openVehicleForm(v) {
+  if (!exigirEdicao()) return;
   editingVehId = v ? v.id : null;
   $('veh-form-title').textContent = v ? 'Editar veículo' : 'Novo veículo';
   $('veh-nome').value = v ? v.nome : '';
@@ -1644,6 +1684,7 @@ function registrarManutencao(vid) {
   $('tx-veiculo').value = vid;
 }
 async function salvarObsVan(vid) {
+  if (!exigirEdicao()) return;
   const v = vehById(vid);
   if (!v) return;
   const obs = $('van-obs').value.trim();
@@ -1676,6 +1717,7 @@ function verHistoricoCompleto(vid) {
 // foto do veículo (aparece no card da frota)
 let vehFotoId = null;
 function pickVehFoto(vid) {
+  if (!exigirEdicao()) return;
   vehFotoId = vid;
   $('veh-foto-input').click();
 }
@@ -1833,6 +1875,7 @@ async function renderDrvTimeline(did) {
 // ── ações rápidas da Central do Motorista ──
 let acaoDrvId = null;
 function openTrocaVeiculo(did) {
+  if (!exigirEdicao()) return;
   const d = S.drivers.find(x => x.id === did);
   if (!d) return;
   acaoDrvId = did;
@@ -1857,6 +1900,7 @@ async function salvarTrocaVeiculo() {
   } catch (e) { toast('Erro ao salvar.'); }
 }
 function openCNHForm(did) {
+  if (!exigirEdicao()) return;
   const d = S.drivers.find(x => x.id === did);
   if (!d) return;
   acaoDrvId = did;
@@ -1882,6 +1926,7 @@ function focarObsMotorista() {
   if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
 }
 async function salvarObsMotorista(did) {
+  if (!exigirEdicao()) return;
   const d = S.drivers.find(x => x.id === did);
   if (!d) return;
   const obs = $('drv-obs-inline').value.trim();
@@ -1895,6 +1940,7 @@ async function salvarObsMotorista(did) {
 // foto do motorista
 let drvFotoId = null;
 function pickDrvFoto(did) {
+  if (!exigirEdicao()) return;
   drvFotoId = did;
   $('drv-foto-input').click();
 }
@@ -1915,12 +1961,196 @@ async function handleDrvFotoInput(input) {
 // AJUSTES (só conta e sistema)
 // ══════════════════════════════════════════
 function renderMais() {
+  renderEmpresaAdmin();
   $('ajuste-nome-atual').textContent = me.nome || '—';
   $('ajuste-email-atual').textContent = me.email || '';
   const temFoto = !!myPhoto();
   $('ajuste-foto-atual').textContent = temFoto ? 'Toque para trocar a foto' : 'Sem foto — mostrando suas iniciais';
   $('btn-remover-foto').style.display = temFoto ? '' : 'none';
   $('theme-label').textContent = document.documentElement.dataset.theme === 'dark' ? 'Escuro' : 'Claro';
+}
+
+// ══════════════════════════════════════════
+// ADMINISTRAÇÃO DA EMPRESA (dados, contador, bancos, sócios e permissões)
+// ══════════════════════════════════════════
+function renderEmpresaAdmin() {
+  const el = $('empresa-admin');
+  if (!el) return;
+  const E = empresaDados();
+  const admin = isAdmin();
+  const cell = (k, v, larga) => `<div class="vd-cell${larga ? ' vd-wide' : ''}"><small>${k}</small><b>${esc(v || '—')}</b></div>`;
+
+  const temContador = E.contadorNome || E.contadorTel || E.contadorEmail;
+  const bancos = E.bancos || [];
+
+  el.innerHTML = `
+    <h2 class="sec-title">${icon('building', 14)} Dados da empresa</h2>
+    <div class="card">
+      <div class="vd-grid" style="margin-bottom:${E.endereco || admin ? '8px' : '0'}">
+        ${cell('Nome', E.nome, true)}
+        ${cell('CNPJ', E.cnpj)}
+        ${cell('Telefone', E.telefone)}
+        ${cell('E-mail', E.email, true)}
+      </div>
+      ${E.endereco ? `<div class="vd-obs" style="margin-bottom:${admin ? '10px' : '0'}">${esc(E.endereco)}</div>` : ''}
+      ${admin ? `<button class="btn btn-secondary btn-block" onclick="openEmpresaForm()">${icon('pencil', 16)} ${E.nome ? 'Editar' : 'Preencher'} dados da empresa</button>` : ''}
+    </div>
+
+    <h2 class="sec-title">${icon('calculator', 14)} Contador</h2>
+    <div class="card">
+      ${temContador
+        ? `<div class="vd-grid" style="margin-bottom:${admin ? '10px' : '0'}">
+             ${cell('Nome', E.contadorNome)}
+             ${cell('Escritório', E.contadorEscritorio)}
+             ${cell('Telefone', E.contadorTel)}
+             ${cell('E-mail', E.contadorEmail, true)}
+           </div>`
+        : '<div class="empty-mini" style="margin-bottom:8px">Nenhum contador cadastrado.</div>'}
+      ${admin ? `<button class="btn btn-secondary btn-block" onclick="openContadorForm()">${icon('pencil', 16)} ${temContador ? 'Editar' : 'Cadastrar'} contador</button>` : ''}
+    </div>
+
+    <h2 class="sec-title">${icon('landmark', 14)} Contas bancárias</h2>
+    <div class="card">
+      ${bancos.length
+        ? bancos.map((b, i) => `
+          <${admin ? `button class="row-btn" onclick="openBancoForm(${i})"` : 'div class="row-btn" style="cursor:default"'}>
+            <span class="row-ico">${icon('landmark')}</span>
+            <span class="row-txt">
+              <b>${esc(b.banco || 'Banco')}</b>
+              <small>${[b.agencia ? 'Ag. ' + esc(b.agencia) : '', b.conta ? 'Conta ' + esc(b.conta) : '', b.pix ? 'PIX ' + esc(b.pix) : ''].filter(Boolean).join(' · ') || '—'}</small>
+            </span>
+          </${admin ? 'button' : 'div'}>`).join('')
+        : '<div class="empty-mini" style="margin-bottom:8px">Nenhuma conta cadastrada.</div>'}
+      ${admin ? `<button class="btn btn-secondary btn-block" style="margin-top:${bancos.length ? '10px' : '0'}" onclick="openBancoForm()">${icon('plus', 16)} Adicionar conta</button>` : ''}
+    </div>
+
+    <h2 class="sec-title">${icon('users', 14)} Sócios e permissões</h2>
+    <div class="card">
+      ${SOCIOS.map(s => socioRow(s, E)).join('')}
+      <p class="perm-note">Administrador cuida da empresa e das permissões · Pode editar lança e altera dados · Só visualiza acompanha sem mudar nada.</p>
+    </div>`;
+}
+
+function socioRow(s, E) {
+  const papel = (E.permissoes || {})[permKey(s.email)] || 'admin';
+  const eu = me && me.email === s.email;
+  const prof = Object.values(S.profiles || {}).find(p => p.email === s.email) || {};
+  const nome = prof.nome || s.nome;
+  const foto = prof.foto || s.foto;
+  const avatar = foto
+    ? `<span class="socio-av"><img src="${foto}" alt=""></span>`
+    : `<span class="socio-av" style="background:${authorColor(nome)}">${esc(s.sigla || nome[0])}</span>`;
+  const controle = isAdmin()
+    ? `<select class="papel-sel" onchange="setPapel('${s.email}', this.value)">
+         <option value="admin"${papel === 'admin' ? ' selected' : ''}>Administrador</option>
+         <option value="editor"${papel === 'editor' ? ' selected' : ''}>Pode editar</option>
+         <option value="leitor"${papel === 'leitor' ? ' selected' : ''}>Só visualiza</option>
+       </select>`
+    : `<span class="row-badge ${papel === 'leitor' ? 'rb-warn' : 'rb-ok'}">${PAPEL_LABEL[papel]}</span>`;
+  return `
+    <div class="row-btn" style="cursor:default">
+      ${avatar}
+      <span class="row-txt"><b>${esc(nome)}${eu ? ' <small>(você)</small>' : ''}</b><small>${esc(s.email)}</small></span>
+      ${controle}
+    </div>`;
+}
+
+async function setPapel(email, papel) {
+  if (!exigirAdmin()) { renderMais(); return; }
+  const E = empresaDados();
+  const perm = { ...(E.permissoes || {}) };
+  perm[permKey(email)] = papel;
+  // a empresa nunca pode ficar sem administrador
+  const algumAdmin = SOCIOS.some(s => (perm[permKey(s.email)] || 'admin') === 'admin');
+  if (!algumAdmin) { toast('Deixe pelo menos um administrador.'); renderMais(); return; }
+  try {
+    await salvarEmpresaDoc({ permissoes: perm });
+    toast('Permissão atualizada ✓');
+  } catch (e) { toast('Erro ao salvar.'); }
+  renderMais();
+}
+
+function openEmpresaForm() {
+  if (!exigirAdmin()) return;
+  const E = empresaDados();
+  $('emp-nome').value = E.nome || '';
+  $('emp-cnpj').value = E.cnpj || '';
+  $('emp-endereco').value = E.endereco || '';
+  $('emp-tel').value = E.telefone || '';
+  $('emp-email').value = E.email || '';
+  openOverlay('modal-empresa');
+}
+async function saveEmpresa() {
+  closeOverlay('modal-empresa');
+  try {
+    await salvarEmpresaDoc({
+      nome: $('emp-nome').value.trim(),
+      cnpj: $('emp-cnpj').value.trim(),
+      endereco: $('emp-endereco').value.trim(),
+      telefone: $('emp-tel').value.trim(),
+      email: $('emp-email').value.trim(),
+    });
+    toast('Dados da empresa salvos ✓');
+  } catch (e) { toast('Erro ao salvar.'); }
+}
+
+function openContadorForm() {
+  if (!exigirAdmin()) return;
+  const E = empresaDados();
+  $('cont-nome').value = E.contadorNome || '';
+  $('cont-escritorio').value = E.contadorEscritorio || '';
+  $('cont-tel').value = E.contadorTel || '';
+  $('cont-email').value = E.contadorEmail || '';
+  openOverlay('modal-contador');
+}
+async function saveContador() {
+  closeOverlay('modal-contador');
+  try {
+    await salvarEmpresaDoc({
+      contadorNome: $('cont-nome').value.trim(),
+      contadorEscritorio: $('cont-escritorio').value.trim(),
+      contadorTel: $('cont-tel').value.trim(),
+      contadorEmail: $('cont-email').value.trim(),
+    });
+    toast('Contador salvo ✓');
+  } catch (e) { toast('Erro ao salvar.'); }
+}
+
+let editingBancoIdx = null;
+function openBancoForm(idx) {
+  if (!exigirAdmin()) return;
+  editingBancoIdx = typeof idx === 'number' ? idx : null;
+  const b = editingBancoIdx !== null ? (empresaDados().bancos || [])[editingBancoIdx] || {} : {};
+  $('banco-form-title').textContent = editingBancoIdx !== null ? 'Editar conta' : 'Nova conta bancária';
+  $('banco-nome').value = b.banco || '';
+  $('banco-agencia').value = b.agencia || '';
+  $('banco-conta').value = b.conta || '';
+  $('banco-pix').value = b.pix || '';
+  $('banco-del-btn').style.display = editingBancoIdx !== null ? '' : 'none';
+  openOverlay('modal-banco');
+}
+async function saveBanco() {
+  const banco = $('banco-nome').value.trim();
+  if (!banco) { toast('Informe o nome do banco.'); return; }
+  const bancos = [...(empresaDados().bancos || [])];
+  const rec = { banco, agencia: $('banco-agencia').value.trim(), conta: $('banco-conta').value.trim(), pix: $('banco-pix').value.trim() };
+  if (editingBancoIdx !== null) bancos[editingBancoIdx] = rec; else bancos.push(rec);
+  closeOverlay('modal-banco');
+  try { await salvarEmpresaDoc({ bancos }); toast('Conta salva ✓'); }
+  catch (e) { toast('Erro ao salvar.'); }
+  editingBancoIdx = null;
+}
+function deleteBanco() {
+  const idx = editingBancoIdx;
+  if (idx === null) return;
+  confirmDialog('Excluir conta', 'Remover esta conta bancária do cadastro?', async () => {
+    const bancos = [...(empresaDados().bancos || [])];
+    bancos.splice(idx, 1);
+    closeOverlay('modal-banco');
+    try { await salvarEmpresaDoc({ bancos }); toast('Conta removida'); }
+    catch (e) { toast('Erro ao salvar.'); }
+    editingBancoIdx = null;
+  });
 }
 
 function changeMyPassword() {
@@ -1940,6 +2170,7 @@ function togglePass(id, btn) {
 }
 
 function openDriverForm(idOrNull) {
+  if (!exigirEdicao()) return;
   const d = typeof idOrNull === 'string' ? S.drivers.find(x => x.id === idOrNull) : null;
   editingDrvId = d ? d.id : null;
   $('driver-form-title').textContent = d ? 'Editar motorista' : 'Novo motorista';
@@ -2356,6 +2587,20 @@ function seedDemo() {
     mk({ tipo: 'receita', cat: 'contrato', valor: 14500, data: dstr(32), veiculo: '', desc: 'Repasse mensal — transporte escolar', autorNome: autores[0], litros: 0, km: 0 }),
     mk({ tipo: 'despesa', cat: 'seguro', valor: 780, data: dstr(35), veiculo: v2, desc: 'Parcela do seguro', litros: 0, km: 0, autorNome: autores[1] }),
   ];
+  S.empresa = [{
+    id: 'dados',
+    nome: 'Lagos Serviços de Transporte',
+    cnpj: '12.345.678/0001-90',
+    endereco: 'Av. Beira-Mar, 120 — Centro, Rio das Ostras/RJ',
+    telefone: '(22) 99999-0000',
+    email: 'lagosoperacional@gmail.com',
+    contadorNome: 'Marcos Contabilidade',
+    contadorEscritorio: 'MC Assessoria Contábil',
+    contadorTel: '(22) 98888-7777',
+    contadorEmail: 'contato@mccontabil.com.br',
+    bancos: [{ banco: 'Banco do Brasil', agencia: '1234-5', conta: '67.890-1', pix: '12.345.678/0001-90' }],
+    permissoes: {},
+  }];
   demoSave();
 }
 
@@ -2403,6 +2648,7 @@ injetarIcones();
 const _lp = { timer: null, fired: false, x: 0, y: 0 };
 function _lpCancel() { clearTimeout(_lp.timer); _lp.timer = null; }
 function confirmarExclusaoTx(id) {
+  if (!exigirEdicao()) return;
   const t = S.tx.find(x => x.id === id);
   if (!t) return;
   if (navigator.vibrate) { try { navigator.vibrate(25); } catch (e) {} }

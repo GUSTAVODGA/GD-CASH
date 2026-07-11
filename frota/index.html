@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=27">
+<link rel="stylesheet" href="style.css?v=28">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -180,7 +180,7 @@
   <section class="page" id="page-frota">
     <header class="page-head">
       <h1 class="page-title">Operação</h1>
-      <button class="btn btn-small" onclick="openVehicleForm()">+ Veículo</button>
+      <button class="btn btn-small" id="btn-add-veh" onclick="openVehicleForm()">+ Veículo</button>
     </header>
     <input class="veh-filter" id="frota-busca" placeholder="Buscar por apelido, placa ou motorista" oninput="renderFrota()" autocomplete="off">
     <div id="veh-list"></div>
@@ -190,7 +190,7 @@
   <section class="page" id="page-motoristas">
     <header class="page-head">
       <h1 class="page-title">Motoristas</h1>
-      <button class="btn btn-small" onclick="openDriverForm()">+ Motorista</button>
+      <button class="btn btn-small" id="btn-add-drv" onclick="openDriverForm()">+ Motorista</button>
     </header>
     <div id="driver-list"></div>
   </section>
@@ -200,6 +200,8 @@
     <header class="page-head">
       <h1 class="page-title">Empresa</h1>
     </header>
+
+    <div id="empresa-admin"></div>
 
     <h2 class="sec-title">Minha conta</h2>
     <div class="card">
@@ -238,7 +240,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.13</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.14</p>
   </section>
 
   <!-- ── NAV INFERIOR: 5 módulos ── -->
@@ -385,6 +387,50 @@
   </div>
 </div>
 
+<!-- Dados da empresa -->
+<div class="overlay" id="modal-empresa">
+  <div class="sheet">
+    <div class="sheet-head"><h3 data-ic="building">Dados da empresa</h3><button class="x" onclick="closeOverlay('modal-empresa')">✕</button></div>
+    <label class="fld"><span>Nome da empresa</span><input type="text" id="emp-nome" placeholder="Razão social ou nome fantasia"></label>
+    <label class="fld"><span>CNPJ</span><input type="text" id="emp-cnpj" inputmode="numeric" placeholder="00.000.000/0000-00"></label>
+    <label class="fld"><span>Endereço</span><input type="text" id="emp-endereco" placeholder="Rua, número, bairro, cidade/UF"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Telefone</span><input type="tel" id="emp-tel" placeholder="(00) 00000-0000"></label>
+      <label class="fld"><span>E-mail</span><input type="email" id="emp-email" placeholder="empresa@email.com"></label>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveEmpresa()">Salvar</button>
+  </div>
+</div>
+
+<!-- Contador -->
+<div class="overlay" id="modal-contador">
+  <div class="sheet">
+    <div class="sheet-head"><h3 data-ic="calculator">Contador</h3><button class="x" onclick="closeOverlay('modal-contador')">✕</button></div>
+    <label class="fld"><span>Nome</span><input type="text" id="cont-nome" placeholder="Nome do contador"></label>
+    <label class="fld"><span>Escritório <small>(opcional)</small></span><input type="text" id="cont-escritorio" placeholder="Nome do escritório de contabilidade"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Telefone</span><input type="tel" id="cont-tel" placeholder="(00) 00000-0000"></label>
+      <label class="fld"><span>E-mail</span><input type="email" id="cont-email" placeholder="contador@email.com"></label>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveContador()">Salvar</button>
+  </div>
+</div>
+
+<!-- Conta bancária -->
+<div class="overlay" id="modal-banco">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="banco-form-title" data-ic="landmark">Nova conta bancária</h3><button class="x" onclick="closeOverlay('modal-banco')">✕</button></div>
+    <label class="fld"><span>Banco</span><input type="text" id="banco-nome" placeholder="Ex.: Banco do Brasil, Itaú…"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Agência</span><input type="text" id="banco-agencia" placeholder="0000-0"></label>
+      <label class="fld"><span>Conta</span><input type="text" id="banco-conta" placeholder="00.000-0"></label>
+    </div>
+    <label class="fld"><span>Chave PIX <small>(opcional)</small></span><input type="text" id="banco-pix" placeholder="CNPJ, telefone ou e-mail"></label>
+    <button class="btn btn-primary btn-block" onclick="saveBanco()">Salvar</button>
+    <button class="btn btn-danger btn-block" id="banco-del-btn" style="display:none" data-ic="trash" onclick="deleteBanco()">Excluir conta</button>
+  </div>
+</div>
+
 <!-- Confirmação -->
 <div class="overlay" id="modal-confirm">
   <div class="sheet sheet-small">
@@ -443,6 +489,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=27"></script>
+<script src="app.js?v=28"></script>
 </body>
 </html>

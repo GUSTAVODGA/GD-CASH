@@ -114,6 +114,19 @@ empresa (ex.: `lagos`) e copiar esta pasta para lá.
 | `drivers`  | Motoristas (CNH, validade, telefone)                            |
 | `kmlog`    | Leituras de quilometragem registradas manualmente               |
 | `profiles` | Nome de exibição de cada sócio (`profiles/{uid}`)               |
+| `eventos`  | Linha do tempo (trocas de veículo, CNH, documentos, cadastros)  |
+| `empresa`  | Documento `dados`: CNPJ, endereço, contador, bancos, permissões |
+
+## Papéis de acesso (aba Empresa → Sócios e permissões)
+
+- **Administrador** — edita tudo, inclusive os dados da empresa e as permissões.
+- **Pode editar** — lança despesas/receitas e altera veículos e motoristas.
+- **Só visualiza** — acompanha tudo, mas os botões de cadastro somem e as
+  ações de edição são bloqueadas no app.
+
+Todos começam como administradores. O sistema não deixa a empresa ficar sem
+pelo menos um administrador. (O controle é feito pelo aplicativo — os três
+logins continuam autorizados no Firestore pelas regras do passo 6.)
 
 ## Dicas de uso
 
