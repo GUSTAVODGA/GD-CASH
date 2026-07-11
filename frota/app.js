@@ -2410,7 +2410,7 @@ async function ocrTexto(dataUrl) {
   return data.text || '';
 }
 
-// extrai valor, litros, data e placa do texto da nota
+// extrai valor, litros, data, placa, km e posto do texto da nota
 function parseNota(txt) {
   const t = txt.toUpperCase();
   const out = {};
@@ -2426,6 +2426,13 @@ function parseNota(txt) {
     const todos = [...t.matchAll(/(\d{1,3}(?:\.\d{3})*,\d{2})/g)].map(m => parseValor(m[1])).filter(v => v > 5);
     if (todos.length) out.valor = Math.max(...todos);
   }
+  // quilometragem anotada na nota (KM / ODÔMETRO / HODÔMETRO)
+  const km = t.match(/(?:KM|OD[ÔO]METRO|HOD[ÔO]METRO)\s*[:.]?\s*(\d{4,7})\b/);
+  if (km) out.km = parseInt(km[1], 10);
+  // nome do posto: primeira linha curta que menciona POSTO/COMBUSTÍVEIS
+  const linha = txt.split('\n').map(l => l.trim()).filter(Boolean)
+    .find(l => l.length >= 5 && l.length <= 45 && /POSTO|COMBUST[ÍI]VEIS|COMBUSTIVEL/i.test(l));
+  if (linha) out.posto = linha.replace(/\s{2,}/g, ' ');
   return out;
 }
 
@@ -2464,6 +2471,14 @@ async function importNota(input) {
   } catch (e) { console.error('OCR indisponível', e); }
   const info = texto ? parseNota(texto) : {};
 
+  // nota de abastecimento lida: abre a tela de conferência antes de salvar
+  const leuAlgo = info.valor || info.litros || info.placa || info.km || info.data;
+  if (txTipo === 'despesa' && leuAlgo && (info.litros || txCat === 'combustivel')) {
+    closeOverlay('modal-tx');
+    abrirConferenciaNota(info);
+    return;
+  }
+
   // preenche APENAS o que o usuário ainda não preencheu
   if (txTipo === 'despesa' && !txCat && info.litros) pickCat('combustivel');
   if (info.valor && !parseValor($('tx-valor').value)) {
@@ -2481,6 +2496,110 @@ async function importNota(input) {
   updateFuelHint();
   const leu = info.valor || info.litros || info.placa;
   toast(leu ? 'Nota lida! Confere e salva.' : 'Nota anexada — preencha os campos normalmente');
+}
+
+// ══════════════════════════════════════════
+// CONFERÊNCIA DA NOTA DE ABASTECIMENTO
+// A leitura preenche; a pessoa confere, corrige e confirma.
+// ══════════════════════════════════════════
+let notaConfInfo = null;
+
+function abrirConferenciaNota(info) {
+  notaConfInfo = info;
+  $('nc-data').value = info.data || todayStr();
+  $('nc-valor').value = info.valor ? info.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '';
+  $('nc-litros').value = info.litros ? String(info.litros).replace('.', ',') : '';
+  $('nc-preco').value = (info.valor && info.litros)
+    ? (info.valor / info.litros).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 }) : '';
+  $('nc-posto').value = info.posto || '';
+  $('nc-placa').value = info.placa || '';
+  $('nc-km').value = info.km || '';
+
+  // veículo: tenta casar a placa lida com a frota
+  const sel = $('nc-veiculo');
+  sel.innerHTML = '<option value="">— Confirme o veículo —</option>' +
+    S.vehicles.filter(v => v.status !== 'inativo')
+      .map(v => `<option value="${v.id}">${esc(v.nome)}${v.placa ? ' · ' + esc(v.placa) : ''}</option>`).join('');
+  const casado = info.placa
+    ? S.vehicles.find(v => (v.placa || '').replace(/[\s-]/g, '').toUpperCase() === info.placa) : null;
+  sel.value = casado ? casado.id : ($('tx-veiculo').value || '');
+
+  const lidos = ['valor', 'litros', 'data', 'placa', 'km', 'posto'].filter(k => info[k]).length;
+  $('nota-conf-status').innerHTML = casado
+    ? `Li ${lidos} campo${lidos === 1 ? '' : 's'} da nota e reconheci a placa da <b>${esc(casado.nome)}</b>. Confira e ajuste o que precisar.`
+    : `Li ${lidos} campo${lidos === 1 ? '' : 's'} da nota. <b>Não reconheci a placa — confirme abaixo qual van foi abastecida.</b>`;
+  openOverlay('modal-nota-conf');
+}
+
+// valor ↔ litros ↔ preço/litro sempre coerentes na conferência
+function syncNcPreco() {
+  const v = parseValor($('nc-valor').value), l = parseValor($('nc-litros').value);
+  if (v > 0 && l > 0) $('nc-preco').value = (v / l).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+}
+function syncNcValor() {
+  const p = parseValor($('nc-preco').value), l = parseValor($('nc-litros').value);
+  if (p > 0 && l > 0) $('nc-valor').value = (p * l).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+}
+
+async function confirmarNotaAbast() {
+  const valor = parseValor($('nc-valor').value);
+  const litros = parseValor($('nc-litros').value);
+  const km = parseIntBR($('nc-km').value);
+  const veiculo = $('nc-veiculo').value;
+  const data = $('nc-data').value || todayStr();
+  if (valor <= 0) { toast('Confira o valor total da nota.'); return; }
+  if (!veiculo) { toast('Confirme qual van foi abastecida.'); return; }
+
+  const v = vehById(veiculo);
+  const kmAntes = Number(v?.km) || 0;
+  const t = {
+    tipo: 'despesa', cat: 'combustivel', origem: 'frota',
+    valor, data, veiculo, litros, km,
+    desc: $('nc-posto').value.trim(),
+    autorNome: me.nome || me.email, autorUid: me.uid, ts: Date.now(),
+  };
+  const id = newId();
+  closeOverlay('modal-nota-conf');
+  try {
+    await dataSet('tx', id, t);
+    // nota anexada ao lançamento e vinculada ao veículo (aparece na ficha da van)
+    if (pendingAnexo) {
+      try { await addAnexoRecord('tx', id, { ...pendingAnexo, veiculoId: veiculo }); } catch (e) { console.error(e); }
+      pendingAnexo = null;
+    }
+    // atualiza o odômetro da van e calcula os indicadores
+    if (km > 0 && v && km > kmAntes) await dataSet('vehicles', v.id, { ...stripId(v), km });
+    const partes = ['Abastecimento salvo ✓'];
+    if (km > kmAntes && kmAntes > 0) partes.push('rodou ' + fmtKm(km - kmAntes) + ' desde o último registro');
+    const cons = consumoMedio(veiculo);
+    if (cons) partes.push('consumo ' + cons.toFixed(1).replace('.', ',') + ' km/L');
+    else if (litros > 0) partes.push(R(valor / litros) + '/litro');
+    toast(partes.join(' · '));
+  } catch (e) {
+    console.error(e);
+    toast('Erro ao salvar. Verifique a conexão.');
+  }
+  notaConfInfo = null;
+}
+
+// leitura errada? volta pro formulário normal com a nota já anexada
+function notaConfManual() {
+  const info = notaConfInfo || {};
+  const anexo = pendingAnexo;
+  const veic = $('nc-veiculo').value;
+  closeOverlay('modal-nota-conf');
+  openTxForm();
+  pendingAnexo = anexo;
+  $('tx-anexo-chip').style.display = anexo ? '' : 'none';
+  if (info.litros) pickCat('combustivel');
+  if (info.valor) $('tx-valor').value = info.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+  if (info.data) $('tx-data').value = info.data;
+  if (info.litros) $('tx-litros').value = String(info.litros).replace('.', ',');
+  if (info.km) $('tx-km').value = info.km;
+  if (veic) $('tx-veiculo').value = veic;
+  updateFuelExtra();
+  updateFuelHint();
+  notaConfInfo = null;
 }
 
 // ══════════════════════════════════════════
@@ -2623,6 +2742,8 @@ function seedDemo() {
 
 document.addEventListener('input', e => {
   if (e.target.id === 'tx-litros' || e.target.id === 'tx-valor') updateFuelHint();
+  if (e.target.id === 'nc-valor' || e.target.id === 'nc-litros') syncNcPreco();
+  if (e.target.id === 'nc-preco') syncNcValor();
 });
 document.addEventListener('change', e => {
   if (e.target.id === 'tx-veiculo') updateFuelHint();
@@ -2659,21 +2780,40 @@ function confirmarExclusaoTx(id) {
       catch (e) { toast('Erro ao excluir.'); }
     });
 }
-document.addEventListener('pointerdown', e => {
-  const item = e.target.closest('[data-tx]');
-  if (!item) return;
-  _lp.fired = false; _lp.x = e.clientX; _lp.y = e.clientY;
+function _lpStart(x, y, id) {
+  _lp.fired = false; _lp.x = x; _lp.y = y;
   _lpCancel();
-  _lp.timer = setTimeout(() => { _lp.fired = true; confirmarExclusaoTx(item.dataset.tx); }, 550);
+  _lp.timer = setTimeout(() => { _lp.fired = true; confirmarExclusaoTx(id); }, 500);
+}
+function _lpMove(x, y) {
+  // arrastar (rolagem) cancela o segurar
+  if (_lp.timer && (Math.abs(x - _lp.x) > 16 || Math.abs(y - _lp.y) > 16)) _lpCancel();
+}
+// celular: eventos de toque (iOS/Android cancelam pointer events no toque longo)
+document.addEventListener('touchstart', e => {
+  const item = e.target.closest('[data-tx]');
+  if (item) _lpStart(e.touches[0].clientX, e.touches[0].clientY, item.dataset.tx);
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (e.touches.length) _lpMove(e.touches[0].clientX, e.touches[0].clientY);
+}, { passive: true });
+['touchend', 'touchcancel'].forEach(ev => document.addEventListener(ev, _lpCancel, { passive: true }));
+// computador: mouse segurando também funciona
+document.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'touch') return; // o toque já é tratado acima
+  const item = e.target.closest('[data-tx]');
+  if (item) _lpStart(e.clientX, e.clientY, item.dataset.tx);
 });
 document.addEventListener('pointermove', e => {
-  // arrastar (rolagem) cancela o segurar
-  if (_lp.timer && (Math.abs(e.clientX - _lp.x) > 12 || Math.abs(e.clientY - _lp.y) > 12)) _lpCancel();
+  if (e.pointerType !== 'touch') _lpMove(e.clientX, e.clientY);
 });
-['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, _lpCancel));
-// depois do segurar, o toque não deve abrir o detalhe
+['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, e => {
+  if (e.pointerType !== 'touch') _lpCancel();
+}));
+// depois do segurar, o clique do soltar não pode abrir o detalhe
+// NEM cair no fundo do overlay e fechar a confirmação recém-aberta
 document.addEventListener('click', e => {
-  if (_lp.fired && e.target.closest('[data-tx]')) {
+  if (_lp.fired) {
     e.preventDefault(); e.stopPropagation();
     _lp.fired = false;
   }

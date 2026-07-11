@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=28">
+<link rel="stylesheet" href="style.css?v=29">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -240,7 +240,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.14</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.15</p>
   </section>
 
   <!-- ── NAV INFERIOR: 5 módulos ── -->
@@ -431,6 +431,30 @@
   </div>
 </div>
 
+<!-- Conferência da nota de abastecimento -->
+<div class="overlay" id="modal-nota-conf">
+  <div class="sheet">
+    <div class="sheet-head"><h3 data-ic="receipt">Conferir nota</h3><button class="x" onclick="closeOverlay('modal-nota-conf')">✕</button></div>
+    <p class="modal-note" id="nota-conf-status"></p>
+    <div class="fld-row">
+      <label class="fld"><span>Data</span><input type="date" id="nc-data"></label>
+      <label class="fld"><span>Valor total (R$)</span><input type="text" id="nc-valor" inputmode="decimal" placeholder="0,00"></label>
+    </div>
+    <div class="fld-row">
+      <label class="fld"><span>Litros</span><input type="text" id="nc-litros" inputmode="decimal" placeholder="0,0"></label>
+      <label class="fld"><span>Preço por litro</span><input type="text" id="nc-preco" inputmode="decimal" placeholder="0,00"></label>
+    </div>
+    <label class="fld"><span>Posto <small>(opcional)</small></span><input type="text" id="nc-posto" placeholder="Nome do posto"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Placa lida</span><input type="text" id="nc-placa" style="text-transform:uppercase" placeholder="—"></label>
+      <label class="fld"><span>Km no painel</span><input type="text" id="nc-km" inputmode="numeric" placeholder="km atual"></label>
+    </div>
+    <label class="fld"><span>Veículo</span><select id="nc-veiculo"></select></label>
+    <button class="btn btn-primary btn-block" onclick="confirmarNotaAbast()">Confirmar abastecimento</button>
+    <button class="btn btn-secondary btn-block" style="margin-top:8px" onclick="notaConfManual()">Preencher manualmente</button>
+  </div>
+</div>
+
 <!-- Confirmação -->
 <div class="overlay" id="modal-confirm">
   <div class="sheet sheet-small">
@@ -489,6 +513,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=28"></script>
+<script src="app.js?v=29"></script>
 </body>
 </html>
