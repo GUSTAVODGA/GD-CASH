@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=32">
+<link rel="stylesheet" href="style.css?v=33">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -236,7 +236,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.18</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.19</p>
   </section>
 
   <!-- ── NAV INFERIOR: 5 módulos ── -->
@@ -272,7 +272,7 @@
     <div id="tx-fuel-extra" style="display:none">
       <div class="fld-row">
         <label class="fld"><span>Litros</span><input type="text" id="tx-litros" inputmode="decimal" placeholder="0,0"></label>
-        <label class="fld"><span>Km no painel</span><input type="text" id="tx-km" inputmode="numeric" placeholder="km atual"></label>
+        <label class="fld"><span>Odômetro (km)</span><input type="text" id="tx-km" inputmode="numeric" placeholder="km atual"></label>
       </div>
       <div class="fuel-hint" id="tx-fuel-hint"></div>
     </div>
@@ -341,7 +341,7 @@
     <div class="sheet-head"><h3>Registrar quilometragem</h3><button class="x" onclick="closeOverlay('modal-km')">✕</button></div>
     <label class="fld" id="km-veh-fld" style="display:none"><span>Veículo</span><select id="km-veiculo" onchange="kmVehChanged()"></select></label>
     <p class="modal-note" id="km-veh-info"></p>
-    <label class="fld"><span>Km no painel</span><input type="text" id="km-valor" inputmode="numeric" placeholder="Ex.: 148900"></label>
+    <label class="fld"><span>Odômetro (km)</span><input type="text" id="km-valor" inputmode="numeric" placeholder="Ex.: 148900"></label>
     <label class="fld"><span>Data</span><input type="date" id="km-data"></label>
     <button class="btn btn-primary btn-block" onclick="saveKmLog()">Salvar</button>
   </div>
@@ -443,7 +443,7 @@
     <label class="fld"><span>Posto <small>(opcional)</small></span><input type="text" id="nc-posto" placeholder="Nome do posto"></label>
     <div class="fld-row">
       <label class="fld"><span>Placa lida</span><input type="text" id="nc-placa" style="text-transform:uppercase" placeholder="—"></label>
-      <label class="fld"><span>Km no painel</span><input type="text" id="nc-km" inputmode="numeric" placeholder="km atual"></label>
+      <label class="fld"><span>Odômetro (km)</span><input type="text" id="nc-km" inputmode="numeric" placeholder="ex.: 2805"></label>
     </div>
     <label class="fld"><span>Veículo</span><select id="nc-veiculo"></select></label>
     <button class="btn btn-primary btn-block" onclick="confirmarNotaAbast()">Confirmar abastecimento</button>
@@ -509,6 +509,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=32"></script>
+<script src="app.js?v=33"></script>
 </body>
 </html>

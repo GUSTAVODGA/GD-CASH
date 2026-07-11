@@ -1392,7 +1392,7 @@ function openTxDetail(id) {
   if (t.tipo === 'despesa') rows.splice(1, 0, ['Origem', origemDe(t) === 'escritorio' ? 'Escritório' : 'Frota']);
   if (t.veiculo) rows.push(['Veículo', vehNome(t.veiculo)]);
   if (t.litros) rows.push(['Litros', t.litros.toLocaleString('pt-BR') + ' L (' + R(t.valor / t.litros) + '/L)']);
-  if (t.km) rows.push(['Km no painel', fmtKm(t.km)]);
+  if (t.km) rows.push(['Odômetro', fmtKm(t.km)]);
   if (t.desc) rows.push(['Descrição', t.desc]);
   rows.push(['Lançado por', (t.autorNome || '—') + (t.ts ? ' · ' + fmtDataHora(t.ts) : '')]);
   $('tx-detail-body').innerHTML = '<div class="detail-rows">' +
@@ -2186,7 +2186,7 @@ function exportBackup() {
   try {
     const backup = {
       app: 'Lagos Serviços de Transporte',
-      versao: 'v1.18',
+      versao: 'v1.19',
       geradoEm: new Date().toISOString(),
       geradoPor: me.nome || me.email,
       empresa: empresaDados(),
@@ -2585,26 +2585,53 @@ async function ocrTexto(dataUrl) {
   return data.text || '';
 }
 
-// extrai valor, litros, data, placa, km e posto do texto da nota
+// meses por extenso (pt-BR), abreviados ou completos — usa as 3 primeiras letras
+const MESES_PT = { JAN: '01', FEV: '02', MAR: '03', ABR: '04', MAI: '05', JUN: '06', JUL: '07', AGO: '08', SET: '09', OUT: '10', NOV: '11', DEZ: '12' };
+
+// extrai valor, litros, data, placa, odômetro e posto do texto da nota
 function parseNota(txt) {
   const t = txt.toUpperCase();
   const out = {};
-  const pm = t.match(/[A-Z]{3}\s?-?\s?\d[A-Z0-9]\d{2}/);
-  if (pm) out.placa = pm[0].replace(/[\s-]/g, '');
+
+  // ── PLACA ── prioriza o rótulo "PLACA:"; o fallback usa fronteira de palavra
+  // para NÃO casar com o fim de "CENTRO" + o CEP (ex.: "CENTRO 28970" → "TRO2897")
+  const placaRe = '[A-Z]{3}[-\\s]?\\d[A-Z0-9]\\d{2}';
+  let pm = t.match(new RegExp('PLACA\\s*[:.]?\\s*(' + placaRe + ')'));
+  if (!pm) pm = t.match(new RegExp('\\b(' + placaRe + ')\\b'));
+  if (pm) out.placa = pm[1].replace(/[\s-]/g, '');
+
+  // ── LITROS ── (quando a nota traz; a nota promissória do posto pode não ter)
   const lm = t.match(/(\d{1,3}[.,]\d{1,3})\s*(?:L\b|LT\b|LTS\b|LITROS?)/);
   if (lm) out.litros = parseValor(lm[1]);
-  const dm = t.match(/(\d{2})\/(\d{2})\/(\d{4})/);
-  if (dm) out.data = `${dm[3]}-${dm[2]}-${dm[1]}`;
-  const vm = t.match(/(?:TOTAL|VALOR)[^0-9]{0,25}(\d{1,3}(?:\.\d{3})*,\d{2})/);
+
+  // ── DATA ── prioriza "DATA DA EMISSÃO" para não pegar a data de vencimento
+  // ("Em 20 de julho de 2026 pagarei…"); entende data por extenso e dd/mm/aaaa
+  const porExtenso = (re) => {
+    const m = t.match(re);
+    if (!m) return null;
+    const mes = MESES_PT[m[2].slice(0, 3)];
+    return mes ? `${m[3]}-${mes}-${String(m[1]).padStart(2, '0')}` : null;
+  };
+  out.data =
+    porExtenso(/EMISS[ÃA]O\s*[:.]?\s*(\d{1,2})\s+DE\s+([A-Z]{3,})\s+DE\s+(\d{4})/) ||
+    (() => { const d = t.match(/EMISS[ÃA]O\s*[:.]?\s*(\d{2})\/(\d{2})\/(\d{4})/); return d ? `${d[3]}-${d[2]}-${d[1]}` : null; })() ||
+    porExtenso(/(\d{1,2})\s+DE\s+([A-Z]{3,})\s+DE\s+(\d{4})/) ||
+    (() => { const d = t.match(/(\d{2})\/(\d{2})\/(\d{4})/); return d ? `${d[3]}-${d[2]}-${d[1]}` : null; })() ||
+    undefined;
+
+  // ── VALOR ── prioriza "VALOR DO PAGAMENTO/TOTAL"; senão, o maior valor da nota
+  const vm = t.match(/(?:VALOR\s+DO\s+PAGAMENTO|VALOR\s+TOTAL|TOTAL|VALOR)[^0-9]{0,25}(\d{1,3}(?:\.\d{3})*,\d{2})/);
   if (vm) out.valor = parseValor(vm[1]);
   else {
     const todos = [...t.matchAll(/(\d{1,3}(?:\.\d{3})*,\d{2})/g)].map(m => parseValor(m[1])).filter(v => v > 5);
     if (todos.length) out.valor = Math.max(...todos);
   }
-  // quilometragem anotada na nota (KM / ODÔMETRO / HODÔMETRO)
-  const km = t.match(/(?:KM|OD[ÔO]METRO|HOD[ÔO]METRO)\s*[:.]?\s*(\d{4,7})\b/);
-  if (km) out.km = parseInt(km[1], 10);
-  // nome do posto: primeira linha curta que menciona POSTO/COMBUSTÍVEIS
+
+  // ── ODÔMETRO / KM ── aceita "Odômetro: 2805,00" (ignora as casas decimais)
+  const km = t.match(/(?:OD[ÔO]METRO|HOD[ÔO]METRO|HOR[ÍI]METRO|\bKM\b)\s*[:.]?\s*([\d.]+)(?:,\d+)?/);
+  if (km) { const n = parseInt(km[1].replace(/\./g, ''), 10); if (n > 0) out.km = n; }
+
+  // ── POSTO ── primeira linha curta que menciona POSTO/COMBUSTÍVEIS
   const linha = txt.split('\n').map(l => l.trim()).filter(Boolean)
     .find(l => l.length >= 5 && l.length <= 45 && /POSTO|COMBUST[ÍI]VEIS|COMBUSTIVEL/i.test(l));
   if (linha) out.posto = linha.replace(/\s{2,}/g, ' ');
@@ -2648,7 +2675,8 @@ async function importNota(input) {
 
   // nota de abastecimento lida: abre a tela de conferência antes de salvar
   const leuAlgo = info.valor || info.litros || info.placa || info.km || info.data;
-  if (txTipo === 'despesa' && leuAlgo && (info.litros || txCat === 'combustivel')) {
+  const ehAbastecimento = info.litros || info.km || info.posto || txCat === 'combustivel';
+  if (txTipo === 'despesa' && leuAlgo && ehAbastecimento) {
     closeOverlay('modal-tx');
     abrirConferenciaNota(info);
     return;
