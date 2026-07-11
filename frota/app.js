@@ -2561,7 +2561,7 @@ async function buildResumoCanvas() {
   x.fillStyle = glow; x.fillRect(0, 0, W, H);
 
   // logo + marca
-  try { x.drawImage(await loadImg('icon-192.png'), 80, 90, 120, 120); } catch (e) {}
+  try { x.drawImage(await loadImg('icon-192.png?v=35'), 80, 90, 120, 120); } catch (e) {}
   x.fillStyle = '#f4f7fb'; x.font = 'italic 800 68px system-ui,sans-serif';
   x.textAlign = 'left'; x.fillText('LAGOS', 228, 168);
   x.fillStyle = 'rgba(244,247,251,0.5)'; x.font = '500 30px system-ui,sans-serif';
