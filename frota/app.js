@@ -304,7 +304,7 @@ async function dataDelete(coll, id) {
 
 function startListeners() {
   stopListeners();
-  ['vehicles', 'drivers', 'tx', 'kmlog'].forEach(coll => {
+  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos'].forEach(coll => {
     unsubs.push(db.collection(coll).onSnapshot(snap => {
       S[coll] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
       renderAll();
@@ -533,24 +533,28 @@ async function addAnexoRecord(tipo, parentId, obj) {
 }
 
 // ── EVENTOS: registro do que aconteceu (troca de veículo, CNH, cadastro…) ──
-async function logEvento(parentTipo, parentId, ico, titulo, detalhe) {
+async function logEvento(parentTipo, parentId, ico, titulo, detalhe, extra) {
   const id = newId();
-  const rec = { parentTipo, parentId, ico, titulo, detalhe: detalhe || '', autorNome: me.nome || me.email, ts: Date.now() };
+  const rec = { parentTipo, parentId, ico, titulo, detalhe: detalhe || '', autorNome: me.nome || me.email, ts: Date.now(), ...(extra || {}) };
   if (DEMO) { S.eventos = S.eventos || []; S.eventos.push({ ...rec, id }); demoSave(); }
   else await db.collection('eventos').doc(id).set(rec);
 }
+// eventos de uma ficha (a coleção inteira fica sincronizada em S.eventos);
+// eventos de documento (doc:true) ficam fora — a ficha já lista os anexos em si
 async function eventosDe(parentId) {
-  if (DEMO) return (S.eventos || []).filter(e => e.parentId === parentId);
-  const snap = await db.collection('eventos').where('parentId', '==', parentId).get();
-  return snap.docs.map(d => ({ ...d.data(), id: d.id }));
+  return (S.eventos || []).filter(e => e.parentId === parentId && !e.doc);
 }
-function eventoHTML(e) {
+function eventoHTML(e, comDono) {
+  // na linha do tempo geral da Central mostra de quem é o evento (van/motorista)
+  const dono = comDono
+    ? (e.parentTipo === 'vehicle' ? vehNome(e.parentId) : (S.drivers.find(d => d.id === e.parentId)?.nome || ''))
+    : '';
   return `
     <div class="tx-item" style="cursor:default">
       <div class="tx-ico">${evIcon(e.ico)}</div>
       <div class="tx-body">
         <div class="tx-title">${esc(e.titulo)}</div>
-        <div class="tx-meta">${authorChip(e.autorNome)}${e.detalhe ? ' · ' + esc(e.detalhe) : ''} · ${e.ts ? fmtDia(new Date(e.ts).toISOString().slice(0, 10)) : ''}</div>
+        <div class="tx-meta">${authorChip(e.autorNome)}${dono ? ' · ' + esc(dono) : ''}${e.detalhe ? ' · ' + esc(e.detalhe) : ''} · ${e.ts ? fmtDia(new Date(e.ts).toISOString().slice(0, 10)) : ''}</div>
       </div>
     </div>`;
 }
@@ -620,6 +624,10 @@ async function handleAnexoInput(input) {
       mime = 'image/jpeg';
     }
     await addAnexoRecord(anexoCtx.tipo, anexoCtx.parentId, { nome: file.name || 'anexo', mime, data });
+    // aparece na linha do tempo geral da Central (doc:true evita duplicar na ficha)
+    if (anexoCtx.tipo === 'vehicle' || anexoCtx.tipo === 'driver') {
+      logEvento(anexoCtx.tipo, anexoCtx.parentId, 'paperclip', 'Documento anexado', file.name || '', { doc: true });
+    }
     toast('Anexo salvo');
     renderAnexosInto(anexoCtx.elId, anexoCtx.parentId, anexoCtx.tipo);
   } catch (e) {
@@ -795,7 +803,8 @@ function goTab(tab) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   $('page-' + tab).classList.add('active');
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('nav-on', b.dataset.tab === tab));
-  $('fab').style.display = (tab === 'inicio' || tab === 'lanc') ? '' : 'none';
+  // a Central é painel executivo: sem botão de cadastro nela
+  $('fab').style.display = (tab === 'lanc') ? '' : 'none';
   window.scrollTo({ top: 0 });
   renderAll();
 }
@@ -852,18 +861,35 @@ function renderInicio() {
   $('hero-exp').textContent = R(exp);
   $('hero-inicio').className = 'hero-card' + (liq < 0 ? ' neg' : '');
 
-  // tiles de indicadores — cada um leva pro seu contexto
+  const alerts = computeAlerts();
+  renderSituacao(alerts);
+
+  // indicadores — tocar leva pro módulo correspondente
   const vansAtivas = S.vehicles.filter(v => v.status !== 'inativo').length;
-  const alertas = computeAlerts().length;
+  const motAtivos = S.drivers.filter(d => d.status !== 'inativo').length;
   $('dash-tiles').innerHTML = `
     <button class="tile" onclick="goTab('frota')"><b>${vansAtivas}</b><small>Veículos ativos</small></button>
-    <button class="tile" onclick="goTab('motoristas')"><b>${S.drivers.length}</b><small>Motoristas</small></button>
-    <button class="tile${alertas ? ' warn' : ''}" onclick="irParaAlertas()"><b>${alertas}</b><small>Vencimentos</small></button>`;
+    <button class="tile" onclick="goTab('motoristas')"><b>${motAtivos}</b><small>Motoristas ativos</small></button>`;
 
-  renderAlerts();
-  renderCatBreakdown(txs);
-  renderVehBreakdown(txs);
-  renderRecent();
+  renderAlerts(alerts);
+  renderRecent(txs);
+  renderInicioChart(txs);
+}
+
+// ── Situação da empresa: calculada a partir das pendências ──
+function renderSituacao(alerts) {
+  const crit = alerts.filter(a => a.crit).length;
+  const nivel = crit ? 'crit' : alerts.length ? 'warn' : 'ok';
+  const conf = {
+    ok:   { ic: 'check', titulo: 'Operação normal', sub: 'Nenhuma pendência — tudo em dia.' },
+    warn: { ic: 'alert', titulo: 'Atenção', sub: alerts.length + (alerts.length === 1 ? ' item precisa' : ' itens precisam') + ' de atenção. Toque para ver.' },
+    crit: { ic: 'alert', titulo: 'Pendências críticas', sub: crit + (crit === 1 ? ' pendência crítica' : ' pendências críticas') + (alerts.length > crit ? ' e ' + (alerts.length - crit) + ' em atenção' : '') + '. Toque para ver.' },
+  }[nivel];
+  $('status-card').innerHTML = `
+    <${alerts.length ? 'button onclick="irParaAlertas()"' : 'div'} class="status-card sc-${nivel}">
+      ${icon(conf.ic, 22)}
+      <div><b>${conf.titulo}</b><small>${conf.sub}</small></div>
+    </${alerts.length ? 'button' : 'div'}>`;
 }
 
 function computeAlerts() {
@@ -894,8 +920,8 @@ function computeAlerts() {
 }
 
 // tocar num alerta abre a ficha de quem tem o problema
-function renderAlerts() {
-  const alerts = computeAlerts();
+function renderAlerts(alerts) {
+  alerts = alerts || computeAlerts();
   $('alert-section').style.display = alerts.length ? '' : 'none';
   $('alert-list').innerHTML = alerts.map(a => `
     <button class="alert-item${a.crit ? ' crit' : ''}" onclick="${a.veh ? `openVehDetail('${a.veh}')` : a.drv ? `openDrvDetail('${a.drv}')` : ''}">
@@ -909,60 +935,24 @@ function irParaAlertas() {
   $('alert-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function renderCatBreakdown(txs) {
-  const el = $('cat-breakdown');
-  const desp = txs.filter(t => t.tipo === 'despesa');
-  $('sec-cats').style.display = desp.length ? '' : 'none';
-  if (!desp.length) { el.innerHTML = ''; return; }
-  const porCat = {};
-  desp.forEach(t => { porCat[t.cat] = (porCat[t.cat] || 0) + t.valor; });
-  const total = desp.reduce((s, t) => s + t.valor, 0);
-  const rows = Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([cat, val]) => {
-    const c = catInfo(cat);
-    const pct = Math.round(val / total * 100);
-    return `
-      <div class="cat-row">
-        <div class="c-ico">${icon(c.ico, 18)}</div>
-        <div class="c-body">
-          <div class="c-top"><b>${c.nome}</b><span class="c-val">${R(val)} <small>· ${pct}%</small></span></div>
-          <div class="c-bar"><div class="c-bar-fill" style="width:${pct}%"></div></div>
-        </div>
-      </div>`;
-  });
-  el.innerHTML = rows.join('');
-}
-
-function renderVehBreakdown(txs) {
-  const el = $('veh-breakdown');
-  const desp = txs.filter(t => t.tipo === 'despesa' && t.veiculo);
-  $('sec-vehs').style.display = desp.length ? '' : 'none';
-  if (!desp.length) { el.innerHTML = ''; return; }
-  const porVeh = {};
-  desp.forEach(t => { porVeh[t.veiculo] = (porVeh[t.veiculo] || 0) + t.valor; });
-  const max = Math.max(...Object.values(porVeh));
-  const rows = Object.entries(porVeh).sort((a, b) => b[1] - a[1]).map(([vid, val]) => {
-    const pct = Math.round(val / max * 100);
-    const existe = !!vehById(vid);
-    const rodou = existe ? kmRodadoMes(vid) : 0;
-    return `
-      <${existe ? `button class="cat-row cat-row-btn" onclick="openVehDetail('${vid}')"` : 'div class="cat-row"'}>
-        <div class="c-ico">${icon('truck', 18)}</div>
-        <div class="c-body">
-          <div class="c-top"><b>${esc(vehNome(vid))}</b><span class="c-val">${R(val)}${rodou ? ' <small>· ' + fmtKm(rodou) + '</small>' : ''}</span></div>
-          <div class="c-bar"><div class="c-bar-fill" style="width:${pct}%"></div></div>
-        </div>
-      </${existe ? 'button' : 'div'}>`;
-  });
-  el.innerHTML = rows.join('');
-}
-
+// linha do tempo geral da empresa: lançamentos + eventos (trocas, documentos, cadastros…)
 function renderRecent() {
   const el = $('recent-list');
-  const txs = [...S.tx].sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 5);
-  $('sec-recent').style.display = txs.length ? '' : 'none';
+  const itens = [
+    ...S.tx.map(t => ({ ts: t.ts || 0, html: txItemHTML(t) })),
+    ...(S.eventos || []).map(e => ({ ts: e.ts || 0, html: eventoHTML(e, true) })),
+  ].sort((a, b) => b.ts - a.ts).slice(0, 8);
+  $('sec-recent').style.display = itens.length ? '' : 'none';
   // sistema zerado: uma boa-vinda no lugar de várias seções vazias
-  $('inicio-vazio').style.display = (!txs.length && !S.vehicles.length) ? '' : 'none';
-  el.innerHTML = txs.map(txItemHTML).join('');
+  $('inicio-vazio').style.display = (!S.tx.length && !S.vehicles.length) ? '' : 'none';
+  el.innerHTML = itens.map(i => i.html).join('');
+}
+
+// gráfico da Central: mesma leitura do Financeiro (frota × escritório + categorias)
+function renderInicioChart(txs) {
+  const desp = txs.filter(t => t.tipo === 'despesa');
+  $('sec-chart').style.display = desp.length ? '' : 'none';
+  if (desp.length) $('inicio-chart').innerHTML = chartDespesasHTML(desp, false);
 }
 
 // ══════════════════════════════════════════
@@ -1057,14 +1047,9 @@ function renderLanc() {
     </div>`).join('');
 }
 
-// ── Gráficos do mês: frota × escritório + maiores categorias ──
-function renderLancCharts(mes) {
-  const wrap = $('lanc-charts');
-  if (!wrap) return;
-  const desp = mes.filter(t => t.tipo === 'despesa');
-  if (!desp.length) { wrap.style.display = 'none'; return; }
-  wrap.style.display = '';
-
+// ── Gráfico de despesas: frota × escritório + maiores categorias ──
+// usado na Central (só leitura) e no Financeiro (linhas aplicam o filtro)
+function chartDespesasHTML(desp, clicavel) {
   const total = desp.reduce((s, t) => s + t.valor, 0);
   const escr = desp.filter(t => origemDe(t) === 'escritorio').reduce((s, t) => s + t.valor, 0);
   const frota = total - escr;
@@ -1080,18 +1065,27 @@ function renderLancCharts(mes) {
   // divisão frota × escritório (só aparece quando o escritório tem gastos)
   let html = '';
   if (escr > 0) {
-    html += row('truck', 'Frota', frota, Math.round(frota / total * 100), "setLancFilter('despesa');setLancOrigem('frota')") +
-            row('building', 'Escritório', escr, Math.round(escr / total * 100), "setLancFilter('despesa');setLancOrigem('escritorio')") +
+    html += row('truck', 'Frota', frota, Math.round(frota / total * 100), clicavel ? "setLancFilter('despesa');setLancOrigem('frota')" : '') +
+            row('building', 'Escritório', escr, Math.round(escr / total * 100), clicavel ? "setLancFilter('despesa');setLancOrigem('escritorio')" : '') +
             '<div class="chart-sep"></div>';
   }
-  // maiores categorias do mês
+  // maiores categorias
   const porCat = {};
   desp.forEach(t => { porCat[t.cat] = (porCat[t.cat] || 0) + t.valor; });
   html += Object.entries(porCat).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([cat, val]) => {
     const c = catInfo(cat);
     return row(c.ico, c.nome, val, Math.round(val / total * 100));
   }).join('');
-  $('lanc-charts-body').innerHTML = html;
+  return html;
+}
+
+function renderLancCharts(mes) {
+  const wrap = $('lanc-charts');
+  if (!wrap) return;
+  const desp = mes.filter(t => t.tipo === 'despesa');
+  if (!desp.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  $('lanc-charts-body').innerHTML = chartDespesasHTML(desp, true);
 }
 
 // ── Formulário de lançamento ──
@@ -2330,9 +2324,15 @@ function seedDemo() {
     { id: newId(), veiculo: v2, km: 96650, data: dstr(0), autorNome: 'Você', autorUid: 'demo', ts: Date.now() },
     { id: newId(), veiculo: v1, km: 145700, data: dstr(36), autorNome: 'Sócio 2', autorUid: 'demo', ts: Date.now() - 36 * 86400000 },
   ];
+  const d1 = newId(), d2 = newId();
   S.drivers = [
-    { id: newId(), nome: 'Carlos Silva', telefone: '(24) 99999-1111', cnhCategoria: 'D', cnhValidade: dfut(400) },
-    { id: newId(), nome: 'Roberto Souza', telefone: '(24) 99999-2222', cnhCategoria: 'D', cnhValidade: dfut(18) },
+    { id: d1, nome: 'Carlos Silva', telefone: '(24) 99999-1111', cnhCategoria: 'D', cnhValidade: dfut(400), veiculoId: v1, status: 'ativo' },
+    { id: d2, nome: 'Roberto Souza', telefone: '(24) 99999-2222', cnhCategoria: 'D', cnhValidade: dfut(18), veiculoId: v2, status: 'ativo' },
+  ];
+  S.eventos = [
+    { id: newId(), parentTipo: 'driver', parentId: d1, ico: 'refresh', titulo: 'Troca de veículo', detalhe: 'Van 02 → Van 01', autorNome: 'Sócio 2', ts: Date.now() - 30 * 60000 },
+    { id: newId(), parentTipo: 'vehicle', parentId: v2, ico: 'paperclip', titulo: 'Documento anexado', detalhe: 'seguro-van02.pdf', autorNome: 'Você', ts: Date.now() - 90 * 60000, doc: true },
+    { id: newId(), parentTipo: 'driver', parentId: d2, ico: 'idCard', titulo: 'CNH atualizada', detalhe: 'categoria D', autorNome: 'Sócio 3', ts: Date.now() - 6 * 86400000 },
   ];
   const autores = ['Você', 'Sócio 2', 'Sócio 3'];
   const mk = (t) => ({ ...t, id: newId(), autorUid: 'demo', ts: Date.now() - Math.random() * 1e7 });
