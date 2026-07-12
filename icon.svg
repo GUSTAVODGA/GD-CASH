@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- App icon background: squircle matching iOS spec -->
+  <rect width="512" height="512" rx="115" fill="#0A0A0A"/>
+  <!-- Upper chevron -->
+  <path d="M 154 258 L 256 94 L 358 258"
+    stroke="#ffd60a" stroke-width="62"
+    stroke-linecap="round" stroke-linejoin="round"
+    fill="none"/>
+  <!-- Lower chevron -->
+  <path d="M 154 418 L 256 254 L 358 418"
+    stroke="#ffd60a" stroke-width="62"
+    stroke-linecap="round" stroke-linejoin="round"
+    fill="none"/>
+</svg>
