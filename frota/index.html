@@ -13,7 +13,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Lagos">
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -177,6 +177,12 @@
       <h1 class="page-title">Operação</h1>
       <button class="btn btn-small" id="btn-add-veh" onclick="openVehicleForm()">+ Veículo</button>
     </header>
+    <div class="chips setor-filtro" id="frota-setor-chips">
+      <button class="chip chip-on" data-s="todos" onclick="setFrotaSetor('todos')">Todos</button>
+      <button class="chip" data-s="educacao" onclick="setFrotaSetor('educacao')">Educação</button>
+      <button class="chip" data-s="saude" onclick="setFrotaSetor('saude')">Saúde</button>
+      <button class="chip" data-s="transporte" onclick="setFrotaSetor('transporte')">Transporte</button>
+    </div>
     <input class="veh-filter" id="frota-busca" placeholder="Buscar por apelido, placa ou motorista" oninput="renderFrota()" autocomplete="off">
     <div id="veh-list"></div>
   </section>
@@ -235,7 +241,7 @@
       </button>
     </div>
 
-    <p class="about-foot">Lagos Serviços de Transporte · v1.24</p>
+    <p class="about-foot">Lagos Serviços de Transporte · v1.25</p>
   </section>
 
   <!-- ── NAV INFERIOR: 5 módulos ── -->
@@ -304,6 +310,14 @@
       <label class="fld"><span>Ano</span><input type="text" id="veh-ano" inputmode="numeric" placeholder="2020"></label>
     </div>
     <label class="fld"><span>Modelo</span><input type="text" id="veh-modelo" placeholder="Ex.: Fiat Ducato, Sprinter 415…"></label>
+    <label class="fld"><span>Setor <small>(contrato da prefeitura)</small></span>
+      <select id="veh-setor">
+        <option value="">— Sem setor —</option>
+        <option value="educacao">Educação</option>
+        <option value="saude">Saúde</option>
+        <option value="transporte">Transporte</option>
+      </select>
+    </label>
     <label class="fld"><span>Km atual (painel)</span><input type="text" id="veh-km" inputmode="numeric" placeholder="0"></label>
     <div class="fld-row">
       <label class="fld"><span>Última troca de óleo (km)</span><input type="text" id="veh-oleo-km" inputmode="numeric" placeholder="km da troca"></label>
@@ -516,6 +530,6 @@
 
 <div id="toast"></div>
 
-<script src="app.js?v=38"></script>
+<script src="app.js?v=39"></script>
 </body>
 </html>

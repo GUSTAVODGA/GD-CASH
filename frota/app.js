@@ -1557,6 +1557,23 @@ function motoristaDe(vid) {
   return S.drivers.find(d => d.veiculoId === vid);
 }
 
+// ── Setor (contrato da prefeitura): classificação por cor ──
+const SETORES = {
+  educacao:   { nome: 'Educação',   cls: 'set-edu' },
+  saude:      { nome: 'Saúde',      cls: 'set-sau' },
+  transporte: { nome: 'Transporte', cls: 'set-tra' },
+};
+function setorChip(v) {
+  const s = SETORES[v && v.setor];
+  return s ? `<span class="setor-chip ${s.cls}">${s.nome}</span>` : '';
+}
+let frotaSetor = 'todos';
+function setFrotaSetor(s) {
+  frotaSetor = s;
+  document.querySelectorAll('#frota-setor-chips .chip').forEach(c => c.classList.toggle('chip-on', c.dataset.s === s));
+  renderFrota();
+}
+
 function renderFrota() {
   const el = $('veh-list');
   if (!S.vehicles.length) {
@@ -1568,6 +1585,7 @@ function renderFrota() {
   const stLabel = { ativo: 'Ativo', manutencao: 'Manutenção', inativo: 'Inativo' };
   const busca = ($('frota-busca')?.value || '').trim().toLowerCase();
   let lista = [...S.vehicles];
+  if (frotaSetor !== 'todos') lista = lista.filter(v => (v.setor || '') === frotaSetor);
   if (busca) {
     lista = lista.filter(v => {
       const mot = motoristaDe(v.id);
@@ -1576,7 +1594,11 @@ function renderFrota() {
              (v.modelo || '').toLowerCase().includes(busca) ||
              (mot && mot.nome.toLowerCase().includes(busca));
     });
-    if (!lista.length) { el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('search')}</span>Nada encontrado com essa busca.</div>`; return; }
+  }
+  if (!lista.length) {
+    const msg = frotaSetor !== 'todos' ? 'Nenhum veículo neste setor.' : 'Nada encontrado com essa busca.';
+    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('search')}</span>${msg}</div>`;
+    return;
   }
   el.innerHTML = lista
     .sort((a, b) => (ordem[a.status] ?? 0) - (ordem[b.status] ?? 0) || a.nome.localeCompare(b.nome))
@@ -1593,6 +1615,7 @@ function renderFrota() {
             <div class="veh-ico">${v.foto ? `<img src="${v.foto}" alt="">` : icon('truck', 24)}</div>
             <div>
               <div class="veh-nome">${esc(v.nome)}</div>
+              ${setorChip(v) ? `<div class="veh-setor-line">${setorChip(v)}</div>` : ''}
               <div class="veh-sub">${esc(v.placa || '')}${v.modelo ? ' · ' + esc(v.modelo) : ''}${mot ? ' · ' + esc(mot.nome.split(' ')[0]) : ''}</div>
             </div>
             <span class="veh-status st-${v.status || 'ativo'}">${stLabel[v.status] || stLabel.ativo}</span>
@@ -1616,6 +1639,7 @@ function openVehicleForm(v) {
   $('veh-placa').value = v ? (v.placa || '') : '';
   $('veh-ano').value = v ? (v.ano || '') : '';
   $('veh-modelo').value = v ? (v.modelo || '') : '';
+  $('veh-setor').value = v ? (v.setor || '') : '';
   $('veh-km').value = v && v.km ? v.km : '';
   $('veh-oleo-km').value = v && v.oleoUltimaKm ? v.oleoUltimaKm : '';
   $('veh-oleo-int').value = v && v.oleoIntervalo ? v.oleoIntervalo : '';
@@ -1636,6 +1660,7 @@ async function saveVehicle() {
     placa: $('veh-placa').value.trim().toUpperCase(),
     ano: $('veh-ano').value.trim(),
     modelo: $('veh-modelo').value.trim(),
+    setor: $('veh-setor').value || '',
     km: parseIntBR($('veh-km').value),
     oleoUltimaKm: parseIntBR($('veh-oleo-km').value),
     oleoIntervalo: parseIntBR($('veh-oleo-int').value),
@@ -1715,6 +1740,7 @@ function openVehDetail(id) {
       <button class="veh-ico ficha-foto" onclick="pickVehFoto('${id}')" title="Trocar foto">${v.foto ? `<img src="${v.foto}" alt="">` : icon('truck', 30)}</button>
       <div class="ficha-info">
         <b class="vd-nome">${esc(v.nome)}</b>
+        ${setorChip(v) ? `<div class="vd-setor-line">${setorChip(v)}</div>` : ''}
         <small class="vd-modelo">${esc(v.modelo || 'Modelo não informado')}${v.placa ? ' · ' + esc(v.placa) : ''}</small>
         <small class="vd-mot">${icon('user', 13)}${mot ? esc(mot.nome) : 'Sem motorista'}</small>
       </div>
@@ -2726,6 +2752,42 @@ async function ocrTexto(dataUrl) {
 // meses por extenso (pt-BR), abreviados ou completos — usa as 3 primeiras letras
 const MESES_PT = { JAN: '01', FEV: '02', MAR: '03', ABR: '04', MAI: '05', JUN: '06', JUL: '07', AGO: '08', SET: '09', OUT: '10', NOV: '11', DEZ: '12' };
 
+// Acha a data de emissão da nota, ignorando a data de vencimento da promissória.
+// `t` já vem em MAIÚSCULAS. Tolera OCR ("EMISSÃO"/"EMISSAO"/"EMISSÁO") e aceita
+// data por extenso ("10 de jul de 2026") ou dd/mm/aaaa.
+function acharDataNota(t) {
+  const porMes = (d, mesTxt, ano) => {
+    const mes = MESES_PT[String(mesTxt).slice(0, 3)];
+    return mes ? `${ano}-${mes}-${String(d).padStart(2, '0')}` : null;
+  };
+  // trecho da promissória a ignorar: "EM <dia> DE <mês> ... PAGAREI"
+  const ehVencimento = (idx) => {
+    const antes = t.slice(Math.max(0, idx - 5), idx);
+    const depois = t.slice(idx, idx + 70);
+    return /\bEM\s*$/.test(antes) || /PAGAR|VENCIMENTO|\bVENCE\b/.test(depois);
+  };
+  // 1) data logo após "EMISSÃO" (o caso normal desta nota)
+  let m = t.match(/EMISS\S*O\s*[:.]?\s*(\d{1,2})\s+DE\s+([A-ZÇÃÁ]{3,})\s+DE\s+(\d{4})/);
+  if (m) { const r = porMes(m[1], m[2], m[3]); if (r) return r; }
+  m = t.match(/EMISS\S*O\s*[:.]?\s*(\d{2})[\/.-](\d{2})[\/.-](\d{4})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  // 2) qualquer data por extenso que NÃO seja a de vencimento
+  const rex = /(\d{1,2})\s+DE\s+([A-ZÇÃÁ]{3,})\s+DE\s+(\d{4})/g;
+  let mm;
+  while ((mm = rex.exec(t))) {
+    if (ehVencimento(mm.index)) continue;
+    const r = porMes(mm[1], mm[2], mm[3]);
+    if (r) return r;
+  }
+  // 3) qualquer dd/mm/aaaa que NÃO seja a de vencimento
+  const rnum = /(\d{2})[\/.-](\d{2})[\/.-](\d{4})/g;
+  while ((mm = rnum.exec(t))) {
+    if (ehVencimento(mm.index)) continue;
+    return `${mm[3]}-${mm[2]}-${mm[1]}`;
+  }
+  return undefined;
+}
+
 // extrai valor, litros, data, placa, odômetro e posto do texto da nota
 function parseNota(txt) {
   const t = txt.toUpperCase();
@@ -2742,20 +2804,10 @@ function parseNota(txt) {
   const lm = t.match(/(\d{1,3}[.,]\d{1,3})\s*(?:L\b|LT\b|LTS\b|LITROS?)/);
   if (lm) out.litros = parseValor(lm[1]);
 
-  // ── DATA ── prioriza "DATA DA EMISSÃO" para não pegar a data de vencimento
-  // ("Em 20 de julho de 2026 pagarei…"); entende data por extenso e dd/mm/aaaa
-  const porExtenso = (re) => {
-    const m = t.match(re);
-    if (!m) return null;
-    const mes = MESES_PT[m[2].slice(0, 3)];
-    return mes ? `${m[3]}-${mes}-${String(m[1]).padStart(2, '0')}` : null;
-  };
-  out.data =
-    porExtenso(/EMISS[ÃA]O\s*[:.]?\s*(\d{1,2})\s+DE\s+([A-Z]{3,})\s+DE\s+(\d{4})/) ||
-    (() => { const d = t.match(/EMISS[ÃA]O\s*[:.]?\s*(\d{2})\/(\d{2})\/(\d{4})/); return d ? `${d[3]}-${d[2]}-${d[1]}` : null; })() ||
-    porExtenso(/(\d{1,2})\s+DE\s+([A-Z]{3,})\s+DE\s+(\d{4})/) ||
-    (() => { const d = t.match(/(\d{2})\/(\d{2})\/(\d{4})/); return d ? `${d[3]}-${d[2]}-${d[1]}` : null; })() ||
-    undefined;
+  // ── DATA ── usa a data de EMISSÃO e NUNCA a de vencimento da promissória
+  // ("Em 20 de julho de 2026 pagarei…"). Se só existir a de vencimento, deixa
+  // em branco (o app avisa e a pessoa preenche) em vez de pôr a data errada.
+  out.data = acharDataNota(t);
 
   // ── VALOR ── prioriza "VALOR DO PAGAMENTO/TOTAL"; senão, o maior valor da nota
   const vm = t.match(/(?:VALOR\s+DO\s+PAGAMENTO|VALOR\s+TOTAL|TOTAL|VALOR)[^0-9]{0,25}(\d{1,3}(?:\.\d{3})*,\d{2})/);
@@ -3014,8 +3066,8 @@ function seedDemo() {
   };
   const v1 = newId(), v2 = newId();
   S.vehicles = [
-    { id: v1, nome: 'Van 01', placa: 'ABC1D23', modelo: 'Fiat Ducato', ano: '2019', km: 148300, oleoUltimaKm: 139500, oleoIntervalo: 10000, licenciamento: dfut(22), seguro: dfut(120), status: 'ativo' },
-    { id: v2, nome: 'Van 02', placa: 'DEF4G56', modelo: 'Mercedes Sprinter 415', ano: '2021', km: 96650, oleoUltimaKm: 95800, oleoIntervalo: 10000, licenciamento: dfut(200), seguro: dfut(45), status: 'ativo' },
+    { id: v1, nome: 'Van 01', placa: 'ABC1D23', modelo: 'Fiat Ducato', ano: '2019', setor: 'educacao', km: 148300, oleoUltimaKm: 139500, oleoIntervalo: 10000, licenciamento: dfut(22), seguro: dfut(120), status: 'ativo' },
+    { id: v2, nome: 'Van 02', placa: 'DEF4G56', modelo: 'Mercedes Sprinter 415', ano: '2021', setor: 'saude', km: 96650, oleoUltimaKm: 95800, oleoIntervalo: 10000, licenciamento: dfut(200), seguro: dfut(45), status: 'ativo' },
   ];
   S.kmlog = [
     { id: newId(), veiculo: v2, km: 96650, data: dstr(0), autorNome: 'Você', autorUid: 'demo', ts: Date.now() },

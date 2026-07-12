@@ -695,3 +695,20 @@ button.status-card:active { transform: scale(.985); }
 /* tela de login sem símbolo (mais clean) */
 .login-card-clean { padding-top: 42px; }
 .login-card-clean h1 { font-size: 2.2rem; }
+
+/* ═══════════ SETOR (contrato da prefeitura) ═══════════ */
+:root{ --edu:#2563eb; }
+[data-theme="dark"]{ --edu:#7ea8ff; }
+@media (prefers-color-scheme:dark){ :root{ --edu:#7ea8ff; } }
+:root[data-theme="light"]{ --edu:#2563eb; }
+.setor-chip{ display:inline-flex; align-items:center; font-size:.7rem; font-weight:800; letter-spacing:.02em;
+  padding:3px 10px; border-radius:999px; line-height:1.35; }
+.set-edu{ color:var(--edu);  background:color-mix(in srgb, var(--edu) 16%, transparent); }
+.set-sau{ color:var(--pos);  background:color-mix(in srgb, var(--pos) 16%, transparent); }
+.set-tra{ color:var(--warn); background:color-mix(in srgb, var(--warn) 18%, transparent); }
+.veh-setor-line{ margin:3px 0 2px; }
+.vd-setor-line{ margin:4px 0 3px; }
+/* filtro de setor na Operação */
+.setor-filtro{ overflow-x:auto; padding-bottom:2px; margin-bottom:12px; -webkit-overflow-scrolling:touch; }
+.setor-filtro::-webkit-scrollbar{ display:none; }
+.setor-filtro .chip{ flex:0 0 auto; }
