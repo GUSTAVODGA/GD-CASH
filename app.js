@@ -234,7 +234,12 @@ async function loadFromCloud() {
   try {
     const doc = await db.collection('users').doc(currentUser.uid).collection('data').doc('main').get();
     if (doc.exists) {
-      D = { ...defaultData(), ...doc.data() };
+      const cloudData = doc.data();
+      const localUpdatedAt = D.updatedAt || 0;
+      const cloudUpdatedAt = cloudData.updatedAt || 0;
+      if (cloudUpdatedAt >= localUpdatedAt) {
+        D = { ...defaultData(), ...cloudData };
+      }
       if (!D.goals) D.goals = [];
       if (!D.weeklyGoal) D.weeklyGoal = 0;
       if (!D.reminders) D.reminders = [];
@@ -263,6 +268,7 @@ async function loadFromCloud() {
 async function saveToCloud() {
   if (!currentUser || !db) return;
   try {
+    D.updatedAt = Date.now();
     await db.collection('users').doc(currentUser.uid).collection('data').doc('main').set(D);
   } catch(e) {
     console.error('Erro ao salvar na nuvem:', e);
@@ -493,8 +499,26 @@ let D = (() => {
   return defaultData();
 })();
 
+function gdToast(msg, duration=4000) {
+  let el = document.getElementById('gd-toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'gd-toast';
+    el.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#e8e7f4;padding:12px 20px;border-radius:12px;font-size:14px;z-index:9999;max-width:320px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.5);border:1px solid #25273a;transition:opacity .3s';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, duration);
+}
+
 function save() {
-  try { localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch(e){}
+  try { localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch(e) {
+    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22)) {
+      gdToast('⚠️ Armazenamento cheio. Exporte seus dados ou ative a sincronização na nuvem.');
+    }
+  }
   if (CLOUD_ENABLED) saveToCloud();
 }
 
@@ -515,7 +539,20 @@ function importData(event) {
   reader.onload = () => {
     try {
       const parsed = JSON.parse(reader.result);
-      D = parsed;
+      const required = ['platforms','expenses','dailyIncome'];
+      const missing = required.filter(k => !parsed[k] || typeof parsed[k] !== 'object');
+      if (missing.length) {
+        alert('Arquivo inválido: campos obrigatórios ausentes (' + missing.join(', ') + '). Selecione um backup exportado pelo GD Cash.');
+        return;
+      }
+      const def = defaultData();
+      D = Object.assign({}, def, parsed);
+      D.platforms = Array.isArray(parsed.platforms) ? parsed.platforms : def.platforms;
+      D.expenses = Array.isArray(parsed.expenses) ? parsed.expenses : def.expenses;
+      D.incomeItems = Array.isArray(parsed.incomeItems) ? parsed.incomeItems : def.incomeItems || [];
+      D.goals = Array.isArray(parsed.goals) ? parsed.goals : def.goals || [];
+      D.reminders = Array.isArray(parsed.reminders) ? parsed.reminders : def.reminders || [];
+      D.fixedExpenses = Array.isArray(parsed.fixedExpenses) ? parsed.fixedExpenses : def.fixedExpenses || [];
       save();
       alert('Dados importados com sucesso!');
       location.reload();
@@ -924,7 +961,7 @@ function renderMes() {
   const weekSums=weeks.map(w=>{
     const ds=[];const cur=new Date(w.start);
     while(cur<=w.end){ds.push(dateStr(cur));cur.setDate(cur.getDate()+1);}
-    const wI=ds.reduce((s,d)=>s+D.platforms.reduce((ss,p)=>{const i=getDayIncome(d);return ss+(i[p.id]||0);},0),0);
+    const wI=ds.reduce((s,d)=>s+D.platforms.reduce((ss,p)=>ss+getDayPlatIncome(d,p.id),0),0);
     const wE=D.expenses.filter(e=>ds.includes(e.date)).reduce((s,e)=>s+e.amount,0);
     return {wI,wL:wI-wE};
   });
@@ -1334,10 +1371,10 @@ function checkGoalNotifications() {
 }
 
 function deleteResHist(id) {
-  const h=D.reservaHistory.find(h=>h.id===id);
-  if(!h) return;
-  D.emergency.current=h.type==='dep' ? Math.max(0,D.emergency.current-h.amount) : D.emergency.current+h.amount;
+  if(!D.reservaHistory.find(h=>h.id===id)) return;
   D.reservaHistory=D.reservaHistory.filter(h=>h.id!==id);
+  D.emergency.current = D.reservaHistory.reduce((s,h) => h.type==='dep' ? s+h.amount : s-h.amount, 0);
+  D.emergency.current = Math.max(0, D.emergency.current);
   save(); renderReserva();
 }
 
@@ -1750,6 +1787,7 @@ function nextTourStep() {
 function closeTour() {
   document.getElementById('tour-overlay').style.display = 'none';
   document.getElementById('tour-spotlight').style.display = 'none';
+  if (DEMO_MODE) exitDemo();
 }
 
 // ══════════════════════════════════════════
@@ -2102,6 +2140,13 @@ function checkReminders() {
       const body = notifyWhen > 0 ? `Daqui ${notifyWhen} dia${notifyWhen!==1?'s':''}` : 'É hoje!';
       new Notification(`🔔 ${r.name}`, { body, icon: '/GD-CASH/icon-192.png' });
       r.lastNotif = todayStr();
+      if (r.repeat && r.repeat !== 'none') {
+        const next = new Date(rDate);
+        if (r.repeat === 'weekly')  next.setDate(next.getDate() + 7);
+        if (r.repeat === 'monthly') next.setMonth(next.getMonth() + 1);
+        if (r.repeat === 'yearly')  next.setFullYear(next.getFullYear() + 1);
+        r.date = dateStr(next);
+      }
       changed = true;
     }
   });
@@ -2112,11 +2157,13 @@ function checkReminders() {
 // EXPORT — CSV / ICS / EMAIL
 // ══════════════════════════════════════════
 function exportCSV() {
-  const rows = [['Data','Tipo','Categoria/Plataforma','Descrição','Valor']];
+  const header = ['Data','Tipo','Categoria/Plataforma','Descrição','Valor'];
+  const rows = [];
   D.expenses.forEach(e => rows.push([e.date,'Gasto',e.category,e.description||e.category,-e.amount]));
   (D.incomeItems||[]).forEach(it => {
     const plat = D.platforms.find(p=>p.id===it.platformId)?.name||'';
-    rows.push([it.date,'Receita',plat,it.note||plat,it.amount]);
+    const tipo = it.status === 'pending' ? 'Receita (pendente)' : 'Receita';
+    rows.push([it.date,tipo,plat,it.note||plat,it.amount]);
   });
   Object.entries(D.dailyIncome||{}).forEach(([date,pm]) => {
     D.platforms.forEach(p => {
@@ -2126,6 +2173,7 @@ function exportCSV() {
     });
   });
   rows.sort((a,b) => String(a[0]).localeCompare(String(b[0])));
+  rows.unshift(header);
   const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
@@ -2374,21 +2422,32 @@ function renderDayAccordion() {
     const exps = getDayExpenses(d);
     const isOff = D.daysOff.includes(d);
 
-    // Income rows — with delete button to clear and re-add
+    // Income rows — each incomeItem gets its own row+delete; legacy dailyIncome entries get one row
     const platItems = D.platforms.map(p => {
-      const v = getDayPlatIncome(d, p.id);
+      const items = (D.incomeItems||[]).filter(it => it.date===d && it.platformId===p.id);
+      if (items.length > 0) {
+        return items.map(it => {
+          const label = it.note || it.description || p.name;
+          const statusTag = it.status === 'pending' ? ' <span style="font-size:10px;opacity:.6">(pendente)</span>' : '';
+          return `<div class="dacc-tx">
+            <div class="dacc-tx-ico" style="background:${p.color}22">
+              <svg viewBox="0 0 24 24" style="stroke:${p.color}"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            </div>
+            <div class="dacc-tx-info"><div class="dacc-tx-lbl">${p.name}${statusTag}</div><div class="dacc-tx-cat">${label !== p.name ? label : 'Receita'}</div></div>
+            <div class="dacc-tx-amt" style="color:var(--gn)">+${R(it.amount)}</div>
+            <button class="dacc-tx-del" title="Remover" onclick="D.incomeItems=(D.incomeItems||[]).filter(x=>x.id!=='${it.id}');save();renderDayAccordion();refreshAfterDayEdit()">✕</button>
+          </div>`;
+        }).join('');
+      }
+      const v = getDayIncome(d)[p.id] || 0;
       if (v <= 0) return '';
-      const hasItems = (D.incomeItems||[]).some(it => it.date===d && it.platformId===p.id);
-      const delAction = hasItems
-        ? `D.incomeItems=(D.incomeItems||[]).filter(it=>!(it.date==='${d}'&&it.platformId==='${p.id}'));save();renderDayAccordion();refreshAfterDayEdit()`
-        : `setDayIncome('${d}','${p.id}',0);renderDayAccordion();refreshAfterDayEdit()`;
       return `<div class="dacc-tx">
         <div class="dacc-tx-ico" style="background:${p.color}22">
           <svg viewBox="0 0 24 24" style="stroke:${p.color}"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </div>
         <div class="dacc-tx-info"><div class="dacc-tx-lbl">${p.name}</div><div class="dacc-tx-cat">Receita</div></div>
         <div class="dacc-tx-amt" style="color:var(--gn)">+${R(v)}</div>
-        <button class="dacc-tx-del" title="Remover" onclick="${delAction}">✕</button>
+        <button class="dacc-tx-del" title="Remover" onclick="setDayIncome('${d}','${p.id}',0);renderDayAccordion();refreshAfterDayEdit()">✕</button>
       </div>`;
     }).join('');
 
@@ -2527,7 +2586,7 @@ function qaConfirm() {
       const hasItems = (D.incomeItems||[]).some(it => it.date===date && it.platformId===pid);
       if (hasItems) {
         if (!D.incomeItems) D.incomeItems = [];
-        D.incomeItems.push({ id: uid(), date, platformId: pid, amount: amt, description: desc || 'Receita', status: 'paid' });
+        D.incomeItems.push({ id: uid(), date, platformId: pid, amount: amt, note: desc || '', status: 'paid' });
         save();
       } else {
         const existing = getDayIncome(date)[pid] || 0;
