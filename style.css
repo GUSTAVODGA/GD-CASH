@@ -47,6 +47,16 @@
   --ol1: rgba(0,0,0,.04);
   --ol2: rgba(0,0,0,.07);
   --ol3: rgba(0,0,0,.12);
+  /* Gold tint scale — fully themed */
+  --gold-t06: rgba(184,112,8,.06);
+  --gold-t12: rgba(184,112,8,.12);
+  --gold-t20: rgba(184,112,8,.20);
+  --gold-t25: rgba(184,112,8,.25);
+  --gold-t30: rgba(184,112,8,.30);
+  --gold-t40: rgba(184,112,8,.40);
+  --gold-t50: rgba(184,112,8,.50);
+  /* Sheet handle (theme-adaptive) */
+  --handle-bg: rgba(0,0,0,.12);
   /* Positive / negative */
   --pos: var(--green);
   --neg: var(--red);
@@ -92,6 +102,16 @@
   --ol1: rgba(255,255,255,.04);
   --ol2: rgba(255,255,255,.07);
   --ol3: rgba(255,255,255,.12);
+  /* Gold tint scale — fully themed */
+  --gold-t06: rgba(255,214,10,.06);
+  --gold-t12: rgba(255,214,10,.12);
+  --gold-t20: rgba(255,214,10,.20);
+  --gold-t25: rgba(255,214,10,.25);
+  --gold-t30: rgba(255,214,10,.30);
+  --gold-t40: rgba(255,214,10,.40);
+  --gold-t50: rgba(255,214,10,.50);
+  /* Sheet handle */
+  --handle-bg: rgba(255,255,255,.14);
   --pos: var(--green);
   --neg: var(--red);
 }
@@ -1261,3 +1281,133 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 :root[data-theme="dark"] .tour-card{background:rgba(18,22,32,.97)}
 :root[data-theme="dark"] .ob-card{background:rgba(20,24,36,.95)}
 :root[data-theme="dark"] .inc-inp{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18)}
+
+/* ══════════════════════════════════════════
+   PREMIUM IDENTITY — paleta dourada unificada
+   Substitui todos os rgba hardcoded por tokens
+   temáticos; corrige light-mode; adiciona glow
+   ══════════════════════════════════════════ */
+
+/* ── Topbar chip ── */
+.curr-chip{background:var(--gold-t12);border-color:var(--gold-t25)}
+.curr-chip:active{background:var(--gold-t25)}
+
+/* ── Bottom nav glow ── */
+.nav-item.active svg{filter:drop-shadow(0 0 5px var(--gold-t40))}
+
+/* ── Day panel close btn ── */
+.dd-close{background:var(--gold-t12);border-color:var(--gold-t25)}
+
+/* ── Income input focus ring ── */
+.inc-inp:focus{box-shadow:0 0 0 3px var(--gold-t20)}
+
+/* ── Reserva ring glow ── */
+.ring-fill{filter:drop-shadow(0 0 6px var(--gold-t40))}
+
+/* ── Reserva pill ── */
+.pill-meta{background:var(--gold-t12);border-color:var(--gold-t20)}
+
+/* ── Week bars glow ── */
+.s2s-bar-fill{box-shadow:0 0 8px var(--gold-t40)}
+
+/* ── Services add btn ── */
+.iitems-add-btn{background:var(--gold-t12);border-color:var(--gold-t25)}
+
+/* ── Pending total row ── */
+.iitem-pending-total{background:var(--gold-t06)}
+
+/* ── Conversor ── */
+.conv-swap-btn{background:var(--gold-t12);border-color:var(--gold-t20)}
+.conv-swap-btn:active{background:var(--gold-t25)}
+.conv-result-box{background:var(--gold-t06);border-color:var(--gold-t12)}
+
+/* ── Sheet handle (fixes invisible handle in light mode) ── */
+.sheet-handle{background:var(--handle-bg)}
+
+/* ── Month summary ── */
+.month-summary{background:var(--gold-t06);border-color:var(--gold-t12)}
+:root .month-summary{background:var(--gold-t06)}
+
+/* ── Color dot (fixes invisible border in light mode) ── */
+.color-dot{border-color:var(--border)}
+
+/* ── Tab help ── */
+.tab-help-btn{background:var(--gold-t12);border-color:var(--gold-t30)}
+.tab-help-btn:active{background:var(--gold-t25)}
+.tab-help-card{background:var(--gold-t06);border-color:var(--gold-t12)}
+
+/* ── Account avatar ── */
+.acct-avatar{border-color:var(--gold-t40)}
+
+/* ── Início goal wrap ── */
+.inicio-goal-wrap{background:var(--gold-t06);border-color:var(--gold-t12)}
+.inicio-goal-wrap:active{background:var(--gold-t12)}
+
+/* ── Install banner & steps ── */
+.install-banner{border-color:var(--gold-t30)}
+.install-step-ico{background:var(--gold-t12);border-color:var(--gold-t25)}
+.ig-step-num{background:var(--gold-t12);border-color:var(--gold-t30)}
+.install-close{background:var(--ol2)}
+
+/* ── Demo login button shadow ── */
+.btn-demo-login{box-shadow:0 4px 20px var(--gold-t40)}
+.btn-demo-login:active{box-shadow:0 2px 10px var(--gold-t25)}
+
+/* ── Login divider (fixes invisible line in light mode) ── */
+.login-divider::before,.login-divider::after{background:var(--border)}
+
+/* ── Demo banner ── */
+.demo-banner{background:linear-gradient(90deg,var(--gold-t20),rgba(255,107,53,.12));border-color:var(--gold-t25)}
+.demo-banner button{background:var(--gold-t20);border-color:var(--gold-t30)}
+
+/* ── Tour spotlight ── */
+.tour-spotlight{box-shadow:0 0 0 9999px rgba(0,0,0,.62),0 0 0 2px var(--gold-t50)}
+
+/* ── Tour card border (fixes in light mode) ── */
+.tour-card{border-color:var(--border)}
+
+/* ── Ob card border (fixes in light mode) ── */
+.ob-card{border-color:var(--border)}
+
+/* ── Onboarding dots (fixes invisible in light mode) ── */
+.ob-dot{background:var(--ol3)}
+
+/* ── Login badge glow ── */
+.login-badge{box-shadow:0 8px 32px var(--gold-t30),0 2px 8px rgba(0,0,0,.5)}
+
+/* ── FAB glow unified ── */
+.fab{box-shadow:0 0 0 1px var(--gold-t20),0 0 40px var(--gold-t40),0 10px 26px var(--gold-t30)}
+
+/* ── Goal bar glow ── */
+.goal-bar-fill{box-shadow:0 0 6px var(--gold-t30)}
+
+/* ── Enhanced FAB glow in dark mode ── */
+:root[data-theme="dark"] .global-fab{
+  box-shadow:0 4px 20px var(--gold-t50),0 0 40px var(--gold-t30),0 2px 8px rgba(0,0,0,.5)
+}
+:root[data-theme="dark"] .fab{
+  box-shadow:0 0 0 1px var(--gold-t25),0 0 50px var(--gold-t50),0 10px 26px var(--gold-t40)
+}
+
+/* ── Hero card premium top accent ── */
+.hero-card{border-top:1px solid var(--gold-t20)}
+
+/* ── Active bigcard elevation ── */
+.dacc.open{box-shadow:var(--shadow-elevated)}
+
+/* ── Primary button enhanced glow ── */
+.btn-primary{box-shadow:0 4px 20px var(--gold-t40),0 2px 6px rgba(0,0,0,.2)}
+.btn-primary:active{box-shadow:0 2px 8px var(--gold-t25)}
+
+/* ── Nav title pick (fixes dotted underline in light mode) ── */
+.nav-title-pick{text-decoration-color:var(--border)}
+
+/* ── Typography refinements ── */
+.hero-val{font-size:40px;letter-spacing:-2px}
+.page-header-title{font-size:15px;letter-spacing:-.2px}
+
+/* ── Smooth transition on gold tinted elements ── */
+.curr-chip,.tab-help-btn,.iitems-add-btn,.conv-swap-btn,
+.inicio-goal-wrap,.install-step-ico,.ig-step-num{
+  transition:background .15s,border-color .15s,transform .1s
+}
