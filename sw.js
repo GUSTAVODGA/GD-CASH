@@ -1,9 +1,9 @@
-const CACHE = 'gdcash-v46';
+const CACHE = 'gdcash-v47';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './style.css?v=34',
+  './style.css?v=35',
   './app.js?v=44',
 ];
 

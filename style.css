@@ -1411,3 +1411,144 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .inicio-goal-wrap,.install-step-ico,.ig-step-num{
   transition:background .15s,border-color .15s,transform .1s
 }
+
+/* ══════════════════════════════════════════
+   PREMIUM DASHBOARD — Fase 2
+   Cards, hierarquia visual e espaçamento
+   ══════════════════════════════════════════ */
+
+/* ── Espaçamento geral ── */
+.page{padding:20px 16px 32px}
+.sec-label{margin:20px 0 10px;font-size:10.5px;letter-spacing:.08em}
+.sec-label:first-child{margin-top:0}
+.sec-title{margin:22px 0 12px}
+.sec-title:first-child{margin-top:0}
+.bigcards{gap:12px;margin-bottom:20px}
+#days-accordion{gap:10px;margin-bottom:20px}
+.plat-cards{gap:10px;margin-bottom:20px}
+
+/* ── Hero card ── */
+.hero-card{
+  padding:26px 24px;border-radius:26px;position:relative;overflow:hidden;
+  box-shadow:var(--shadow-card)
+}
+.hero-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,var(--gold-t50) 0%,var(--gold-t20) 50%,transparent 100%)
+}
+.hero-lbl{font-size:10px;letter-spacing:.14em}
+.hero-val{font-size:42px;letter-spacing:-2.5px;line-height:1.0;margin:4px 0 16px}
+.hero-chips{gap:8px}
+.hero-chip{
+  background:var(--ol1);border:1px solid var(--border);
+  border-radius:20px;padding:5px 10px;gap:6px
+}
+.chip-dot{width:7px;height:7px}
+
+/* ── Carousel cards ── */
+.cc{border:1px solid var(--border);border-radius:20px;padding:18px}
+.cc-gold{border-color:var(--gold-t25)}
+.cc-green{border-color:var(--gn-t)}
+.cc-ico{width:46px;height:46px;border-radius:15px}
+.cc-title{font-size:16px;letter-spacing:-.4px}
+.cc-sub{font-size:11.5px;margin-top:4px}
+.cc-arr{border:1px solid var(--border)}
+
+/* ── Quad-grid ── */
+.qi{
+  padding:18px 8px 16px;border-radius:20px;
+  border:1px solid var(--border);gap:10px;
+  box-shadow:var(--shadow-sm)
+}
+.qi-ico{width:42px;height:42px;border-radius:13px}
+.qi-lbl{font-size:10.5px}
+
+/* ── Bigcards ── */
+.bigcard{
+  padding:20px;border-radius:22px;
+  border:1px solid var(--border);
+  border-left:3px solid var(--border);
+  box-shadow:var(--shadow-sm)
+}
+.bigcards .bigcard:first-child{border-left-color:var(--green)}
+.bigcards .bigcard:last-child{border-left-color:var(--gold)}
+.bigcard-val{font-size:28px;letter-spacing:-1.2px;margin-bottom:10px}
+.bigcard-lbl{font-size:10px;letter-spacing:.08em}
+.bigcard-arr{
+  width:30px;height:30px;
+  background:var(--ol1);border:1px solid var(--border)
+}
+.bigcard-chip{
+  background:var(--ol1);border:1px solid var(--border);
+  border-radius:12px;padding:4px 8px
+}
+
+/* ── Day accordion ── */
+.dacc{
+  border-radius:18px;border:1px solid var(--border);
+  box-shadow:var(--shadow-sm)
+}
+.dacc.open{
+  border-color:var(--border-strong);
+  box-shadow:var(--shadow-elevated)
+}
+.dacc-head{padding:14px 16px}
+.dacc-dot{width:9px;height:9px}
+.dacc-dot-active{box-shadow:0 0 0 3px var(--gold-t12)}
+.dacc-name{font-size:13.5px;letter-spacing:-.1px}
+.dacc-liq{font-size:14px;letter-spacing:-.3px}
+.dacc-tx{padding:11px 16px}
+.dacc-tx-ico{width:36px;height:36px;border-radius:11px}
+.dacc-tx-lbl{font-size:12.5px}
+.dacc-tx-amt{font-size:13px}
+
+/* ── Platform cards ── */
+.plat-c{
+  border-radius:18px;border:1px solid var(--border);
+  border-top-width:3px;min-width:118px;
+  box-shadow:var(--shadow-sm);background:var(--surface)
+}
+.plat-c-val{font-size:20px;letter-spacing:-.5px}
+.plat-c-name{font-size:10.5px;letter-spacing:.05em}
+
+/* ── Transaction list ── */
+.tx-item{padding:14px 16px}
+.tx-icon{width:46px;height:46px;border-radius:15px;font-size:19px}
+.tx-label{font-size:14px;letter-spacing:-.1px}
+.tx-sub{font-size:11.5px;margin-top:3px}
+.tx-amt{font-size:15.5px;letter-spacing:-.3px}
+
+/* ── Result card (Semana) ── */
+.result-row{border-radius:18px;padding:18px 20px;border-color:var(--border-strong)}
+.result-val{font-size:22px;letter-spacing:-.5px}
+.result-lbl{font-size:13.5px}
+
+/* ── Month summary ── */
+.month-summary{border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+.month-summary-text{font-size:13.5px;line-height:1.7}
+
+/* ── Inicio goal wrap ── */
+.inicio-goal-wrap{border-radius:18px;padding:14px 16px}
+
+/* ── Dark mode surface refinements ── */
+:root[data-theme="dark"] .dacc{border-color:rgba(255,255,255,.08)}
+:root[data-theme="dark"] .dacc.open{border-color:rgba(255,255,255,.16);box-shadow:0 8px 40px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.12)}
+:root[data-theme="dark"] .bigcard{border-color:rgba(255,255,255,.08)}
+:root[data-theme="dark"] .bigcards .bigcard:first-child{border-left-color:var(--green)}
+:root[data-theme="dark"] .bigcards .bigcard:last-child{border-left-color:var(--gold)}
+:root[data-theme="dark"] .qi{border-color:rgba(255,255,255,.08)}
+:root[data-theme="dark"] .cc{border-color:rgba(255,255,255,.08)}
+:root[data-theme="dark"] .cc-gold{border-color:var(--gold-t25)}
+:root[data-theme="dark"] .cc-green{border-color:rgba(48,209,88,.18)}
+:root[data-theme="dark"] .plat-c{border-color:rgba(255,255,255,.08);border-top-color:inherit}
+:root[data-theme="dark"] .hero-chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10)}
+:root[data-theme="dark"] .bigcard-arr{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10)}
+:root[data-theme="dark"] .bigcard-chip{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.10)}
+
+/* ── Light mode surface refinements ── */
+:root .hero-card{box-shadow:0 2px 20px rgba(0,0,0,.09),0 8px 40px rgba(0,0,0,.06)}
+:root .bigcard{box-shadow:0 2px 12px rgba(0,0,0,.07),0 1px 4px rgba(0,0,0,.05)}
+:root .dacc{box-shadow:0 1px 6px rgba(0,0,0,.06),0 2px 12px rgba(0,0,0,.04)}
+:root .qi{box-shadow:0 1px 4px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04)}
+:root .plat-c{box-shadow:0 1px 4px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04)}
+:root .cc{box-shadow:0 2px 12px rgba(0,0,0,.07),0 1px 4px rgba(0,0,0,.04)}
