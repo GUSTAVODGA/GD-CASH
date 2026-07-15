@@ -190,6 +190,7 @@
 .qi-gold { background:var(--ac-t); } .qi-gold svg { stroke:var(--ac); }
 .qi-blue { background:var(--bl-t); } .qi-blue svg { stroke:var(--bl); }
 .qi-red { background:var(--rd-t); } .qi-red svg { stroke:var(--rd); }
+.qi-green { background:var(--gn-t); } .qi-green svg { stroke:var(--gn); }
 
 /* ══ BIG NAV CARDS ══ */
 .bigcards { display:flex; flex-direction:column; gap:10px; margin-bottom:16px; }
