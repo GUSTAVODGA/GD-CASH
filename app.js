@@ -68,6 +68,7 @@ function initFirebase() {
       if (fab) fab.style.display = 'none';
       checkGoalNotifications();
       checkReminders();
+      checkPendenciasDeadlines();
       checkOnboarding();
       checkInstallBanner();
       handleShortcut();
@@ -185,6 +186,11 @@ const TAB_HELP = {
     title: 'Ajustes',
     text: 'Configure suas fontes de receita, categorias de gastos e limites de orçamento mensal por categoria. Também aqui você faz backup e restaura seus dados.',
   },
+  pendencias: {
+    icon: '📋',
+    title: 'Pendências',
+    text: 'Registre tudo que precisa resolver — compra, documento, manutenção, conta. Defina prioridade e prazo. Ao concluir, você pode registrar como gasto real se quiser.',
+  },
 };
 
 function showTabHelp(tab) {
@@ -243,6 +249,7 @@ async function loadFromCloud() {
       if (!D.goals) D.goals = [];
       if (!D.weeklyGoal) D.weeklyGoal = 0;
       if (!D.reminders) D.reminders = [];
+      if (!D.pendencias) D.pendencias = [];
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
     } else {
       // Primeiro login — oferece migrar dados locais existentes
@@ -480,6 +487,7 @@ function defaultData() {
     incomeItems: [],
     catBudgets: {},
     reminders: [],
+    pendencias: [],
   };
 }
 
@@ -493,6 +501,7 @@ let D = (() => {
       if(!p.incomeItems) p.incomeItems=[];
       if(!p.catBudgets)  p.catBudgets={};
       if(!p.reminders)   p.reminders=[];
+      if(!p.pendencias)  p.pendencias=[];
       return p;
     }
   } catch(e){}
@@ -553,6 +562,7 @@ function importData(event) {
       D.goals = Array.isArray(parsed.goals) ? parsed.goals : def.goals || [];
       D.reminders = Array.isArray(parsed.reminders) ? parsed.reminders : def.reminders || [];
       D.fixedExpenses = Array.isArray(parsed.fixedExpenses) ? parsed.fixedExpenses : def.fixedExpenses || [];
+      D.pendencias = Array.isArray(parsed.pendencias) ? parsed.pendencias : def.pendencias || [];
       save();
       alert('Dados importados com sucesso!');
       location.reload();
@@ -1515,7 +1525,7 @@ function switchTab(tab) {
   page.classList.add('active');
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   // Highlight "Mais" button for secondary tabs
-  const moreTabs = ['fixos','conversor','ajustes','lembretes'];
+  const moreTabs = ['fixos','conversor','ajustes','lembretes','pendencias'];
   if(tab==='inicio')    { renderInicio(); renderInicioCards(); }
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
@@ -1525,6 +1535,7 @@ function switchTab(tab) {
   if(tab==='conversor')  loadConversorRates();
   if(tab==='ajustes')    { renderBudgetSettings(); initSettingsExtras(); }
   if(tab==='lembretes')  renderLembretes();
+  if(tab==='pendencias') renderPendencias();
   // Show FAB only on main tabs
   const fab = document.getElementById('global-fab');
   if (fab) fab.style.display = tab === 'semana' ? '' : 'none';
@@ -2402,6 +2413,8 @@ function renderInicioCards() {
   const nome = currentUser?.displayName?.split(' ')[0] || 'você';
   const greet = document.getElementById('logo-greeting');
   if (greet) { greet.textContent = 'Olá, '; const b = document.createElement('b'); b.textContent = nome; greet.appendChild(b); }
+
+  renderPendInicio();
 }
 
 // ══════════════════════════════════════════
@@ -2715,4 +2728,232 @@ function initSettingsExtras() {
 
   // Set initial toggle state
   updateThemeToggle(document.documentElement.dataset.theme === 'dark');
+}
+
+// ══════════════════════════════════════════
+// PENDÊNCIAS
+// ══════════════════════════════════════════
+const PEND_CAT_LABELS = { carro:'🚗 Carro', casa:'🏠 Casa', documento:'📄 Documento', financeiro:'💰 Financeiro', pessoal:'👤 Pessoal', outra:'📌 Outra' };
+const PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baixa' };
+let pendFilter = 'abertas';
+
+function renderPendInicio() {
+  const el = document.getElementById('pend-inicio-card');
+  if (!el) return;
+  const hoje = todayStr();
+  const abertas = (D.pendencias || []).filter(p => p.status === 'aberta');
+  if (abertas.length === 0) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  const altas = abertas.filter(p => p.priority === 'alta').length;
+  const vencidas = abertas.filter(p => p.deadline && p.deadline < hoje).length;
+  const totalEst = abertas.reduce((s, p) => s + (p.estimatedValue || 0), 0);
+  el.innerHTML = `
+    <div class="pend-inicio-header" onclick="switchMore('pendencias')">
+      <span class="pend-inicio-title">📋 Pendências</span>
+      <span class="pend-inicio-link">Ver todas →</span>
+    </div>
+    <div class="pend-inicio-chips">
+      <div class="pic pic-blue">${abertas.length} em aberto</div>
+      ${altas > 0 ? `<div class="pic pic-red">${altas} alta${altas>1?'s':''}</div>` : ''}
+      ${vencidas > 0 ? `<div class="pic pic-orange">${vencidas} vencida${vencidas>1?'s':''}</div>` : ''}
+      ${totalEst > 0 ? `<div class="pic pic-gray">${R(totalEst)} estimado</div>` : ''}
+    </div>`;
+}
+
+function setPendFilter(f) {
+  pendFilter = f;
+  document.querySelectorAll('.pend-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.f === f));
+  renderPendList();
+}
+
+function renderPendencias() {
+  const page = document.getElementById('page-pendencias');
+  if (!page) return;
+  const tabs = page.querySelector('.pend-filter-row');
+  if (tabs) tabs.querySelectorAll('.pend-filter-btn').forEach(b => b.classList.toggle('active', b.dataset.f === pendFilter));
+  renderPendList();
+}
+
+function renderPendList() {
+  const cont = document.getElementById('pend-list');
+  if (!cont) return;
+  const hoje = todayStr();
+  let items = (D.pendencias || []);
+  if (pendFilter === 'abertas') items = items.filter(p => p.status === 'aberta');
+  else if (pendFilter === 'concluidas') items = items.filter(p => p.status === 'concluida');
+
+  if (items.length === 0) {
+    cont.innerHTML = `<div class="empty-state">${pendFilter === 'abertas' ? 'Nenhuma pendência em aberto. Toque em + para adicionar.' : 'Nenhuma pendência concluída.'}</div>`;
+    return;
+  }
+
+  items = [...items].sort((a, b) => {
+    const prioOrder = { alta: 0, media: 1, baixa: 2 };
+    const ap = prioOrder[a.priority] ?? 1, bp = prioOrder[b.priority] ?? 1;
+    if (ap !== bp) return ap - bp;
+    if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline);
+    if (a.deadline) return -1;
+    if (b.deadline) return 1;
+    return (b.createdAt || '').localeCompare(a.createdAt || '');
+  });
+
+  cont.innerHTML = items.map(p => {
+    const vencida = p.status === 'aberta' && p.deadline && p.deadline < hoje;
+    const proxima = p.status === 'aberta' && p.deadline && p.deadline >= hoje && p.deadline <= pendAddDays(hoje, 3);
+    const catLabel = PEND_CAT_LABELS[p.category] || p.category;
+    const prioLabel = PEND_PRIO_LABELS[p.priority] || p.priority;
+    const deadlineStr = p.deadline ? `Prazo: ${pendFmtDate(p.deadline)}` : '';
+    const valStr = p.estimatedValue ? `Estimado: ${R(p.estimatedValue)}` : '';
+    return `<div class="pend-card${vencida ? ' pend-vencida' : proxima ? ' pend-proxima' : ''}">
+      <div class="pend-card-top">
+        <div class="pend-card-info">
+          <div class="pend-card-title">${pendEsc(p.title)}</div>
+          <div class="pend-card-meta">
+            <span class="pend-badge pend-prio-${p.priority}">${prioLabel}</span>
+            <span class="pend-badge pend-cat">${catLabel}</span>
+          </div>
+          ${deadlineStr || valStr ? `<div class="pend-card-sub">${[deadlineStr, valStr].filter(Boolean).join(' · ')}</div>` : ''}
+          ${p.note ? `<div class="pend-card-note">${pendEsc(p.note)}</div>` : ''}
+        </div>
+        <div class="pend-card-actions">
+          ${p.status === 'aberta'
+            ? `<button class="pend-btn pend-btn-done" onclick="completePendencia('${p.id}')" title="Concluir">✓</button>`
+            : `<button class="pend-btn pend-btn-reopen" onclick="reopenPendencia('${p.id}')" title="Reabrir">↩</button>`}
+          <button class="pend-btn pend-btn-edit" onclick="openPendenciaModal('${p.id}')" title="Editar">✎</button>
+          <button class="pend-btn pend-btn-del" onclick="deletePendencia('${p.id}')" title="Excluir">🗑</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function pendEsc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function pendAddDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function pendFmtDate(dateStr) {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function openPendenciaModal(id) {
+  const modal = document.getElementById('modal-pendencia');
+  if (!modal) return;
+  const p = id ? (D.pendencias || []).find(x => x.id === id) : null;
+  modal.querySelector('#pend-modal-title').textContent = p ? 'Editar Pendência' : 'Nova Pendência';
+  modal.querySelector('#pend-id').value = p ? p.id : '';
+  modal.querySelector('#pend-title-input').value = p ? p.title : '';
+  modal.querySelector('#pend-cat-sel').value = p ? p.category : 'pessoal';
+  modal.querySelector('#pend-prio-sel').value = p ? p.priority : 'media';
+  modal.querySelector('#pend-deadline').value = p ? (p.deadline || '') : '';
+  modal.querySelector('#pend-value').value = p ? (p.estimatedValue || '') : '';
+  modal.querySelector('#pend-note').value = p ? (p.note || '') : '';
+  openOverlay('modal-pendencia');
+}
+
+function savePendencia() {
+  const title = document.getElementById('pend-title-input')?.value?.trim();
+  if (!title) { alert('Informe um título para a pendência.'); return; }
+  const id = document.getElementById('pend-id')?.value;
+  const cat = document.getElementById('pend-cat-sel')?.value || 'pessoal';
+  const prio = document.getElementById('pend-prio-sel')?.value || 'media';
+  const deadline = document.getElementById('pend-deadline')?.value || null;
+  const valRaw = parseFloat(document.getElementById('pend-value')?.value);
+  const estimatedValue = valRaw > 0 ? valRaw : null;
+  const note = document.getElementById('pend-note')?.value?.trim() || '';
+  if (!D.pendencias) D.pendencias = [];
+  if (id) {
+    const idx = D.pendencias.findIndex(p => p.id === id);
+    if (idx >= 0) D.pendencias[idx] = { ...D.pendencias[idx], title, category: cat, priority: prio, deadline, estimatedValue, note };
+  } else {
+    D.pendencias.push({ id: uid(), title, category: cat, priority: prio, deadline, estimatedValue, note, status: 'aberta', createdAt: todayStr() });
+  }
+  save();
+  closeOverlay('modal-pendencia');
+  haptic(10);
+  renderPendList();
+  renderPendInicio();
+  gdToast('Pendência salva!');
+}
+
+function completePendencia(id) {
+  const p = (D.pendencias || []).find(x => x.id === id);
+  if (!p) return;
+  p.status = 'concluida';
+  p.completedAt = todayStr();
+  save();
+  renderPendList();
+  renderPendInicio();
+  haptic(15);
+  if (p.estimatedValue && p.estimatedValue > 0) {
+    if (confirm(`Pendência concluída! Deseja registrar o valor estimado (${R(p.estimatedValue)}) como gasto?`)) {
+      openPendenciaAsExpense(p);
+    }
+  } else {
+    gdToast('Pendência concluída! ✓');
+  }
+}
+
+function openPendenciaAsExpense(p) {
+  const platSel = document.getElementById('qa-plat-sel');
+  if (platSel) platSel.innerHTML = D.platforms.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('');
+  const catSel = document.getElementById('qa-cat-sel');
+  if (catSel) catSel.innerHTML = (D.expCats || []).map(c => `<option value="${c}">${c}</option>`).join('');
+  const dateEl = document.getElementById('qa-date');
+  if (dateEl) dateEl.value = todayStr();
+  const amtEl = document.getElementById('qa-amt-input');
+  if (amtEl) amtEl.value = p.estimatedValue;
+  const amtDisp = document.getElementById('qa-amt-display');
+  if (amtDisp) amtDisp.textContent = R(p.estimatedValue);
+  const descEl = document.getElementById('qa-desc');
+  if (descEl) descEl.value = p.title;
+  qaSetType('gas');
+  document.getElementById('qa-suggest-row').style.display = 'none';
+  openOverlay('modal-quick-add');
+}
+
+function reopenPendencia(id) {
+  const p = (D.pendencias || []).find(x => x.id === id);
+  if (!p) return;
+  p.status = 'aberta';
+  delete p.completedAt;
+  save();
+  renderPendList();
+  renderPendInicio();
+  gdToast('Pendência reaberta.');
+}
+
+function deletePendencia(id) {
+  if (!confirm('Excluir esta pendência?')) return;
+  D.pendencias = (D.pendencias || []).filter(p => p.id !== id);
+  save();
+  renderPendList();
+  renderPendInicio();
+  haptic(10);
+  gdToast('Pendência excluída.');
+}
+
+function checkPendenciasDeadlines() {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const hoje = todayStr();
+  const amanha = pendAddDays(hoje, 1);
+  (D.pendencias || []).filter(p => p.status === 'aberta' && p.deadline).forEach(p => {
+    if (p.lastDeadlineNotif === hoje) return;
+    const isVencida = p.deadline < hoje;
+    const isHoje = p.deadline === hoje;
+    const isAmanha = p.deadline === amanha;
+    if (isVencida || isHoje || isAmanha) {
+      const msg = isVencida ? `Pendência vencida: ${p.title}` : isHoje ? `Pendência vence hoje: ${p.title}` : `Pendência vence amanhã: ${p.title}`;
+      try { new Notification('GD Cash — Pendência', { body: msg, icon: '/GD-CASH/icon-192.png', tag: 'pend-' + p.id }); } catch(e) {}
+      p.lastDeadlineNotif = hoje;
+    }
+  });
+  save();
 }
