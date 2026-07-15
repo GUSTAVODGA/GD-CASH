@@ -1552,3 +1552,70 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 :root .qi{box-shadow:0 1px 4px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04)}
 :root .plat-c{box-shadow:0 1px 4px rgba(0,0,0,.06),0 2px 8px rgba(0,0,0,.04)}
 :root .cc{box-shadow:0 2px 12px rgba(0,0,0,.07),0 1px 4px rgba(0,0,0,.04)}
+
+/* ══════════════════════════════════════════
+   PENDÊNCIAS
+   ══════════════════════════════════════════ */
+
+/* Início summary card */
+.pend-inicio-card{background:var(--surface-2,var(--card));border-radius:14px;padding:14px 16px;margin:0 0 8px;border:1px solid var(--border)}
+.pend-inicio-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.pend-inicio-title{font-size:14px;font-weight:600;color:var(--text-1)}
+.pend-inicio-link{font-size:12px;color:var(--gold,#f0b429)}
+.pend-inicio-chips{display:flex;gap:6px;flex-wrap:wrap}
+.pic{padding:4px 10px;border-radius:20px;font-size:11px;font-weight:600}
+.pic-blue{background:rgba(62,198,255,.15);color:#3ec6ff}
+.pic-red{background:rgba(255,77,106,.12);color:#ff4d6a}
+.pic-orange{background:rgba(255,107,53,.12);color:#ff6b35}
+.pic-gray{background:var(--border);color:var(--text-2)}
+
+/* Filter row */
+.pend-filter-row{display:flex;gap:8px;margin:0 0 14px}
+.pend-filter-btn{flex:1;padding:9px 0;border-radius:10px;border:1.5px solid var(--border);background:transparent;color:var(--text-2);font-size:13px;font-weight:500;cursor:pointer;transition:all .2s}
+.pend-filter-btn.active{background:var(--gold,#f0b429);border-color:var(--gold,#f0b429);color:#1a1208;font-weight:700}
+
+/* Pendência card */
+.pend-card{background:var(--card);border-radius:14px;padding:14px 16px;margin-bottom:10px;border:1px solid var(--border);border-left:4px solid var(--border)}
+.pend-card.pend-vencida{border-left-color:#ff4d6a}
+.pend-card.pend-proxima{border-left-color:#ff6b35}
+.pend-card-top{display:flex;gap:10px;align-items:flex-start}
+.pend-card-info{flex:1;min-width:0}
+.pend-card-title{font-size:14px;font-weight:600;color:var(--text-1);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pend-card-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px}
+.pend-badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.pend-prio-alta{background:rgba(255,77,106,.12);color:#ff4d6a}
+.pend-prio-media{background:rgba(255,184,0,.12);color:#f0b429}
+.pend-prio-baixa{background:rgba(0,230,160,.12);color:#00b87a}
+.pend-cat{background:var(--border);color:var(--text-2)}
+.pend-card-sub{font-size:11px;color:var(--text-2);margin-bottom:3px}
+.pend-card-note{font-size:12px;color:var(--text-2);font-style:italic;white-space:pre-wrap;word-break:break-word;margin-top:4px}
+
+/* Card action buttons */
+.pend-card-actions{display:flex;flex-direction:column;gap:5px;flex-shrink:0}
+.pend-btn{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;color:var(--text-2);transition:background .15s}
+.pend-btn-done{border-color:rgba(0,230,160,.3);color:#00b87a}
+.pend-btn-done:active{background:rgba(0,230,160,.15)}
+.pend-btn-reopen{border-color:rgba(62,198,255,.3);color:#3ec6ff}
+.pend-btn-reopen:active{background:rgba(62,198,255,.1)}
+.pend-btn-edit:active{background:var(--border)}
+.pend-btn-del{color:rgba(255,77,106,.7)}
+.pend-btn-del:active{background:rgba(255,77,106,.1)}
+
+/* Add button */
+.pend-add-btn{margin-top:4px;margin-bottom:20px}
+
+/* Form */
+.form-group{margin-bottom:14px}
+.form-label{display:block;font-size:12px;font-weight:600;color:var(--text-2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.4px}
+.form-input,.form-select{width:100%;padding:11px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--input-bg,var(--surface-2,var(--card)));color:var(--text-1);font-size:14px;box-sizing:border-box}
+.form-input:focus,.form-select:focus{outline:none;border-color:var(--gold,#f0b429)}
+textarea.form-input{resize:none;font-family:inherit}
+
+/* Dark mode adaptations */
+:root[data-theme="dark"] .pend-card{background:var(--card);border-color:rgba(255,255,255,.07)}
+:root[data-theme="dark"] .pend-filter-btn{border-color:rgba(255,255,255,.08);color:var(--text-2)}
+:root[data-theme="dark"] .pend-inicio-card{border-color:rgba(255,255,255,.07)}
+:root[data-theme="dark"] .form-input,:root[data-theme="dark"] .form-select{background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.10)}
+
+/* Light mode */
+:root .pend-card{box-shadow:0 1px 4px rgba(0,0,0,.05),0 2px 8px rgba(0,0,0,.03)}

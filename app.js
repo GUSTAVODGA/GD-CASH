@@ -1589,7 +1589,7 @@ function swapCurrencies() {
 // ══════════════════════════════════════════
 // DEMO MODE
 // ══════════════════════════════════════════
-let DEMO_MODE = false;
+var DEMO_MODE = false;
 let _realD = null;
 
 function buildDemoData() {

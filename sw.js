@@ -1,10 +1,10 @@
-const CACHE = 'gdcash-v47';
+const CACHE = 'gdcash-v48';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './style.css?v=35',
-  './app.js?v=44',
+  './style.css?v=36',
+  './app.js?v=45',
 ];
 
 self.addEventListener('install', e => {

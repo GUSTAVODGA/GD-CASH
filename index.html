@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=35">
+<link rel="stylesheet" href="style.css?v=36">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -246,6 +246,9 @@
     </div>
   </div>
 
+  <!-- Pendências summary -->
+  <div id="pend-inicio-card" class="pend-inicio-card" style="display:none"></div>
+
   <!-- Recent transactions (kept for JS compat) -->
   <div class="sec-label">Movimentações recentes</div>
   <div class="card tx-list" id="inicio-tx-list">
@@ -432,6 +435,20 @@
   </div>
   <div id="lembretes-list"></div>
   <button class="btn btn-secondary" style="margin-bottom:10px" onclick="openLembreteModal()">+ Novo lembrete</button>
+</section>
+
+<!-- ════ PENDÊNCIAS ════ -->
+<section class="page" id="page-pendencias">
+  <div class="page-header-row">
+    <span class="page-header-title">Pendências</span>
+    <button class="tab-help-btn" onclick="showTabHelp('pendencias')">?</button>
+  </div>
+  <div class="pend-filter-row">
+    <button class="pend-filter-btn active" data-f="abertas" onclick="setPendFilter('abertas')">Em aberto</button>
+    <button class="pend-filter-btn" data-f="concluidas" onclick="setPendFilter('concluidas')">Concluídas</button>
+  </div>
+  <div id="pend-list"></div>
+  <button class="btn btn-primary pend-add-btn" onclick="openPendenciaModal()">+ Nova pendência</button>
 </section>
 
 <!-- ════ CONVERSOR ════ -->
@@ -661,7 +678,55 @@
       <button class="more-item" onclick="switchMore('lembretes')">
         <span class="more-icon">🔔</span><span>Lembretes</span>
       </button>
+      <button class="more-item" onclick="switchMore('pendencias')">
+        <span class="more-icon">📋</span><span>Pendências</span>
+      </button>
     </div>
+  </div>
+</div>
+
+<div class="overlay" id="modal-pendencia">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="pend-modal-title">Nova Pendência</div>
+    <input type="hidden" id="pend-id">
+    <div class="form-group">
+      <label class="form-label">Título *</label>
+      <input class="form-input" id="pend-title-input" type="text" placeholder="Ex: Trocar pneu, pagar IPVA…" maxlength="80">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Categoria</label>
+      <select class="form-select" id="pend-cat-sel">
+        <option value="carro">🚗 Carro</option>
+        <option value="casa">🏠 Casa</option>
+        <option value="documento">📄 Documento</option>
+        <option value="financeiro">💰 Financeiro</option>
+        <option value="pessoal" selected>👤 Pessoal</option>
+        <option value="outra">📌 Outra</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Prioridade</label>
+      <select class="form-select" id="pend-prio-sel">
+        <option value="alta">🔴 Alta</option>
+        <option value="media" selected>🟡 Média</option>
+        <option value="baixa">🟢 Baixa</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Prazo (opcional)</label>
+      <input class="form-input" id="pend-deadline" type="date">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Valor estimado (opcional)</label>
+      <input class="form-input" id="pend-value" type="number" min="0" step="0.01" placeholder="0,00">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observação</label>
+      <textarea class="form-input" id="pend-note" rows="2" placeholder="Detalhes…" maxlength="200"></textarea>
+    </div>
+    <button class="btn btn-primary" onclick="savePendencia()">Salvar</button>
+    <button class="btn btn-secondary" onclick="closeOverlay('modal-pendencia')">Cancelar</button>
   </div>
 </div>
 
@@ -907,7 +972,7 @@
   </div>
 </div>
 
-<script src="app.js?v=44"></script>
+<script src="app.js?v=45"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
