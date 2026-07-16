@@ -536,7 +536,7 @@ function exportData() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `gdcash-backup-${todayStr()}.json`;
+  a.download = `avenco-backup-${todayStr()}.json`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   localStorage.setItem('gdcash_last_backup', todayStr());
@@ -551,7 +551,7 @@ function importData(event) {
       const required = ['platforms','expenses','dailyIncome'];
       const missing = required.filter(k => !parsed[k] || typeof parsed[k] !== 'object');
       if (missing.length) {
-        alert('Arquivo inválido: campos obrigatórios ausentes (' + missing.join(', ') + '). Selecione um backup exportado pelo GD Cash.');
+        alert('Arquivo inválido: campos obrigatórios ausentes (' + missing.join(', ') + '). Selecione um backup exportado pelo Avenco.');
         return;
       }
       const def = defaultData();
@@ -1153,9 +1153,9 @@ function renderWeekGoal() {
 
 function shareApp() {
   const url = 'https://gustavodga.github.io/GD-CASH/';
-  const text = 'Controle suas finanças de forma simples e inteligente. Experimenta o GD Cash, é gratuito!';
+  const text = 'Controle suas finanças com clareza e inteligência. Experimenta o Avenco, é gratuito!';
   if (navigator.share) {
-    navigator.share({ title: 'GD Cash', text, url }).catch(() => {});
+    navigator.share({ title: 'Avenco', text, url }).catch(() => {});
   } else {
     navigator.clipboard?.writeText(url).then(() => alert('Link copiado! Cole e envie para quem quiser.'));
   }
@@ -1740,7 +1740,7 @@ function exitDemo() {
 
 // ── Tour ──
 const TOUR_STEPS = [
-  { tab:'inicio',  anchor:'car-inner',       title:'Tela Início',            text:'Resumo da semana, reserva e movimentações recentes. É aqui que você começa o dia no GD CASH.' },
+  { tab:'inicio',  anchor:'car-inner',       title:'Tela Início',            text:'Resumo da semana, reserva e movimentações recentes. É aqui que você começa o dia no Avenco.' },
   { tab:'semana',  anchor:'days-accordion',  title:'Dias da semana',          text:'Veja e edite os lançamentos de cada dia. Toque em um dia para expandir. Use o + para adicionar receita ou gasto.' },
   { tab:'mes',     anchor:'big-donut-card', title:'Gastos por categoria',    text:'No mês você vê exatamente onde o dinheiro foi — o gráfico de rosca mostra cada categoria.' },
   { tab:'mes',     anchor:'trends-chart',   title:'Histórico 6 meses',       text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês.' },
@@ -1805,7 +1805,7 @@ function closeTour() {
 // ONBOARDING
 // ══════════════════════════════════════════
 const OB_STEPS = [
-  { icon:'💰', title:'Bem-vindo ao GD CASH', text:'Seu controle financeiro pessoal. Simples, bonito e gratuito para sempre.', cta:'Próximo' },
+  { icon:'💰', title:'Bem-vindo ao Avenco', text:'Seu controle financeiro pessoal. Clareza para decidir, controle para avançar.', cta:'Próximo' },
   { icon:'📥', title:'Lance seus ganhos', text:'Na aba Semana, registre o quanto ganhou em cada fonte — delivery, freela, cliente, o que for.', cta:'Próximo' },
   { icon:'🎯', title:'Acompanhe e cresça', text:'Veja gastos por categoria, monte sua reserva de emergência e defina metas. Tudo em um lugar.', cta:'Começar agora' },
 ];
@@ -1965,15 +1965,15 @@ function shareMonthReport() {
 
   // Footer
   ctx.fillStyle='rgba(245,246,248,0.18)'; ctx.font='500 24px system-ui,sans-serif';
-  ctx.fillText('GD CASH · gustavodga.github.io/GD-CASH/',80,1042);
+  ctx.fillText('Avenco · gustavodga.github.io/GD-CASH/',80,1042);
 
   canvas.toBlob(blob => {
     const file = new File([blob],'gdcash-resumo.png',{type:'image/png'});
     if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
-      navigator.share({files:[file], title:`GD CASH — ${mLabel}`}).catch(()=>{});
+      navigator.share({files:[file], title:`Avenco — ${mLabel}`}).catch(()=>{});
     } else {
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download=`gdcash-${mLabel}.png`;
+      const a = document.createElement('a'); a.href=url; a.download=`avenco-${mLabel}.png`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
@@ -2188,7 +2188,7 @@ function exportCSV() {
   const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
   const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download=`gdcash-${todayStr()}.csv`;
+  const a = document.createElement('a'); a.href=url; a.download=`avenco-${todayStr()}.csv`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -2208,7 +2208,7 @@ function exportCalendar() {
       events += `BEGIN:VEVENT\r\nDTSTART;VALUE=DATE:${ds}\r\nDTEND;VALUE=DATE:${ns}\r\nSUMMARY:🔁 ${f.name} — vencimento\r\nDESCRIPTION:${f.category} · ${R(f.amount)}\r\nUID:gdcash-${f.id}-${ds}@gdcash\r\nBEGIN:VALARM\r\nTRIGGER:-P2D\r\nACTION:DISPLAY\r\nDESCRIPTION:Vence em 2 dias: ${f.name}\r\nEND:VALARM\r\nEND:VEVENT\r\n`;
     }
   });
-  const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//GD CASH//PT\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events}END:VCALENDAR`;
+  const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Avenco//PT\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events}END:VCALENDAR`;
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   if (isIOS) {
@@ -2223,7 +2223,7 @@ function exportCalendar() {
   } else {
     const blob = new Blob([ics], {type:'text/calendar'});
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href=url; a.download='gdcash-vencimentos.ics';
+    const a = document.createElement('a'); a.href=url; a.download='avenco-vencimentos.ics';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 3000);
   }
@@ -2232,8 +2232,8 @@ function exportCalendar() {
 function emailMonthReport() {
   const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp;
   const mLabel=fmtMonthYear(monthOffset);
-  const subject = `GD CASH — Resumo ${mLabel}`;
-  const body = `Resumo financeiro: ${mLabel}\n\nReceita:  ${R(inc)}\nGastos:   ${R(exp)}\nLíquido:  ${R(liq)}\n\nReserva de emergência: ${R(D.emergency.current)}\n\n---\nGerado pelo GD CASH`;
+  const subject = `Avenco — Resumo ${mLabel}`;
+  const body = `Resumo financeiro: ${mLabel}\n\nReceita:  ${R(inc)}\nGastos:   ${R(exp)}\nLíquido:  ${R(liq)}\n\nReserva de emergência: ${R(D.emergency.current)}\n\n---\nGerado pelo Avenco`;
   window.open(`mailto:${currentUser?.email||''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
 }
 
@@ -2682,7 +2682,7 @@ function checkBudgetAlerts(cat) {
     .reduce((s, e) => s + e.amount, 0);
   const pct = Math.round(catSpent / budget * 100);
   if (pct >= 80 && pct < 100 && Notification.permission === 'granted') {
-    new Notification('GD CASH — Alerta de orçamento', {
+    new Notification('Avenco — Alerta de orçamento', {
       body: `Você já usou ${pct}% do limite de "${cat}" este mês.`,
       icon: '/icon-192.png',
     });
@@ -2951,7 +2951,7 @@ function checkPendenciasDeadlines() {
     const isAmanha = p.deadline === amanha;
     if (isVencida || isHoje || isAmanha) {
       const msg = isVencida ? `Pendência vencida: ${p.title}` : isHoje ? `Pendência vence hoje: ${p.title}` : `Pendência vence amanhã: ${p.title}`;
-      try { new Notification('GD Cash — Pendência', { body: msg, icon: '/GD-CASH/icon-192.png', tag: 'pend-' + p.id }); } catch(e) {}
+      try { new Notification('Avenco — Pendência', { body: msg, icon: '/GD-CASH/icon-192.png', tag: 'pend-' + p.id }); } catch(e) {}
       p.lastDeadlineNotif = hoje;
     }
   });

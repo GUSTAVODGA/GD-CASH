@@ -1,10 +1,10 @@
-const CACHE = 'gdcash-v49';
+const CACHE = 'avenco-v1';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './style.css?v=37',
-  './app.js?v=45',
+  './style.css?v=38',
+  './app.js?v=46',
 ];
 
 self.addEventListener('install', e => {

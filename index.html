@@ -5,16 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="GD CASH">
-<meta name="theme-color" content="#ffb800">
+<meta name="apple-mobile-web-app-title" content="Avenco">
+<meta name="theme-color" content="#2563EB">
 <meta name="mobile-web-app-capable" content="yes">
-<title>GD CASH</title>
+<title>Avenco</title>
 
 <!-- Open Graph (preview ao compartilhar) -->
 <meta property="og:type"        content="website">
 <meta property="og:url"         content="https://gustavodga.github.io/GD-CASH/">
-<meta property="og:title"       content="GD CASH — Ganhou. Anotou. Sobrou.">
-<meta property="og:description" content="Receitas, despesas, metas e reserva de emergência. Gratuito. Sempre.">
+<meta property="og:title"       content="Avenco — Clareza para decidir. Controle para avançar.">
+<meta property="og:description" content="Controle financeiro pessoal. Receitas, despesas, metas e reserva de emergência.">
 <meta property="og:image"       content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height"content="630">
@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=37">
+<link rel="stylesheet" href="style.css?v=38">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -46,12 +46,17 @@
 <div id="login-screen" class="login-screen" style="display:none">
   <div class="login-card">
     <div class="login-brand">
-      <div class="login-badge">GD</div>
-      <div class="login-wordmark">CASH</div>
+      <div class="login-badge">
+        <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 8L31 28H9L20 8Z" stroke="white" stroke-width="2.2" stroke-linejoin="round"/>
+          <line x1="13.5" y1="23" x2="26.5" y2="23" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="login-wordmark">Avenco</div>
     </div>
-    <p class="login-sub">Controle financeiro no seu bolso</p>
+    <p class="login-sub">Clareza para decidir.<br>Controle para avançar.</p>
     <button class="btn-demo-login" onclick="startDemo()">
-      ▶ Ver demo do app
+      ▶ Experimentar o Avenco
     </button>
     <div class="login-divider"><span>ou</span></div>
     <button class="btn-google-login" onclick="signInWithGoogle()">
@@ -77,10 +82,15 @@
 <div id="install-banner" class="install-banner" style="display:none">
   <button class="install-close" onclick="dismissInstallBanner()">✕</button>
   <div class="install-banner-top">
-    <div class="install-banner-badge">GD</div>
+    <div class="install-banner-badge">
+        <svg viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M10 3L16 14H4L10 3Z" stroke="white" stroke-width="1.9" stroke-linejoin="round"/>
+          <line x1="7" y1="11.5" x2="13" y2="11.5" stroke="white" stroke-width="1.9" stroke-linecap="round"/>
+        </svg>
+      </div>
     <div>
       <div class="install-banner-title">Adicione à tela de início</div>
-      <div class="install-banner-sub">Use o GD CASH como app nativo!</div>
+      <div class="install-banner-sub">Use o Avenco como app nativo!</div>
     </div>
   </div>
   <div class="install-steps">
@@ -119,7 +129,12 @@
 
 <header class="topbar">
   <div class="logo-group">
-    <div class="logo-badge">GD</div>
+    <div class="av-mark">
+      <svg viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M11 4L18 16H4L11 4Z" stroke="white" stroke-width="2" stroke-linejoin="round"/>
+        <line x1="7.5" y1="13" x2="14.5" y2="13" stroke="white" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+    </div>
     <div class="logo-greeting" id="logo-greeting">Olá, <b>Gustavo</b></div>
   </div>
   <div class="topbar-right">
@@ -184,7 +199,7 @@
         <div class="cc-body">
           <div class="cc-lbl">Indique para alguém</div>
           <div class="cc-title">Convide um amigo</div>
-          <div class="cc-sub">Compartilhe o GD Cash →</div>
+          <div class="cc-sub">Compartilhe o Avenco →</div>
         </div>
         <div class="cc-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
       </div>
@@ -303,8 +318,8 @@
       <svg viewBox="0 0 160 160">
         <defs>
           <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#ffb800"/>
-            <stop offset="100%" stop-color="#ff6b35"/>
+            <stop offset="0%" stop-color="#2563EB"/>
+            <stop offset="100%" stop-color="#5B8AF5"/>
           </linearGradient>
         </defs>
         <circle class="ring-bg" cx="80" cy="80" r="68"/>
@@ -533,7 +548,7 @@
       <span class="ig-header-icon">📲</span>
       <div>
         <div class="ig-title">Adicionar à tela de início</div>
-        <div class="ig-sub">Acesse o GD CASH direto do iPhone, sem abrir o Safari</div>
+        <div class="ig-sub">Acesse o Avenco direto do iPhone, sem abrir o Safari</div>
       </div>
     </div>
     <div class="ig-steps">
@@ -562,7 +577,7 @@
         <div class="ig-step-num">4</div>
         <div class="ig-step-body">
           <div class="ig-step-title">Toque em "Adicionar" no canto superior</div>
-          <div class="ig-step-text">Pronto! O ícone do GD CASH aparece na sua tela inicial</div>
+          <div class="ig-step-text">Pronto! O ícone do Avenco aparece na sua tela inicial</div>
         </div>
       </div>
     </div>
@@ -978,7 +993,7 @@
   </div>
 </div>
 
-<script src="app.js?v=45"></script>
+<script src="app.js?v=46"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
