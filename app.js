@@ -323,6 +323,7 @@ function renderInicio() {
 
   renderRecentTx();
   renderInicioCards();
+  renderHomeNew();
 }
 
 function renderRecentTx() {
@@ -2415,6 +2416,236 @@ function renderInicioCards() {
   if (greet) { greet.textContent = 'Olá, '; const b = document.createElement('b'); b.textContent = nome; greet.appendChild(b); }
 
   renderPendInicio();
+}
+
+// ══════════════════════════════════════════
+// HOME SCREEN — redesign
+// ══════════════════════════════════════════
+function renderHomeNew() {
+  // 1. Hero
+  const hour = new Date().getHours();
+  const saudacao = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const nome = currentUser?.displayName?.split(' ')[0] || '';
+  const greetEl = document.getElementById('home-greeting');
+  if (greetEl) greetEl.textContent = saudacao + (nome ? ', ' + nome : '');
+
+  const monthEl = document.getElementById('home-month');
+  if (monthEl) {
+    const now = new Date();
+    monthEl.textContent = now.toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
+  }
+
+  const inc = sumMonthIncome(0), exp = sumMonthExpenses(0), liq = inc - exp;
+
+  const balEl = document.getElementById('home-balance');
+  if (balEl) {
+    balEl.className = 'home-balance ' + (liq >= 0 ? 'pos' : 'neg');
+    animCount(balEl, liq, 700);
+  }
+  const incEl = document.getElementById('home-inc');
+  const expEl = document.getElementById('home-exp');
+  if (incEl) incEl.textContent = R(inc);
+  if (expEl) expEl.textContent = R(exp);
+
+  // 2. Chart
+  setTimeout(drawHomeChart, 40);
+
+  // 3. Insight
+  const insightEl = document.getElementById('home-insight');
+  if (insightEl) insightEl.innerHTML = `<p class="home-insight-text">${buildMonthInsight(inc, exp)}</p>`;
+
+  // 4. Timeline — pendencias with deadlines
+  const hoje = todayStr();
+  const upcoming = (D.pendencias || [])
+    .filter(p => p.status === 'aberta' && p.deadline)
+    .sort((a, b) => a.deadline.localeCompare(b.deadline))
+    .slice(0, 4);
+
+  const tlWrap = document.getElementById('home-timeline-wrap');
+  const tlEl   = document.getElementById('home-timeline');
+  if (tlWrap && tlEl) {
+    if (upcoming.length > 0) {
+      tlWrap.style.display = '';
+      tlEl.innerHTML = upcoming.map(p => {
+        const isOv  = p.deadline < hoje;
+        const isTod = p.deadline === hoje;
+        const dt = parseDate(p.deadline).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'});
+        const label = isOv ? 'Vencida' : isTod ? 'Hoje' : dt;
+        const prioClass = p.priority === 'alta' ? 'tl-prio-alta' : p.priority === 'media' ? 'tl-prio-media' : '';
+        return `<div class="home-tl-item${isOv ? ' tl-overdue' : isTod ? ' tl-today' : ''}">
+          <div class="home-tl-date">${label}</div>
+          <div class="home-tl-info">
+            <div class="home-tl-name">${p.title}</div>
+            ${p.estimatedValue ? `<div class="home-tl-amount">${R(p.estimatedValue)}</div>` : ''}
+          </div>
+          <div class="home-tl-dot ${prioClass}"></div>
+        </div>`;
+      }).join('');
+    } else {
+      tlWrap.style.display = 'none';
+    }
+  }
+
+  // 5. Meta atual
+  const activeGoals = (D.goals || []).filter(g => !g.completed);
+  const goalSection = document.getElementById('home-goal-section');
+  const goalEl      = document.getElementById('home-goal');
+  if (goalSection && goalEl) {
+    if (activeGoals.length > 0) {
+      const g = activeGoals[0];
+      const saved   = g.saved   || 0;
+      const target  = g.target  || 0;
+      const pct     = target > 0 ? Math.min(100, Math.round(saved / target * 100)) : 0;
+      const remains = Math.max(0, target - saved);
+      goalSection.style.display = '';
+      goalEl.innerHTML = `
+        <div class="home-goal-name">${g.name || 'Meta'}</div>
+        <div class="home-goal-stats">
+          <div class="home-goal-stat">
+            <div class="home-goal-val">${R(saved)}</div>
+            <div class="home-goal-sub">acumulado</div>
+          </div>
+          <div class="home-goal-sep"></div>
+          <div class="home-goal-stat">
+            <div class="home-goal-val">${R(remains)}</div>
+            <div class="home-goal-sub">restam</div>
+          </div>
+          <div class="home-goal-sep"></div>
+          <div class="home-goal-stat">
+            <div class="home-goal-val">${pct}%</div>
+            <div class="home-goal-sub">concluído</div>
+          </div>
+        </div>
+        <div class="home-goal-bar-track">
+          <div class="home-goal-bar-fill" style="width:${pct}%"></div>
+        </div>`;
+    } else {
+      goalSection.style.display = 'none';
+    }
+  }
+
+  // 6. Pendências relevantes (vencidas ou alta prioridade)
+  const relevantPend = (D.pendencias || [])
+    .filter(p => p.status === 'aberta' && ((p.deadline && p.deadline <= hoje) || p.priority === 'alta'))
+    .sort((a, b) => {
+      const aS = (a.deadline && a.deadline < hoje) ? 0 : a.priority === 'alta' ? 1 : 2;
+      const bS = (b.deadline && b.deadline < hoje) ? 0 : b.priority === 'alta' ? 1 : 2;
+      return aS - bS || (a.deadline || '9999').localeCompare(b.deadline || '9999');
+    })
+    .slice(0, 5);
+
+  const pendSection = document.getElementById('home-pend-section');
+  const pendListEl  = document.getElementById('home-pend-list');
+  if (pendSection && pendListEl) {
+    if (relevantPend.length > 0) {
+      pendSection.style.display = '';
+      pendListEl.innerHTML = relevantPend.map(p => {
+        const isOv  = p.deadline && p.deadline < hoje;
+        const isTod = p.deadline === hoje;
+        const dt    = p.deadline ? parseDate(p.deadline).toLocaleDateString('pt-BR', {day:'2-digit',month:'short'}) : '';
+        const emoji = (PEND_CAT_LABELS[p.category] || '📌 Outra').split(' ')[0];
+        return `<div class="home-pend-item" onclick="switchTab('pendencias')">
+          <span class="home-pend-emoji">${emoji}</span>
+          <div class="home-pend-info">
+            <div class="home-pend-name">${p.title}</div>
+            ${dt ? `<div class="home-pend-date${isOv?' pend-overdue':isTod?' pend-today':''}">${isOv?'Venceu ':''}${dt}</div>` : ''}
+          </div>
+          ${p.estimatedValue ? `<div class="home-pend-amount">${R(p.estimatedValue)}</div>` : ''}
+        </div>`;
+      }).join('');
+    } else {
+      pendSection.style.display = 'none';
+    }
+  }
+}
+
+function buildMonthInsight(inc, exp) {
+  const liq = inc - exp;
+  if (inc === 0 && exp === 0) return 'Nenhuma movimentação registrada este mês. Comece lançando sua primeira receita ou gasto.';
+  if (exp === 0)  return `Receita de ${R(inc)} registrada — nenhum gasto lançado até agora.`;
+  if (inc === 0)  return `${R(exp)} em gastos lançados. Nenhuma receita registrada ainda.`;
+  const ratio = exp / inc;
+  if (liq >= 0) {
+    if (ratio < 0.5) return `Mês excelente: só ${Math.round(ratio*100)}% da receita foi gasta. Você ficou com ${R(liq)} líquido.`;
+    if (ratio < 0.8) return `Mês equilibrado: ${Math.round(ratio*100)}% da receita foi para gastos. Saldo de ${R(liq)}.`;
+    return `Mês apertado: ${Math.round(ratio*100)}% da receita foi consumida. Sobraram ${R(liq)}.`;
+  }
+  return `Atenção: os gastos superaram a receita em ${R(Math.abs(liq))} este mês.`;
+}
+
+function drawHomeChart() {
+  const canvas = document.getElementById('home-chart');
+  if (!canvas || !canvas.offsetWidth) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
+  canvas.width = cw * dpr; canvas.height = ch * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const months = [];
+  for (let i = -5; i <= 0; i++) {
+    const d = new Date(); d.setMonth(d.getMonth() + i, 1);
+    const lbl = d.toLocaleDateString('pt-BR', {month: 'short'}).replace('.', '');
+    months.push({ lbl, inc: sumMonthIncome(i), exp: sumMonthExpenses(i) });
+  }
+
+  const maxVal = Math.max(...months.flatMap(m => [m.inc, m.exp]), 1);
+  const padT = 8, padB = 22, padL = 0, padR = 0;
+  const chartW = cw - padL - padR, chartH = ch - padT - padB;
+  const groupW = chartW / months.length;
+  const barW   = Math.min(groupW * 0.26, 14);
+  const barGap = groupW * 0.06;
+
+  const isDark    = document.documentElement.dataset.theme === 'dark';
+  const incColor  = isDark ? '#4ADE80' : '#16A34A';
+  const expColor  = isDark ? '#F87171' : '#DC2626';
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(13,20,64,.055)';
+  const lblColor  = isDark ? 'rgba(232,237,255,.38)' : 'rgba(13,20,64,.36)';
+
+  ctx.clearRect(0, 0, cw, ch);
+
+  // 3 horizontal grid lines
+  for (let i = 1; i <= 3; i++) {
+    const y = padT + (chartH / 4) * i;
+    ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
+  }
+
+  months.forEach((m, i) => {
+    const cx   = padL + (i + 0.5) * groupW;
+    const incH = Math.max((m.inc / maxVal) * chartH, 2);
+    const expH = Math.max((m.exp / maxVal) * chartH, 2);
+
+    ctx.fillStyle = incColor; ctx.globalAlpha = 0.8;
+    homeRoundRect(ctx, cx - barW - barGap / 2, padT + chartH - incH, barW, incH, 3);
+    ctx.fill();
+
+    ctx.fillStyle = expColor; ctx.globalAlpha = 0.65;
+    homeRoundRect(ctx, cx + barGap / 2, padT + chartH - expH, barW, expH, 3);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = lblColor;
+    ctx.font = `500 10px Inter, -apple-system, sans-serif`;
+    ctx.textAlign = 'center';
+    const lbl = m.lbl.charAt(0).toUpperCase() + m.lbl.slice(1, 3);
+    ctx.fillText(lbl, cx, padT + chartH + 16);
+  });
+}
+
+function homeRoundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, h / 2, w / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 // ══════════════════════════════════════════

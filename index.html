@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -152,8 +152,9 @@
 
 <!-- ════ INÍCIO ════ -->
 <section class="page active" id="page-inicio">
-  <!-- Hidden elements kept for JS compatibility -->
-  <div style="display:none">
+
+  <!-- JS compat: hidden elements used by existing render functions -->
+  <div style="display:none" aria-hidden="true">
     <div id="inicio-greeting"></div>
     <div id="inicio-liq"></div>
     <div id="inicio-inc"></div>
@@ -165,116 +166,120 @@
     <div id="inicio-reserve-pct-txt"></div>
     <div id="hero-inicio" class="hero-card pos"></div>
     <div id="inicio-goal-wrap"></div>
+    <div id="bc-week-liq"></div><div id="bc-week-inc"></div><div id="bc-week-exp"></div>
+    <div id="bc-month-liq"></div><div id="bc-month-inc"></div><div id="bc-month-exp"></div>
+    <div id="bc-month-lbl"></div>
+    <div id="car-reserve-sub"></div><div id="car-goals-sub"></div>
+    <div id="car-inner"></div><div id="car-dots"></div>
+    <div id="pend-inicio-card"></div>
   </div>
 
-  <!-- 1. Compact carousel -->
-  <div class="car-wrap">
-    <div class="car-inner" id="car-inner" onscroll="updCarDots()">
-      <div class="cc cc-gold" onclick="switchTab('reserva')">
-        <div class="cc-ico">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+  <!-- ── 1. HERO ─────────────────────────── -->
+  <div class="home-hero">
+    <div class="home-hero-top">
+      <span class="home-greeting" id="home-greeting">Bom dia</span>
+      <span class="home-period" id="home-month">Julho 2025</span>
+    </div>
+    <div class="home-balance-label">Saldo do mês</div>
+    <div class="home-balance pos" id="home-balance">R$ 0,00</div>
+    <div class="home-stats-row">
+      <div class="home-stat">
+        <div class="home-stat-icon home-stat-icon--inc">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </div>
-        <div class="cc-body">
-          <div class="cc-lbl">Proteção financeira</div>
-          <div class="cc-title">Reserva de Emergência</div>
-          <div class="cc-sub" id="car-reserve-sub">Acompanhe seu progresso →</div>
+        <div>
+          <div class="home-stat-label">Receitas</div>
+          <div class="home-stat-val" id="home-inc">R$ 0,00</div>
         </div>
-        <div class="cc-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
       </div>
-      <div class="cc cc-green" onclick="switchTab('metas')">
-        <div class="cc-ico">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <div class="home-stat-divider"></div>
+      <div class="home-stat">
+        <div class="home-stat-icon home-stat-icon--exp">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
         </div>
-        <div class="cc-body">
-          <div class="cc-lbl">Suas conquistas</div>
-          <div class="cc-title">Planeje. Realize.</div>
-          <div class="cc-sub" id="car-goals-sub">Metas ativas →</div>
+        <div>
+          <div class="home-stat-label">Gastos</div>
+          <div class="home-stat-val" id="home-exp">R$ 0,00</div>
         </div>
-        <div class="cc-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
-      </div>
-      <div class="cc cc-violet" onclick="shareApp()">
-        <div class="cc-ico">
-          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-        </div>
-        <div class="cc-body">
-          <div class="cc-lbl">Indique para alguém</div>
-          <div class="cc-title">Convide um amigo</div>
-          <div class="cc-sub">Compartilhe o Avenco →</div>
-        </div>
-        <div class="cc-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
-      </div>
-    </div>
-    <div class="cdots" id="car-dots">
-      <div class="cdot on"></div>
-      <div class="cdot"></div>
-      <div class="cdot"></div>
-    </div>
-  </div>
-
-  <!-- 2. Quadradinhos -->
-  <div class="sec-label">Acesso rápido</div>
-  <div class="quad-grid">
-    <div class="qi" onclick="switchTab('conversor')">
-      <div class="qi-ico qi-gold">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      </div>
-      <div class="qi-lbl">Conversor</div>
-    </div>
-    <div class="qi" onclick="switchTab('lembretes')">
-      <div class="qi-ico qi-blue">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      </div>
-      <div class="qi-lbl">Lembretes</div>
-    </div>
-    <div class="qi" onclick="switchTab('fixos')">
-      <div class="qi-ico qi-red">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-      </div>
-      <div class="qi-lbl">Fixos</div>
-    </div>
-    <div class="qi" onclick="switchTab('pendencias')">
-      <div class="qi-ico qi-green">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-      </div>
-      <div class="qi-lbl">Pendências</div>
-    </div>
-  </div>
-
-  <!-- 3. Big nav cards -->
-  <div class="sec-label">Navegar</div>
-  <div class="bigcards">
-    <div class="bigcard" onclick="switchTab('semana')">
-      <div class="bigcard-top">
-        <div class="bigcard-lbl">Esta Semana</div>
-        <div class="bigcard-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
-      </div>
-      <div class="bigcard-val" id="bc-week-liq">R$ 0,00</div>
-      <div class="bigcard-chips">
-        <div class="bigcard-chip"><div class="bchd bchd-gn"></div>Receita <b id="bc-week-inc">R$ 0,00</b></div>
-        <div class="bigcard-chip"><div class="bchd bchd-rd"></div>Gastos <b id="bc-week-exp">R$ 0,00</b></div>
-      </div>
-    </div>
-    <div class="bigcard" onclick="switchTab('mes')">
-      <div class="bigcard-top">
-        <div class="bigcard-lbl" id="bc-month-lbl">Este Mês</div>
-        <div class="bigcard-arr"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg></div>
-      </div>
-      <div class="bigcard-val" id="bc-month-liq">R$ 0,00</div>
-      <div class="bigcard-chips">
-        <div class="bigcard-chip"><div class="bchd bchd-gn"></div>Receita <b id="bc-month-inc">R$ 0,00</b></div>
-        <div class="bigcard-chip"><div class="bchd bchd-rd"></div>Gastos <b id="bc-month-exp">R$ 0,00</b></div>
       </div>
     </div>
   </div>
 
-  <!-- Pendências summary -->
-  <div id="pend-inicio-card" class="pend-inicio-card" style="display:none"></div>
-
-  <!-- Recent transactions (kept for JS compat) -->
-  <div class="sec-label">Movimentações recentes</div>
-  <div class="card tx-list" id="inicio-tx-list">
-    <div class="empty-state">Sem movimentações ainda</div>
+  <!-- ── 2. EVOLUÇÃO ──────────────────────── -->
+  <div class="home-section">
+    <div class="home-sec-hd">
+      <span class="home-sec-title">Evolução</span>
+      <button class="home-sec-link" onclick="switchTab('mes')">Ver mês →</button>
+    </div>
+    <div class="home-chart-card">
+      <canvas id="home-chart" class="home-chart"></canvas>
+      <div class="home-chart-legend">
+        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--inc"></span>Receitas</span>
+        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--exp"></span>Gastos</span>
+      </div>
+    </div>
   </div>
+
+  <!-- ── 3. LEITURA DO MÊS ────────────────── -->
+  <div class="home-insight" id="home-insight">
+    <p class="home-insight-text">Carregando análise do mês…</p>
+  </div>
+
+  <!-- ── 4. PRÓXIMOS COMPROMISSOS ──────────── -->
+  <div class="home-section" id="home-timeline-wrap" style="display:none">
+    <div class="home-sec-hd">
+      <span class="home-sec-title">Próximos compromissos</span>
+      <button class="home-sec-link" onclick="switchTab('pendencias')">Ver todos →</button>
+    </div>
+    <div id="home-timeline" class="home-timeline"></div>
+  </div>
+
+  <!-- ── 5. META ATUAL ─────────────────────── -->
+  <div class="home-section" id="home-goal-section" style="display:none">
+    <div class="home-sec-hd">
+      <span class="home-sec-title">Meta atual</span>
+      <button class="home-sec-link" onclick="switchTab('metas')">Ver metas →</button>
+    </div>
+    <div id="home-goal" class="home-goal-card"></div>
+  </div>
+
+  <!-- ── 6. PENDÊNCIAS RELEVANTES ──────────── -->
+  <div class="home-section" id="home-pend-section" style="display:none">
+    <div class="home-sec-hd">
+      <span class="home-sec-title">Pendências</span>
+      <button class="home-sec-link" onclick="switchTab('pendencias')">Ver todas →</button>
+    </div>
+    <div id="home-pend-list" class="home-pend-list"></div>
+  </div>
+
+  <!-- ── 7. MOVIMENTAÇÕES RECENTES ─────────── -->
+  <div class="home-section">
+    <div class="home-sec-hd">
+      <span class="home-sec-title">Recentes</span>
+      <button class="home-sec-link" onclick="switchTab('semana')">Ver semana →</button>
+    </div>
+    <div class="card tx-list" id="inicio-tx-list">
+      <div class="empty-state">Sem movimentações ainda</div>
+    </div>
+  </div>
+
+  <!-- ── 8. AÇÕES ──────────────────────────── -->
+  <div class="home-actions">
+    <button class="home-action-primary" onclick="switchTab('semana')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Registrar lançamento
+    </button>
+    <div class="home-action-pills">
+      <button class="home-pill" onclick="switchTab('conversor')">Conversor</button>
+      <button class="home-pill" onclick="switchTab('lembretes')">Lembretes</button>
+      <button class="home-pill" onclick="switchTab('fixos')">Fixos</button>
+      <button class="home-pill" onclick="switchTab('pendencias')">Pendências</button>
+      <button class="home-pill" onclick="switchTab('reserva')">Reserva</button>
+      <button class="home-pill" onclick="switchTab('metas')">Metas</button>
+    </div>
+  </div>
+  <div style="height:32px"></div>
+
 </section>
 
 <!-- ════ SEMANA ════ -->
@@ -993,7 +998,7 @@
   </div>
 </div>
 
-<script src="app.js?v=46"></script>
+<script src="app.js?v=47"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
