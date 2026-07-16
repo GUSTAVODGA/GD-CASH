@@ -23,7 +23,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=39">
+<link rel="stylesheet" href="style.css?v=40">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -176,57 +176,61 @@
 
   <!-- ── 1. HERO ─────────────────────────── -->
   <div class="home-hero">
-    <div class="home-hero-top">
-      <span class="home-greeting" id="home-greeting">Bom dia</span>
-      <span class="home-period" id="home-month">Julho 2025</span>
+    <div class="home-eyebrow">
+      <span id="home-greeting">Boa tarde</span>
+      <span class="home-eyebrow-sep">·</span>
+      <span id="home-month" class="home-eyebrow-period">Julho 2026</span>
     </div>
-    <div class="home-balance-label">Saldo do mês</div>
-    <div class="home-balance pos" id="home-balance">R$ 0,00</div>
+    <div class="home-balance-block">
+      <div class="home-balance-label">Saldo do mês</div>
+      <div class="home-balance pos" id="home-balance">—</div>
+    </div>
     <div class="home-stats-row">
       <div class="home-stat">
-        <div class="home-stat-icon home-stat-icon--inc">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-        </div>
+        <div class="home-stat-pip home-pip-inc"></div>
         <div>
           <div class="home-stat-label">Receitas</div>
-          <div class="home-stat-val" id="home-inc">R$ 0,00</div>
+          <div class="home-stat-val pos" id="home-inc">—</div>
         </div>
       </div>
       <div class="home-stat-divider"></div>
       <div class="home-stat">
-        <div class="home-stat-icon home-stat-icon--exp">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
-        </div>
+        <div class="home-stat-pip home-pip-exp"></div>
         <div>
           <div class="home-stat-label">Gastos</div>
-          <div class="home-stat-val" id="home-exp">R$ 0,00</div>
+          <div class="home-stat-val" id="home-exp">—</div>
         </div>
       </div>
     </div>
   </div>
 
   <!-- ── 2. EVOLUÇÃO ──────────────────────── -->
-  <div class="home-section">
+  <div class="home-section home-section--ruled">
     <div class="home-sec-hd">
-      <span class="home-sec-title">Evolução</span>
+      <span class="home-sec-title">Evolução — 6 meses</span>
       <button class="home-sec-link" onclick="switchTab('mes')">Ver mês →</button>
     </div>
-    <div class="home-chart-card">
-      <canvas id="home-chart" class="home-chart"></canvas>
-      <div class="home-chart-legend">
-        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--inc"></span>Receitas</span>
-        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--exp"></span>Gastos</span>
-      </div>
+    <canvas id="home-chart" class="home-chart"></canvas>
+    <div class="home-chart-empty" id="home-chart-empty" style="display:none">
+      <svg viewBox="0 0 56 36" fill="none" width="56" height="36">
+        <polyline points="2,32 14,22 22,26 36,12 54,18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <span>Sem histórico ainda</span>
+      <span class="home-chart-empty-sub">Dados aparecerão após suas primeiras movimentações</span>
+    </div>
+    <div class="home-chart-legend" id="home-chart-legend">
+      <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--inc"></span>Receitas</span>
+      <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--exp"></span>Gastos</span>
     </div>
   </div>
 
   <!-- ── 3. LEITURA DO MÊS ────────────────── -->
-  <div class="home-insight" id="home-insight">
-    <p class="home-insight-text">Carregando análise do mês…</p>
+  <div class="home-insight" id="home-insight" style="display:none">
+    <p class="home-insight-text" id="home-insight-text"></p>
   </div>
 
   <!-- ── 4. PRÓXIMOS COMPROMISSOS ──────────── -->
-  <div class="home-section" id="home-timeline-wrap" style="display:none">
+  <div class="home-section home-section--ruled" id="home-timeline-wrap" style="display:none">
     <div class="home-sec-hd">
       <span class="home-sec-title">Próximos compromissos</span>
       <button class="home-sec-link" onclick="switchTab('pendencias')">Ver todos →</button>
@@ -235,16 +239,16 @@
   </div>
 
   <!-- ── 5. META ATUAL ─────────────────────── -->
-  <div class="home-section" id="home-goal-section" style="display:none">
+  <div class="home-section home-section--ruled" id="home-goal-section" style="display:none">
     <div class="home-sec-hd">
       <span class="home-sec-title">Meta atual</span>
       <button class="home-sec-link" onclick="switchTab('metas')">Ver metas →</button>
     </div>
-    <div id="home-goal" class="home-goal-card"></div>
+    <div id="home-goal"></div>
   </div>
 
   <!-- ── 6. PENDÊNCIAS RELEVANTES ──────────── -->
-  <div class="home-section" id="home-pend-section" style="display:none">
+  <div class="home-section home-section--ruled" id="home-pend-section" style="display:none">
     <div class="home-sec-hd">
       <span class="home-sec-title">Pendências</span>
       <button class="home-sec-link" onclick="switchTab('pendencias')">Ver todas →</button>
@@ -253,32 +257,34 @@
   </div>
 
   <!-- ── 7. MOVIMENTAÇÕES RECENTES ─────────── -->
-  <div class="home-section">
+  <div class="home-section home-section--ruled">
     <div class="home-sec-hd">
       <span class="home-sec-title">Recentes</span>
       <button class="home-sec-link" onclick="switchTab('semana')">Ver semana →</button>
     </div>
-    <div class="card tx-list" id="inicio-tx-list">
-      <div class="empty-state">Sem movimentações ainda</div>
+    <div class="tx-list" id="inicio-tx-list">
+      <div class="home-empty-guide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        <div>Nenhum lançamento ainda</div>
+        <button class="home-guide-cta" onclick="switchTab('semana')">Registrar agora →</button>
+      </div>
     </div>
   </div>
 
-  <!-- ── 8. AÇÕES ──────────────────────────── -->
-  <div class="home-actions">
-    <button class="home-action-primary" onclick="switchTab('semana')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Registrar lançamento
+  <!-- ── 8. NAVEGAÇÃO RÁPIDA ──────────────── -->
+  <div class="home-nav-pills">
+    <button class="home-pill home-pill--primary" onclick="switchTab('semana')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Registrar
     </button>
-    <div class="home-action-pills">
-      <button class="home-pill" onclick="switchTab('conversor')">Conversor</button>
-      <button class="home-pill" onclick="switchTab('lembretes')">Lembretes</button>
-      <button class="home-pill" onclick="switchTab('fixos')">Fixos</button>
-      <button class="home-pill" onclick="switchTab('pendencias')">Pendências</button>
-      <button class="home-pill" onclick="switchTab('reserva')">Reserva</button>
-      <button class="home-pill" onclick="switchTab('metas')">Metas</button>
-    </div>
+    <button class="home-pill" onclick="switchTab('conversor')">Conversor</button>
+    <button class="home-pill" onclick="switchTab('lembretes')">Lembretes</button>
+    <button class="home-pill" onclick="switchTab('fixos')">Fixos</button>
+    <button class="home-pill" onclick="switchTab('pendencias')">Pendências</button>
+    <button class="home-pill" onclick="switchTab('reserva')">Reserva</button>
+    <button class="home-pill" onclick="switchTab('metas')">Metas</button>
   </div>
-  <div style="height:32px"></div>
+  <div style="height:40px"></div>
 
 </section>
 
@@ -998,7 +1004,7 @@
   </div>
 </div>
 
-<script src="app.js?v=47"></script>
+<script src="app.js?v=48"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

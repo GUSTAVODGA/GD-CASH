@@ -2422,7 +2422,7 @@ function renderInicioCards() {
 // HOME SCREEN — redesign
 // ══════════════════════════════════════════
 function renderHomeNew() {
-  // 1. Hero
+  // 1. Hero — use real monthOffset so period matches user's selection
   const hour = new Date().getHours();
   const saudacao = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
   const nome = currentUser?.displayName?.split(' ')[0] || '';
@@ -2431,28 +2431,37 @@ function renderHomeNew() {
 
   const monthEl = document.getElementById('home-month');
   if (monthEl) {
-    const now = new Date();
-    monthEl.textContent = now.toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
+    const d = new Date(); d.setMonth(d.getMonth() + monthOffset, 1);
+    monthEl.textContent = d.toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
   }
 
-  const inc = sumMonthIncome(0), exp = sumMonthExpenses(0), liq = inc - exp;
+  const inc = sumMonthIncome(monthOffset), exp = sumMonthExpenses(monthOffset), liq = inc - exp;
 
   const balEl = document.getElementById('home-balance');
   if (balEl) {
     balEl.className = 'home-balance ' + (liq >= 0 ? 'pos' : 'neg');
-    animCount(balEl, liq, 700);
+    if (inc === 0 && exp === 0) { balEl.textContent = '—'; }
+    else animCount(balEl, liq, 700);
   }
   const incEl = document.getElementById('home-inc');
   const expEl = document.getElementById('home-exp');
-  if (incEl) incEl.textContent = R(inc);
-  if (expEl) expEl.textContent = R(exp);
+  if (incEl) incEl.textContent = inc === 0 ? '—' : R(inc);
+  if (expEl) expEl.textContent = exp === 0 ? '—' : R(exp);
 
   // 2. Chart
   setTimeout(drawHomeChart, 40);
 
-  // 3. Insight
-  const insightEl = document.getElementById('home-insight');
-  if (insightEl) insightEl.innerHTML = `<p class="home-insight-text">${buildMonthInsight(inc, exp)}</p>`;
+  // 3. Insight — show only when there's actual data
+  const insightWrap = document.getElementById('home-insight');
+  const insightText = document.getElementById('home-insight-text');
+  if (insightWrap && insightText) {
+    if (inc > 0 || exp > 0) {
+      insightWrap.style.display = '';
+      insightText.textContent = buildMonthInsight(inc, exp);
+    } else {
+      insightWrap.style.display = 'none';
+    }
+  }
 
   // 4. Timeline — pendencias with deadlines
   const hoje = todayStr();
@@ -2574,13 +2583,10 @@ function buildMonthInsight(inc, exp) {
 }
 
 function drawHomeChart() {
-  const canvas = document.getElementById('home-chart');
-  if (!canvas || !canvas.offsetWidth) return;
-  const dpr = window.devicePixelRatio || 1;
-  const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
-  canvas.width = cw * dpr; canvas.height = ch * dpr;
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
+  const canvas  = document.getElementById('home-chart');
+  const emptyEl = document.getElementById('home-chart-empty');
+  const legendEl = document.getElementById('home-chart-legend');
+  if (!canvas) return;
 
   const months = [];
   for (let i = -5; i <= 0; i++) {
@@ -2589,26 +2595,47 @@ function drawHomeChart() {
     months.push({ lbl, inc: sumMonthIncome(i), exp: sumMonthExpenses(i) });
   }
 
+  const hasData = months.some(m => m.inc > 0 || m.exp > 0);
+
+  // Empty state
+  if (!hasData) {
+    canvas.style.display  = 'none';
+    if (emptyEl)  emptyEl.style.display  = '';
+    if (legendEl) legendEl.style.display = 'none';
+    return;
+  }
+
+  canvas.style.display  = '';
+  if (emptyEl)  emptyEl.style.display  = 'none';
+  if (legendEl) legendEl.style.display = '';
+
+  if (!canvas.offsetWidth) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
+  canvas.width = cw * dpr; canvas.height = ch * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
   const maxVal = Math.max(...months.flatMap(m => [m.inc, m.exp]), 1);
-  const padT = 8, padB = 22, padL = 0, padR = 0;
+  const padT = 6, padB = 22, padL = 0, padR = 0;
   const chartW = cw - padL - padR, chartH = ch - padT - padB;
   const groupW = chartW / months.length;
-  const barW   = Math.min(groupW * 0.26, 14);
-  const barGap = groupW * 0.06;
+  const barW   = Math.min(groupW * 0.27, 15);
+  const barGap = groupW * 0.055;
 
   const isDark    = document.documentElement.dataset.theme === 'dark';
   const incColor  = isDark ? '#4ADE80' : '#16A34A';
   const expColor  = isDark ? '#F87171' : '#DC2626';
-  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(13,20,64,.055)';
-  const lblColor  = isDark ? 'rgba(232,237,255,.38)' : 'rgba(13,20,64,.36)';
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(13,20,64,.06)';
+  const lblColor  = isDark ? 'rgba(232,237,255,.35)' : 'rgba(13,20,64,.33)';
 
   ctx.clearRect(0, 0, cw, ch);
 
-  // 3 horizontal grid lines
+  // grid lines
   for (let i = 1; i <= 3; i++) {
     const y = padT + (chartH / 4) * i;
     ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(chartW, y); ctx.stroke();
   }
 
   months.forEach((m, i) => {
@@ -2616,17 +2643,17 @@ function drawHomeChart() {
     const incH = Math.max((m.inc / maxVal) * chartH, 2);
     const expH = Math.max((m.exp / maxVal) * chartH, 2);
 
-    ctx.fillStyle = incColor; ctx.globalAlpha = 0.8;
+    ctx.fillStyle = incColor; ctx.globalAlpha = 0.82;
     homeRoundRect(ctx, cx - barW - barGap / 2, padT + chartH - incH, barW, incH, 3);
     ctx.fill();
 
-    ctx.fillStyle = expColor; ctx.globalAlpha = 0.65;
+    ctx.fillStyle = expColor; ctx.globalAlpha = 0.66;
     homeRoundRect(ctx, cx + barGap / 2, padT + chartH - expH, barW, expH, 3);
     ctx.fill();
 
     ctx.globalAlpha = 1;
     ctx.fillStyle = lblColor;
-    ctx.font = `500 10px Inter, -apple-system, sans-serif`;
+    ctx.font = `600 10px Inter, -apple-system, sans-serif`;
     ctx.textAlign = 'center';
     const lbl = m.lbl.charAt(0).toUpperCase() + m.lbl.slice(1, 3);
     ctx.fillText(lbl, cx, padT + chartH + 16);
