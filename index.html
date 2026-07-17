@@ -6,8 +6,10 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Avenco">
-<meta name="theme-color" content="#2563EB">
+<meta name="theme-color" content="#1D4ED8">
 <meta name="mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png">
 <title>Avenco</title>
 
 <!-- Open Graph (preview ao compartilhar) -->
@@ -21,9 +23,8 @@
 <meta name="twitter:card"       content="summary_large_image">
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
-<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=40">
+<link rel="stylesheet" href="style.css?v=41">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -153,7 +154,7 @@
 <!-- ════ INÍCIO ════ -->
 <section class="page active" id="page-inicio">
 
-  <!-- JS compat: hidden elements used by existing render functions -->
+  <!-- JS compat: hidden elements used by existing render functions — UNTOUCHED -->
   <div style="display:none" aria-hidden="true">
     <div id="inicio-greeting"></div>
     <div id="inicio-liq"></div>
@@ -174,117 +175,128 @@
     <div id="pend-inicio-card"></div>
   </div>
 
-  <!-- ── 1. HERO ─────────────────────────── -->
-  <div class="home-hero">
-    <div class="home-eyebrow">
-      <span id="home-greeting">Boa tarde</span>
-      <span class="home-eyebrow-sep">·</span>
-      <span id="home-month" class="home-eyebrow-period">Julho 2026</span>
+  <!-- ── 1. HERO (assimétrico — Proposta C) ── -->
+  <div class="hc-header">
+    <div class="hc-brand">
+      <span class="hc-tri"></span>
+      <span class="hc-brand-name">Avenco</span>
     </div>
-    <div class="home-balance-block">
-      <div class="home-balance-label">Saldo do mês</div>
-      <div class="home-balance pos" id="home-balance">—</div>
-    </div>
-    <div class="home-stats-row">
-      <div class="home-stat">
-        <div class="home-stat-pip home-pip-inc"></div>
-        <div>
-          <div class="home-stat-label">Receitas</div>
-          <div class="home-stat-val pos" id="home-inc">—</div>
-        </div>
+    <div class="hc-hero">
+      <div class="hc-hero-left">
+        <p class="hc-greeting" id="home-greeting">Boa tarde</p>
+        <p class="hc-month" id="home-month">—</p>
+        <div class="hc-bal-label">Saldo do mês</div>
+        <div class="hc-balance pos" id="home-balance">—</div>
       </div>
-      <div class="home-stat-divider"></div>
-      <div class="home-stat">
-        <div class="home-stat-pip home-pip-exp"></div>
-        <div>
-          <div class="home-stat-label">Gastos</div>
-          <div class="home-stat-val" id="home-exp">—</div>
+      <div class="hc-hero-right">
+        <div class="hc-stat">
+          <div class="hc-stat-label">Receitas</div>
+          <div class="hc-stat-val hc-stat-inc" id="home-inc">—</div>
+        </div>
+        <div class="hc-stat hc-stat--exp">
+          <div class="hc-stat-label">Gastos</div>
+          <div class="hc-stat-val hc-stat-exp" id="home-exp">—</div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- ── 2. EVOLUÇÃO ──────────────────────── -->
-  <div class="home-section home-section--ruled">
-    <div class="home-sec-hd">
-      <span class="home-sec-title">Evolução — 6 meses</span>
-      <button class="home-sec-link" onclick="switchTab('mes')">Ver mês →</button>
+  <!-- ── 2. EVOLUÇÃO ── -->
+  <div class="hc-rule"></div>
+  <div class="hc-section">
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">Evolução — 6 meses</span>
+      <button class="hc-sec-link" onclick="switchTab('mes')">Ver mês</button>
     </div>
-    <canvas id="home-chart" class="home-chart"></canvas>
-    <div class="home-chart-empty" id="home-chart-empty" style="display:none">
-      <svg viewBox="0 0 56 36" fill="none" width="56" height="36">
-        <polyline points="2,32 14,22 22,26 36,12 54,18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-      </svg>
-      <span>Sem histórico ainda</span>
-      <span class="home-chart-empty-sub">Dados aparecerão após suas primeiras movimentações</span>
-    </div>
-    <div class="home-chart-legend" id="home-chart-legend">
-      <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--inc"></span>Receitas</span>
-      <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--exp"></span>Gastos</span>
+    <div class="hc-chart-box">
+      <canvas id="home-chart" class="home-chart"></canvas>
+      <div class="home-chart-empty" id="home-chart-empty" style="display:none">
+        <svg viewBox="0 0 56 36" fill="none" width="40" height="25">
+          <polyline points="2,32 14,22 22,26 36,12 54,18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Nenhum histórico ainda</span>
+        <span class="home-chart-empty-sub">Os dados do semestre aparecem após seus primeiros lançamentos</span>
+      </div>
+      <div class="home-chart-legend" id="home-chart-legend">
+        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--inc"></span>Receitas</span>
+        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--exp"></span>Gastos</span>
+      </div>
     </div>
   </div>
 
-  <!-- ── 3. LEITURA DO MÊS ────────────────── -->
-  <div class="home-insight" id="home-insight" style="display:none">
-    <p class="home-insight-text" id="home-insight-text"></p>
+  <!-- ── 3. ANÁLISE DO MÊS ── -->
+  <div class="hc-insight" id="home-insight" style="display:none">
+    <p class="hc-insight-text" id="home-insight-text"></p>
   </div>
 
-  <!-- ── 4. PRÓXIMOS COMPROMISSOS ──────────── -->
-  <div class="home-section home-section--ruled" id="home-timeline-wrap" style="display:none">
-    <div class="home-sec-hd">
-      <span class="home-sec-title">Próximos compromissos</span>
-      <button class="home-sec-link" onclick="switchTab('pendencias')">Ver todos →</button>
+  <!-- ── 4. PRÓXIMOS COMPROMISSOS ── -->
+  <div class="hc-section hc-section--sep" id="home-timeline-wrap" style="display:none">
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">Próximos compromissos</span>
+      <button class="hc-sec-link" onclick="switchTab('pendencias')">Ver todos</button>
     </div>
-    <div id="home-timeline" class="home-timeline"></div>
+    <div id="home-timeline" class="hc-timeline"></div>
   </div>
 
-  <!-- ── 5. META ATUAL ─────────────────────── -->
-  <div class="home-section home-section--ruled" id="home-goal-section" style="display:none">
-    <div class="home-sec-hd">
-      <span class="home-sec-title">Meta atual</span>
-      <button class="home-sec-link" onclick="switchTab('metas')">Ver metas →</button>
+  <!-- ── 5. META EM CURSO ── -->
+  <div class="hc-section hc-section--sep" id="home-goal-section" style="display:none">
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">Meta em curso</span>
+      <button class="hc-sec-link" onclick="switchTab('metas')">Ver metas</button>
     </div>
-    <div id="home-goal"></div>
+    <div class="hc-goal-card">
+      <div id="home-goal"></div>
+    </div>
   </div>
 
-  <!-- ── 6. PENDÊNCIAS RELEVANTES ──────────── -->
-  <div class="home-section home-section--ruled" id="home-pend-section" style="display:none">
-    <div class="home-sec-hd">
-      <span class="home-sec-title">Pendências</span>
-      <button class="home-sec-link" onclick="switchTab('pendencias')">Ver todas →</button>
+  <!-- ── 6. PENDÊNCIAS RELEVANTES ── -->
+  <div class="hc-section hc-section--sep" id="home-pend-section" style="display:none">
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">Pendências</span>
+      <button class="hc-sec-link" onclick="switchTab('pendencias')">Ver todas</button>
     </div>
-    <div id="home-pend-list" class="home-pend-list"></div>
+    <div id="home-pend-list" class="hc-pend-list"></div>
   </div>
 
-  <!-- ── 7. MOVIMENTAÇÕES RECENTES ─────────── -->
-  <div class="home-section home-section--ruled">
-    <div class="home-sec-hd">
-      <span class="home-sec-title">Recentes</span>
-      <button class="home-sec-link" onclick="switchTab('semana')">Ver semana →</button>
+  <!-- ── 7. RECENTES ── -->
+  <div class="hc-rule"></div>
+  <div class="hc-section">
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">Recentes</span>
+      <button class="hc-sec-link" onclick="switchTab('semana')">Ver semana</button>
     </div>
-    <div class="tx-list" id="inicio-tx-list">
-      <div class="home-empty-guide">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="28" height="28"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+    <div id="inicio-tx-list" class="hc-tx-list">
+      <div class="hc-empty-guide">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" width="26" height="26"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
         <div>Nenhum lançamento ainda</div>
-        <button class="home-guide-cta" onclick="switchTab('semana')">Registrar agora →</button>
+        <button class="hc-guide-cta" onclick="switchTab('semana')">Registrar agora</button>
       </div>
     </div>
   </div>
 
-  <!-- ── 8. NAVEGAÇÃO RÁPIDA ──────────────── -->
-  <div class="home-nav-pills">
-    <button class="home-pill home-pill--primary" onclick="switchTab('semana')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Registrar
+  <!-- ── 8. REGISTRAR ── -->
+  <div class="hc-register-wrap">
+    <button class="hc-register-btn" onclick="switchTab('semana')">
+      <span class="hc-btn-tri"></span>
+      Registrar lançamento
     </button>
-    <button class="home-pill" onclick="switchTab('conversor')">Conversor</button>
-    <button class="home-pill" onclick="switchTab('lembretes')">Lembretes</button>
-    <button class="home-pill" onclick="switchTab('fixos')">Fixos</button>
-    <button class="home-pill" onclick="switchTab('pendencias')">Pendências</button>
-    <button class="home-pill" onclick="switchTab('reserva')">Reserva</button>
-    <button class="home-pill" onclick="switchTab('metas')">Metas</button>
   </div>
-  <div style="height:40px"></div>
+
+  <!-- ── 9. NAVEGAÇÃO RÁPIDA ── -->
+  <div class="hc-pills-wrap">
+    <button class="hc-pill" onclick="switchTab('conversor')">Conversor</button>
+    <button class="hc-pill" onclick="switchTab('lembretes')">Lembretes</button>
+    <button class="hc-pill" onclick="switchTab('fixos')">Fixos</button>
+    <button class="hc-pill" onclick="switchTab('pendencias')">Pendências</button>
+    <button class="hc-pill" onclick="switchTab('reserva')">Reserva</button>
+    <button class="hc-pill" onclick="switchTab('metas')">Metas</button>
+  </div>
+  <div style="height:56px"></div>
 
 </section>
 
@@ -1004,7 +1016,7 @@
   </div>
 </div>
 
-<script src="app.js?v=48"></script>
+<script src="app.js?v=49"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

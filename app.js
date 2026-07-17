@@ -2439,7 +2439,7 @@ function renderHomeNew() {
 
   const balEl = document.getElementById('home-balance');
   if (balEl) {
-    balEl.className = 'home-balance ' + (liq >= 0 ? 'pos' : 'neg');
+    balEl.className = 'hc-balance ' + (liq >= 0 ? 'pos' : 'neg');
     if (inc === 0 && exp === 0) { balEl.textContent = '—'; }
     else animCount(balEl, liq, 700);
   }
@@ -2479,15 +2479,17 @@ function renderHomeNew() {
         const isOv  = p.deadline < hoje;
         const isTod = p.deadline === hoje;
         const dt = parseDate(p.deadline).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'});
-        const label = isOv ? 'Vencida' : isTod ? 'Hoje' : dt;
-        const prioClass = p.priority === 'alta' ? 'tl-prio-alta' : p.priority === 'media' ? 'tl-prio-media' : '';
-        return `<div class="home-tl-item${isOv ? ' tl-overdue' : isTod ? ' tl-today' : ''}">
-          <div class="home-tl-date">${label}</div>
-          <div class="home-tl-info">
-            <div class="home-tl-name">${p.title}</div>
-            ${p.estimatedValue ? `<div class="home-tl-amount">${R(p.estimatedValue)}</div>` : ''}
+        const dateLabel = isOv ? 'Vencida' : isTod ? 'Hoje' : dt;
+        const dayNum = isOv ? '!' : isTod ? '◆' : parseDate(p.deadline).getDate();
+        const badgeCls = p.priority === 'alta' ? 'hc-tl-badge--alta' : p.priority === 'media' ? 'hc-tl-badge--media' : 'hc-tl-badge--baixa';
+        const dateCls = isOv ? ' hc-tl-overdue' : isTod ? ' hc-tl-today' : '';
+        return `<div class="hc-tl-item">
+          <div class="hc-tl-badge ${badgeCls}">${dayNum}</div>
+          <div class="hc-tl-info">
+            <div class="hc-tl-name">${p.title}</div>
+            <div class="hc-tl-date-label${dateCls}">${dateLabel}</div>
           </div>
-          <div class="home-tl-dot ${prioClass}"></div>
+          <div class="hc-tl-right">${p.estimatedValue ? `<div class="hc-tl-amount">${R(p.estimatedValue)}</div>` : ''}</div>
         </div>`;
       }).join('');
     } else {
@@ -2508,25 +2510,17 @@ function renderHomeNew() {
       const remains = Math.max(0, target - saved);
       goalSection.style.display = '';
       goalEl.innerHTML = `
-        <div class="home-goal-name">${g.name || 'Meta'}</div>
-        <div class="home-goal-stats">
-          <div class="home-goal-stat">
-            <div class="home-goal-val">${R(saved)}</div>
-            <div class="home-goal-sub">acumulado</div>
-          </div>
-          <div class="home-goal-sep"></div>
-          <div class="home-goal-stat">
-            <div class="home-goal-val">${R(remains)}</div>
-            <div class="home-goal-sub">restam</div>
-          </div>
-          <div class="home-goal-sep"></div>
-          <div class="home-goal-stat">
-            <div class="home-goal-val">${pct}%</div>
-            <div class="home-goal-sub">concluído</div>
-          </div>
+        <div class="hc-goal-name">${g.name || 'Meta'}</div>
+        <div class="hc-goal-row">
+          <div class="hc-goal-saved">${R(saved)} guardados</div>
+          <div class="hc-goal-pct-big">${pct}%</div>
         </div>
-        <div class="home-goal-bar-track">
-          <div class="home-goal-bar-fill" style="width:${pct}%"></div>
+        <div class="hc-goal-bar-track">
+          <div class="hc-goal-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="hc-goal-meta">
+          <span>Meta: ${R(target)}</span>
+          <span>Faltam ${R(remains)}</span>
         </div>`;
     } else {
       goalSection.style.display = 'none';
@@ -2552,14 +2546,15 @@ function renderHomeNew() {
         const isOv  = p.deadline && p.deadline < hoje;
         const isTod = p.deadline === hoje;
         const dt    = p.deadline ? parseDate(p.deadline).toLocaleDateString('pt-BR', {day:'2-digit',month:'short'}) : '';
-        const emoji = (PEND_CAT_LABELS[p.category] || '📌 Outra').split(' ')[0];
-        return `<div class="home-pend-item" onclick="switchTab('pendencias')">
-          <span class="home-pend-emoji">${emoji}</span>
-          <div class="home-pend-info">
-            <div class="home-pend-name">${p.title}</div>
-            ${dt ? `<div class="home-pend-date${isOv?' pend-overdue':isTod?' pend-today':''}">${isOv?'Venceu ':''}${dt}</div>` : ''}
+        const barCls = p.priority === 'alta' ? 'hc-pend-bar--alta' : p.priority === 'media' ? 'hc-pend-bar--media' : 'hc-pend-bar--baixa';
+        const dateCls = isOv ? ' hc-pend-overdue' : isTod ? ' hc-pend-today' : '';
+        return `<div class="hc-pend-item" onclick="switchTab('pendencias')">
+          <div class="hc-pend-bar ${barCls}"></div>
+          <div class="hc-pend-info">
+            <div class="hc-pend-name">${p.title}</div>
+            ${dt ? `<div class="hc-pend-date${dateCls}">${isOv?'Venceu ':''}${dt}</div>` : ''}
           </div>
-          ${p.estimatedValue ? `<div class="home-pend-amount">${R(p.estimatedValue)}</div>` : ''}
+          ${p.estimatedValue ? `<div class="hc-pend-amount">${R(p.estimatedValue)}</div>` : ''}
         </div>`;
       }).join('');
     } else {
@@ -2624,10 +2619,10 @@ function drawHomeChart() {
   const barGap = groupW * 0.055;
 
   const isDark    = document.documentElement.dataset.theme === 'dark';
-  const incColor  = isDark ? '#4ADE80' : '#16A34A';
-  const expColor  = isDark ? '#F87171' : '#DC2626';
-  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(13,20,64,.06)';
-  const lblColor  = isDark ? 'rgba(232,237,255,.35)' : 'rgba(13,20,64,.33)';
+  const incColor  = isDark ? '#5B8AF5' : '#1D4ED8';
+  const expColor  = isDark ? 'rgba(91,138,245,.38)' : '#93C5FD';
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(12,18,64,.06)';
+  const lblColor  = isDark ? 'rgba(232,237,255,.35)' : 'rgba(12,18,64,.33)';
 
   ctx.clearRect(0, 0, cw, ch);
 
