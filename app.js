@@ -250,6 +250,7 @@ async function loadFromCloud() {
       if (!D.weeklyGoal) D.weeklyGoal = 0;
       if (!D.reminders) D.reminders = [];
       if (!D.pendencias) D.pendencias = [];
+      if (!D.vehicles) D.vehicles = [];
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
     } else {
       // Primeiro login — oferece migrar dados locais existentes
@@ -489,6 +490,7 @@ function defaultData() {
     catBudgets: {},
     reminders: [],
     pendencias: [],
+    vehicles: [],
   };
 }
 
@@ -503,6 +505,7 @@ let D = (() => {
       if(!p.catBudgets)  p.catBudgets={};
       if(!p.reminders)   p.reminders=[];
       if(!p.pendencias)  p.pendencias=[];
+      if(!p.vehicles)    p.vehicles=[];
       return p;
     }
   } catch(e){}
@@ -1612,7 +1615,7 @@ function switchTab(tab) {
   page.classList.add('active');
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   // Highlight "Mais" button for secondary tabs
-  const moreTabs = ['fixos','conversor','ajustes','lembretes','pendencias'];
+  const moreTabs = ['fixos','conversor','ajustes','lembretes','pendencias','patrimonio'];
   if(tab==='inicio')    { renderInicio(); renderInicioCards(); }
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
@@ -1623,6 +1626,7 @@ function switchTab(tab) {
   if(tab==='ajustes')    { renderBudgetSettings(); initSettingsExtras(); }
   if(tab==='lembretes')  renderLembretes();
   if(tab==='pendencias') renderPendencias();
+  if(tab==='patrimonio') renderPatrimonio();
   // Show FAB only on main tabs
   const fab = document.getElementById('global-fab');
   if (fab) fab.style.display = tab === 'semana' ? '' : 'none';
@@ -1798,6 +1802,29 @@ function buildDemoData() {
       { id:'ii2', date:w[2], platformId:'d3', amount:150, note:'Site cliente — restante', status:'pending' },
       { id:'ii3', date:w[4], platformId:'d2', amount:35,  note:'Almoço Zona Norte',       status:'paid'    },
       { id:'ii4', date:w[4], platformId:'d2', amount:25,  note:'Lanche tarde',             status:'paid'    },
+    ],
+    vehicles: [
+      {
+        id:'vh1', name:'Prius Preto', brand:'Toyota', model:'Prius', year:'2022',
+        color:'Preto', plate:'BRA2E19', km:38400, photo:null,
+        notes:'Principal. Revisão anual em dezembro.',
+        status:'na_oficina',
+        history:[
+          { id:'vh1h1', type:'km_update', date:prev[2], note:'', km:38400 },
+          { id:'vh1h2', type:'evento',    date:w[0],    note:'Levado à oficina — barulho no freio' },
+        ],
+        linkedExpenses:[], linkedPendencias:[],
+      },
+      {
+        id:'vh2', name:'Prius Vermelho', brand:'Toyota', model:'Prius', year:'2019',
+        color:'Vermelho', plate:'ABC1234', km:72000, photo:null,
+        notes:'Segundo veículo. IPVA vence em fevereiro.',
+        status:'em_uso',
+        history:[
+          { id:'vh2h1', type:'km_update', date:prev[0], note:'', km:72000 },
+        ],
+        linkedExpenses:[], linkedPendencias:[],
+      },
     ],
   };
 }
@@ -2394,6 +2421,17 @@ function flyNumber(amount, fromEl) {
   requestAnimationFrame(() => requestAnimationFrame(() => fly.classList.add('fly-go')));
   setTimeout(() => fly.remove(), 900);
 }
+
+// ══════════════════════════════════════════
+// PATRIMÔNIO — VEÍCULOS (module state — must be before firebase init)
+// ══════════════════════════════════════════
+var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
+var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
+var _vehDetailId = null;
+var _vehEventTarget = null;
+var _vehLinkExpTarget = null;
+var _vehLinkPendTarget = null;
+var _vehStatusTarget = null;
 
 // ══════════════════════════════════════════
 // INIT
@@ -3320,4 +3358,456 @@ function checkPendenciasDeadlines() {
     }
   });
   save();
+}
+
+// ══════════════════════════════════════════
+// PATRIMÔNIO — VEÍCULOS
+// ══════════════════════════════════════════
+
+function escHtml(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
+var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
+
+var _vehDetailId = null;
+
+function renderPatrimonio() {
+  if (_vehDetailId) renderVehDetail(_vehDetailId);
+  else renderVehList();
+}
+
+function _vehShowView(id) {
+  ['veh-list-view','veh-detail-view','veh-form-view'].forEach(v => {
+    const el = document.getElementById(v);
+    if (el) el.style.display = (v === id) ? '' : 'none';
+  });
+  const addBtn = document.getElementById('veh-add-btn');
+  if (addBtn) addBtn.style.display = (id === 'veh-list-view') ? '' : 'none';
+}
+
+function renderVehList() {
+  _vehDetailId = null;
+  _vehShowView('veh-list-view');
+  const list = document.getElementById('veh-list');
+  if (!list) return;
+  const vehicles = D.vehicles || [];
+  const active   = vehicles.filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
+  const inactive = vehicles.filter(v => v.status === 'arquivado' || v.status === 'vendido');
+  if (vehicles.length === 0) {
+    list.innerHTML = `<div class="veh-empty"><div class="veh-empty-ico">🚗</div><p>Nenhum veículo cadastrado.</p><button class="btn btn-primary" onclick="openVehForm()">Adicionar veículo</button></div>`;
+    return;
+  }
+  const carSvg = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>`;
+  const cardHtml = v => {
+    const col = VEH_STATUS_COLORS[v.status] || 'var(--tx3)';
+    const lbl = VEH_STATUS_LABELS[v.status] || v.status;
+    const sub = [v.brand, v.model, v.year].filter(Boolean).join(' · ');
+    return `<div class="veh-card" onclick="renderVehDetail('${v.id}')">
+      ${v.photo
+        ? `<img class="veh-card-photo" src="${v.photo}" alt="${escHtml(v.name)}">`
+        : `<div class="veh-card-photo veh-card-no-photo">${carSvg}</div>`}
+      <div class="veh-card-info">
+        <div class="veh-card-name">${escHtml(v.name)}</div>
+        ${sub ? `<div class="veh-card-sub">${escHtml(sub)}</div>` : ''}
+        ${v.km != null ? `<div class="veh-card-km">${Number(v.km).toLocaleString('pt-BR')} km</div>` : ''}
+      </div>
+      <span class="veh-status-chip" style="background:${col}20;color:${col}">${lbl}</span>
+    </div>`;
+  };
+  let html = active.length === 0
+    ? `<div class="veh-empty" style="padding:24px 0"><p style="margin:0;color:var(--tx3)">Nenhum veículo ativo.</p></div>`
+    : active.map(cardHtml).join('');
+  if (inactive.length > 0) {
+    html += `<div class="veh-section-title veh-archive-heading">Vendidos e arquivados (${inactive.length})</div>`;
+    html += inactive.map(cardHtml).join('');
+  }
+  list.innerHTML = html;
+}
+
+function renderVehDetail(id) {
+  const v = (D.vehicles || []).find(x => x.id === id);
+  if (!v) { renderVehList(); return; }
+  _vehDetailId = id;
+  _vehShowView('veh-detail-view');
+  const cont = document.getElementById('veh-detail-cont');
+  if (!cont) return;
+  const col = VEH_STATUS_COLORS[v.status] || 'var(--tx3)';
+  const lbl = VEH_STATUS_LABELS[v.status] || v.status;
+  const sub = [v.brand, v.model, v.year, v.color].filter(Boolean).join(' · ');
+  const carSvg = `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>`;
+
+  const linkedExps  = (v.linkedExpenses  || []).map(eid => (D.expenses  || []).find(e => e.id === eid)).filter(Boolean);
+  const linkedPends = (v.linkedPendencias|| []).map(pid => (D.pendencias|| []).find(p => p.id === pid)).filter(Boolean);
+  const history = (v.history || []).slice().reverse();
+  const canHardDelete = history.length === 0 && (v.linkedExpenses||[]).length === 0 && (v.linkedPendencias||[]).length === 0;
+
+  cont.innerHTML = `
+    <div class="veh-detail-topbar">
+      <button class="btn-icon-sm" onclick="renderVehList()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Lista
+      </button>
+    </div>
+    <div class="veh-detail-header">
+      ${v.photo ? `<img class="veh-detail-photo" src="${v.photo}" alt="${escHtml(v.name)}">` : `<div class="veh-detail-photo veh-detail-no-photo">${carSvg}</div>`}
+      <div class="veh-detail-meta">
+        <div class="veh-detail-name">${escHtml(v.name)}</div>
+        ${sub ? `<div class="veh-detail-sub">${escHtml(sub)}</div>` : ''}
+        ${v.plate ? `<div class="veh-detail-plate">${escHtml(v.plate)}</div>` : ''}
+        ${v.km != null ? `<div class="veh-detail-km">${Number(v.km).toLocaleString('pt-BR')} km</div>` : ''}
+      </div>
+    </div>
+    <div class="veh-detail-status-row">
+      <span class="veh-status-chip" style="background:${col}20;color:${col}">${lbl}</span>
+      <button class="btn-inline-ghost" onclick="openVehStatus('${v.id}')">Alterar status</button>
+    </div>
+    ${v.notes ? `<div class="veh-detail-notes">${escHtml(v.notes)}</div>` : ''}
+    <div class="veh-actions-row">
+      <button class="btn-pill" onclick="openVehEvent('${v.id}')">+ Apontamento</button>
+      <button class="btn-pill" onclick="openVehLinkExp('${v.id}')">Vincular despesa</button>
+      <button class="btn-pill" onclick="openVehLinkPend('${v.id}')">Vincular pendência</button>
+    </div>
+    ${linkedExps.length ? `
+    <div class="veh-section-title">Despesas vinculadas</div>
+    <div class="veh-linked-list">${linkedExps.map(e => `
+      <div class="veh-linked-item">
+        <div class="veh-linked-info">
+          <span class="veh-linked-desc">${escHtml(e.description || e.category)}</span>
+          <span class="veh-linked-meta">${fmtShort(e.date)} · ${R(e.amount)}</span>
+        </div>
+        <button class="veh-unlink-btn" onclick="unlinkVehExp('${v.id}','${e.id}')">✕</button>
+      </div>`).join('')}</div>` : ''}
+    ${linkedPends.length ? `
+    <div class="veh-section-title">Pendências vinculadas</div>
+    <div class="veh-linked-list">${linkedPends.map(p => `
+      <div class="veh-linked-item">
+        <div class="veh-linked-info">
+          <span class="veh-linked-desc">${escHtml(p.title)}</span>
+          <span class="veh-linked-meta">${p.status === 'aberta' ? 'Aberta' : 'Concluída'}${p.estimatedValue ? ' · ' + R(p.estimatedValue) : ''}</span>
+        </div>
+        <button class="veh-unlink-btn" onclick="unlinkVehPend('${v.id}','${p.id}')">✕</button>
+      </div>`).join('')}</div>` : ''}
+    ${history.length ? `
+    <div class="veh-section-title">Histórico</div>
+    <div class="veh-history-list">${history.map(h => `
+      <div class="veh-hist-item">
+        <div class="veh-hist-dot ${h.type === 'km_update' ? 'km' : ''}"></div>
+        <div class="veh-hist-info">
+          <div class="veh-hist-main">${h.type === 'km_update' ? Number(h.km).toLocaleString('pt-BR') + ' km' : escHtml(h.note || 'Evento')}</div>
+          <div class="veh-hist-meta">${fmtShort(h.date)}${h.amount ? ' · ' + R(h.amount) : ''}</div>
+        </div>
+        <button class="veh-unlink-btn" onclick="deleteVehHistItem('${v.id}','${h.id}')">✕</button>
+      </div>`).join('')}</div>` : ''}
+    <div class="veh-detail-footer">
+      <button class="btn btn-secondary" onclick="openVehForm('${v.id}')">Editar</button>
+      <button class="btn btn-secondary" onclick="archiveVehicle('${v.id}')">Arquivar</button>
+    </div>
+    ${canHardDelete ? `<div class="veh-hard-delete-row"><button class="btn-text-danger" onclick="deleteVehicle('${v.id}')">Excluir definitivamente</button></div>` : ''}`;
+}
+
+function openVehForm(id) {
+  const v = id ? (D.vehicles || []).find(x => x.id === id) : null;
+  _vehShowView('veh-form-view');
+  const cont = document.getElementById('veh-form-cont');
+  if (!cont) return;
+  const cancelAction = id ? `renderVehDetail('${id}')` : 'renderVehList()';
+  cont.innerHTML = `
+    <div class="veh-detail-topbar">
+      <button class="btn-icon-sm" onclick="${cancelAction}">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        ${id ? 'Detalhes' : 'Lista'}
+      </button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nome / apelido *</label>
+      <input class="form-input" id="vf-name" value="${escHtml(v?.name||'')}" placeholder="Ex: Prius Preto">
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label">Marca</label><input class="form-input" id="vf-brand" value="${escHtml(v?.brand||'')}" placeholder="Toyota"></div>
+      <div class="form-group"><label class="form-label">Modelo</label><input class="form-input" id="vf-model" value="${escHtml(v?.model||'')}" placeholder="Prius"></div>
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label">Ano</label><input class="form-input" id="vf-year" value="${escHtml(v?.year||'')}" placeholder="2023"></div>
+      <div class="form-group"><label class="form-label">Cor</label><input class="form-input" id="vf-color" value="${escHtml(v?.color||'')}" placeholder="Preto"></div>
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label">Placa</label><input class="form-input" id="vf-plate" value="${escHtml(v?.plate||'')}" placeholder="ABC-1234"></div>
+      <div class="form-group"><label class="form-label">Quilometragem</label><input class="form-input" id="vf-km" type="number" min="0" value="${v?.km ?? ''}" placeholder="45000"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-input" id="vf-status">
+        ${Object.entries(VEH_STATUS_LABELS).filter(([k]) => k !== 'arquivado').map(([k,l]) => `<option value="${k}" ${(v?.status||'em_uso')===k?'selected':''}>${l}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Foto</label>
+      <div class="veh-photo-upload">
+        <div id="vf-photo-preview" class="${v?.photo ? '' : 'veh-photo-empty'}" style="${v?.photo ? 'width:64px;height:64px;border-radius:12px;overflow:hidden' : ''}">
+          ${v?.photo ? `<img src="${v.photo}" style="width:100%;height:100%;object-fit:cover">` : 'Sem foto'}
+        </div>
+        <button type="button" class="btn-pill" onclick="document.getElementById('vf-photo-input').click()">Escolher foto</button>
+        <input type="file" id="vf-photo-input" accept="image/*" style="display:none" onchange="onVehPhotoChange(this)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observações</label>
+      <textarea class="form-input" id="vf-notes" rows="2" placeholder="Notas sobre o veículo">${escHtml(v?.notes||'')}</textarea>
+    </div>
+    <input type="hidden" id="vf-photo-data" value="${v?.photo||''}">
+    <input type="hidden" id="vf-id" value="${v?.id||''}">
+    <div class="veh-form-btns">
+      <button class="btn btn-secondary" onclick="${cancelAction}">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveVehicle()">Salvar</button>
+    </div>`;
+}
+
+function saveVehicle() {
+  const name = (document.getElementById('vf-name')?.value || '').trim();
+  if (!name) { gdToast('Nome obrigatório.'); return; }
+  const existId = document.getElementById('vf-id')?.value;
+  const id = existId || uid();
+  const photo = document.getElementById('vf-photo-data')?.value || null;
+  const kmRaw = document.getElementById('vf-km')?.value;
+  const vehicles = D.vehicles || [];
+  const idx = vehicles.findIndex(v => v.id === id);
+  const veh = {
+    id,
+    name,
+    brand:  (document.getElementById('vf-brand')?.value || '').trim(),
+    model:  (document.getElementById('vf-model')?.value || '').trim(),
+    year:   (document.getElementById('vf-year')?.value  || '').trim(),
+    color:  (document.getElementById('vf-color')?.value || '').trim(),
+    plate:  (document.getElementById('vf-plate')?.value || '').trim(),
+    km:     kmRaw !== '' && kmRaw != null ? Number(kmRaw) : null,
+    photo:  photo || null,
+    notes:  (document.getElementById('vf-notes')?.value || '').trim(),
+    status: document.getElementById('vf-status')?.value || 'em_uso',
+    history:          idx >= 0 ? (vehicles[idx].history          || []) : [],
+    linkedExpenses:   idx >= 0 ? (vehicles[idx].linkedExpenses   || []) : [],
+    linkedPendencias: idx >= 0 ? (vehicles[idx].linkedPendencias || []) : [],
+  };
+  if (idx >= 0) vehicles[idx] = veh; else vehicles.push(veh);
+  D.vehicles = vehicles;
+  save();
+  _vehDetailId = id;
+  renderVehDetail(id);
+  gdToast(idx >= 0 ? 'Veículo atualizado.' : 'Veículo adicionado.');
+}
+
+function archiveVehicle(id) {
+  const v = (D.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  if (v.status === 'arquivado') { gdToast('Veículo já está arquivado.'); return; }
+  v.status = 'arquivado';
+  save();
+  renderVehList();
+  gdToast('Veículo arquivado. Histórico e vínculos preservados.');
+}
+
+function deleteVehicle(id) {
+  const v = (D.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  const hasHistory = (v.history || []).length > 0;
+  const hasLinks   = (v.linkedExpenses || []).length > 0 || (v.linkedPendencias || []).length > 0;
+  if (hasHistory || hasLinks) {
+    gdToast('Veículo com histórico ou vínculos não pode ser excluído. Use "Arquivar".');
+    return;
+  }
+  if (!confirm('Excluir permanentemente este veículo? Esta ação não pode ser desfeita.')) return;
+  D.vehicles = (D.vehicles || []).filter(x => x.id !== id);
+  save();
+  renderVehList();
+  gdToast('Veículo excluído definitivamente.');
+}
+
+function onVehPhotoChange(input) {
+  const file = input.files[0];
+  if (!file) return;
+  resizeVehPhoto(file).then(dataUrl => {
+    if (!dataUrl) return;
+    document.getElementById('vf-photo-data').value = dataUrl;
+    const prev = document.getElementById('vf-photo-preview');
+    if (prev) {
+      prev.className = '';
+      prev.style.cssText = 'width:64px;height:64px;border-radius:12px;overflow:hidden';
+      prev.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
+    }
+  });
+}
+
+function resizeVehPhoto(file) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const MAX = 400;
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+
+// ── Apontamento modal ──
+var _vehEventTarget = null;
+function openVehEvent(vehId) {
+  _vehEventTarget = vehId;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  document.getElementById('veh-event-modal-title').textContent = 'Apontamento — ' + v.name;
+  document.getElementById('ve-date').value = todayStr();
+  document.getElementById('ve-type').value = 'evento';
+  document.getElementById('ve-note').value = '';
+  document.getElementById('ve-km').value = '';
+  document.getElementById('ve-amount').value = '';
+  _vehEventTypeToggle();
+  openOverlay('modal-veh-event');
+}
+
+function _vehEventTypeToggle() {
+  const t = document.getElementById('ve-type')?.value;
+  const kmRow   = document.getElementById('ve-km-row');
+  const noteRow = document.getElementById('ve-note-row');
+  if (kmRow)   kmRow.style.display   = (t === 'km_update') ? '' : 'none';
+  if (noteRow) noteRow.style.display = (t !== 'km_update') ? '' : 'none';
+}
+
+function saveVehEvent() {
+  const vehId = _vehEventTarget;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  const type   = document.getElementById('ve-type').value;
+  const date   = document.getElementById('ve-date').value || todayStr();
+  const note   = (document.getElementById('ve-note').value || '').trim();
+  const kmVal  = document.getElementById('ve-km').value;
+  const amtVal = document.getElementById('ve-amount').value;
+  if (type === 'km_update') {
+    if (!kmVal) { gdToast('Informe a quilometragem.'); return; }
+    v.km = Number(kmVal);
+  } else {
+    if (!note) { gdToast('Informe uma descrição.'); return; }
+  }
+  if (!v.history) v.history = [];
+  const entry = { id: uid(), type, date, note };
+  if (kmVal)  entry.km     = Number(kmVal);
+  if (amtVal) entry.amount = Number(amtVal);
+  v.history.push(entry);
+  save();
+  closeOverlay('modal-veh-event');
+  renderVehDetail(vehId);
+  gdToast('Apontamento salvo.');
+}
+
+function deleteVehHistItem(vehId, histId) {
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  v.history = (v.history || []).filter(h => h.id !== histId);
+  save();
+  renderVehDetail(vehId);
+}
+
+// ── Vincular despesa ──
+var _vehLinkExpTarget = null;
+function openVehLinkExp(vehId) {
+  _vehLinkExpTarget = vehId;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  const linked = v.linkedExpenses || [];
+  const available = (D.expenses || []).filter(e => !linked.includes(e.id)).slice().sort((a,b) => b.date.localeCompare(a.date));
+  const sel = document.getElementById('vle-exp-sel');
+  if (!sel) return;
+  sel.innerHTML = available.length
+    ? available.map(e => `<option value="${e.id}">${fmtShort(e.date)} · ${e.category} · ${R(e.amount)}${e.description ? ' · ' + escHtml(e.description) : ''}</option>`).join('')
+    : '<option value="">Nenhuma despesa disponível</option>';
+  openOverlay('modal-veh-link-exp');
+}
+
+function saveVehLinkExp() {
+  const vehId = _vehLinkExpTarget;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  const expId = document.getElementById('vle-exp-sel')?.value;
+  if (!expId) { gdToast('Selecione uma despesa.'); return; }
+  if (!v.linkedExpenses) v.linkedExpenses = [];
+  if (!v.linkedExpenses.includes(expId)) { v.linkedExpenses.push(expId); save(); gdToast('Despesa vinculada.'); }
+  closeOverlay('modal-veh-link-exp');
+  renderVehDetail(vehId);
+}
+
+function unlinkVehExp(vehId, expId) {
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  v.linkedExpenses = (v.linkedExpenses || []).filter(id => id !== expId);
+  save();
+  renderVehDetail(vehId);
+}
+
+// ── Vincular pendência ──
+var _vehLinkPendTarget = null;
+function openVehLinkPend(vehId) {
+  _vehLinkPendTarget = vehId;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  const linked = v.linkedPendencias || [];
+  const available = (D.pendencias || []).filter(p => !linked.includes(p.id));
+  const sel = document.getElementById('vlp-pend-sel');
+  if (!sel) return;
+  sel.innerHTML = available.length
+    ? available.map(p => `<option value="${p.id}">${escHtml(p.title)}${p.estimatedValue ? ' · ' + R(p.estimatedValue) : ''} · ${p.status}</option>`).join('')
+    : '<option value="">Nenhuma pendência disponível</option>';
+  openOverlay('modal-veh-link-pend');
+}
+
+function saveVehLinkPend() {
+  const vehId = _vehLinkPendTarget;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  const pId = document.getElementById('vlp-pend-sel')?.value;
+  if (!pId) { gdToast('Selecione uma pendência.'); return; }
+  if (!v.linkedPendencias) v.linkedPendencias = [];
+  if (!v.linkedPendencias.includes(pId)) { v.linkedPendencias.push(pId); save(); gdToast('Pendência vinculada.'); }
+  closeOverlay('modal-veh-link-pend');
+  renderVehDetail(vehId);
+}
+
+function unlinkVehPend(vehId, pId) {
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  v.linkedPendencias = (v.linkedPendencias || []).filter(id => id !== pId);
+  save();
+  renderVehDetail(vehId);
+}
+
+// ── Status ──
+var _vehStatusTarget = null;
+function openVehStatus(vehId) {
+  _vehStatusTarget = vehId;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  const sel = document.getElementById('vs-status');
+  if (sel) sel.value = v.status;
+  openOverlay('modal-veh-status');
+}
+
+function saveVehStatus() {
+  const vehId = _vehStatusTarget;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  v.status = document.getElementById('vs-status')?.value || 'em_uso';
+  save();
+  closeOverlay('modal-veh-status');
+  renderVehDetail(vehId);
+  gdToast('Status atualizado.');
 }

@@ -2240,3 +2240,132 @@ textarea.form-input{resize:none;font-family:inherit}
   background: rgba(22,163,74,.10);
   border-color: rgba(22,163,74,.22);
 }
+
+/* ══════════════════════════════════════════
+   PATRIMÔNIO — VEÍCULOS
+   ══════════════════════════════════════════ */
+
+/* Inline ghost / pill button variants (auto-width) */
+.btn-icon-sm {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: none; border: none; color: var(--ac);
+  font-size: 13px; font-weight: 700; cursor: pointer; padding: 4px 0;
+}
+.btn-inline-ghost {
+  background: none; border: 1.5px solid var(--border);
+  color: var(--tx2); border-radius: 8px; padding: 4px 10px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.btn-pill {
+  display: inline-block; background: var(--ol1); border: 1px solid var(--border);
+  color: var(--tx); border-radius: 20px; padding: 6px 12px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer; white-space: nowrap;
+  transition: background .15s;
+}
+.btn-pill:active { background: var(--ol2, rgba(0,0,0,.07)); }
+.veh-btn-danger { background: var(--red); color: #fff; }
+.veh-btn-danger:active { opacity: .85; }
+
+/* Veh header button */
+.veh-add-btn {
+  display: flex; align-items: center; gap: 5px;
+  background: var(--ac); color: #fff;
+  border: none; border-radius: 10px;
+  padding: 7px 13px; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+
+/* List */
+.veh-list { padding: 10px 0 100px; display: flex; flex-direction: column; gap: 10px; }
+
+.veh-card {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 16px; padding: 12px; cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+.veh-card:active { transform: scale(.98); }
+
+.veh-card-photo {
+  width: 64px; height: 64px; border-radius: 12px; object-fit: cover; flex-shrink: 0;
+}
+.veh-card-no-photo {
+  width: 64px; height: 64px; border-radius: 12px;
+  background: var(--ol1); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--tx3); flex-shrink: 0;
+}
+.veh-card-info { flex: 1; min-width: 0; }
+.veh-card-name { font-size: 15px; font-weight: 700; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.veh-card-sub  { font-size: 12px; color: var(--tx2); margin-top: 2px; }
+.veh-card-km   { font-size: 12px; color: var(--tx3); margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+/* Status chip */
+.veh-status-chip {
+  display: inline-block; border-radius: 20px; padding: 4px 10px;
+  font-size: 11px; font-weight: 700; white-space: nowrap; flex-shrink: 0;
+}
+
+/* Empty */
+.veh-empty { text-align: center; padding: 48px 20px; }
+.veh-empty-ico { font-size: 48px; margin-bottom: 12px; }
+.veh-empty p { color: var(--tx2); font-size: 14px; margin-bottom: 18px; }
+
+/* Detail */
+.veh-detail-topbar { padding: 10px 0 4px; }
+.veh-detail-header { display: flex; gap: 14px; align-items: flex-start; padding: 8px 0 14px; }
+.veh-detail-photo  { width: 80px; height: 80px; border-radius: 14px; object-fit: cover; flex-shrink: 0; }
+.veh-detail-no-photo {
+  width: 80px; height: 80px; border-radius: 14px;
+  background: var(--ol1); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--tx3); flex-shrink: 0;
+}
+.veh-detail-meta   { flex: 1; min-width: 0; }
+.veh-detail-name   { font-size: 18px; font-weight: 800; color: var(--tx); margin-bottom: 3px; }
+.veh-detail-sub    { font-size: 13px; color: var(--tx2); }
+.veh-detail-plate  {
+  display: inline-block; margin-top: 5px; padding: 3px 10px;
+  border: 1.5px solid var(--border); border-radius: 6px;
+  font-size: 12px; font-weight: 700; letter-spacing: 1.5px; color: var(--tx);
+}
+.veh-detail-km     { font-size: 13px; color: var(--tx3); margin-top: 4px; font-variant-numeric: tabular-nums; }
+.veh-detail-status-row { display: flex; align-items: center; gap: 10px; padding: 0 0 12px; }
+.veh-detail-notes  { font-size: 13px; color: var(--tx2); line-height: 1.5; padding: 10px 14px; background: var(--ol1); border-radius: 10px; margin-bottom: 12px; }
+
+.veh-actions-row   { display: flex; gap: 8px; flex-wrap: wrap; padding: 4px 0 14px; }
+
+.veh-section-title { font-size: 11px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; color: var(--tx3); margin: 10px 0 6px; }
+
+/* Linked */
+.veh-linked-list   { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.veh-linked-item   { display: flex; align-items: center; gap: 8px; background: var(--ol1); border: 1px solid var(--border); border-radius: 10px; padding: 9px 10px; }
+.veh-linked-info   { flex: 1; min-width: 0; }
+.veh-linked-desc   { font-size: 13px; font-weight: 600; color: var(--tx); display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.veh-linked-meta   { font-size: 11.5px; color: var(--tx2); }
+.veh-unlink-btn    { background: none; border: none; color: var(--tx3); font-size: 13px; cursor: pointer; padding: 4px 6px; flex-shrink: 0; }
+
+/* History */
+.veh-history-list  { display: flex; flex-direction: column; margin-bottom: 16px; }
+.veh-hist-item     { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.veh-hist-item:last-child { border-bottom: none; }
+.veh-hist-dot      { width: 10px; height: 10px; border-radius: 50%; background: var(--ac); margin-top: 5px; flex-shrink: 0; }
+.veh-hist-dot.km   { background: var(--green); }
+.veh-hist-info     { flex: 1; min-width: 0; }
+.veh-hist-main     { font-size: 13px; font-weight: 600; color: var(--tx); }
+.veh-hist-meta     { font-size: 11.5px; color: var(--tx2); }
+
+/* Detail footer */
+.veh-detail-footer { display: flex; gap: 8px; padding: 14px 0 100px; }
+.veh-detail-footer .btn { flex: 1; }
+
+/* Form */
+.veh-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.veh-photo-upload { display: flex; align-items: center; gap: 12px; }
+.veh-photo-empty  { width: 64px; height: 64px; border-radius: 12px; background: var(--ol1); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--tx3); }
+.veh-form-btns    { display: flex; gap: 10px; margin-top: 8px; padding-bottom: 100px; }
+.veh-form-btns .btn { flex: 1; }
+
+/* Archive section & hard delete */
+.veh-archive-heading { margin-top: 20px; opacity: 0.7; }
+.veh-hard-delete-row { text-align: center; padding: 4px 0 20px; }
+.btn-text-danger { background: none; border: none; cursor: pointer; font-size: 12px; color: var(--red); padding: 4px 8px; text-decoration: underline; }
