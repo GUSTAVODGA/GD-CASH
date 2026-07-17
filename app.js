@@ -250,6 +250,7 @@ async function loadFromCloud() {
       if (!D.weeklyGoal) D.weeklyGoal = 0;
       if (!D.reminders) D.reminders = [];
       if (!D.pendencias) D.pendencias = [];
+      if (!D.vehicles) D.vehicles = [];
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
     } else {
       // Primeiro login — oferece migrar dados locais existentes
@@ -2424,8 +2425,8 @@ function flyNumber(amount, fromEl) {
 // ══════════════════════════════════════════
 // PATRIMÔNIO — VEÍCULOS (module state — must be before firebase init)
 // ══════════════════════════════════════════
-var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido' };
-var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)' };
+var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
+var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
 var _vehDetailId = null;
 var _vehEventTarget = null;
 var _vehLinkExpTarget = null;
@@ -3367,8 +3368,8 @@ function escHtml(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido' };
-var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)' };
+var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
+var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
 
 var _vehDetailId = null;
 
@@ -3392,12 +3393,14 @@ function renderVehList() {
   const list = document.getElementById('veh-list');
   if (!list) return;
   const vehicles = D.vehicles || [];
+  const active   = vehicles.filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
+  const inactive = vehicles.filter(v => v.status === 'arquivado' || v.status === 'vendido');
   if (vehicles.length === 0) {
     list.innerHTML = `<div class="veh-empty"><div class="veh-empty-ico">🚗</div><p>Nenhum veículo cadastrado.</p><button class="btn btn-primary" onclick="openVehForm()">Adicionar veículo</button></div>`;
     return;
   }
   const carSvg = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>`;
-  list.innerHTML = vehicles.map(v => {
+  const cardHtml = v => {
     const col = VEH_STATUS_COLORS[v.status] || 'var(--tx3)';
     const lbl = VEH_STATUS_LABELS[v.status] || v.status;
     const sub = [v.brand, v.model, v.year].filter(Boolean).join(' · ');
@@ -3412,7 +3415,15 @@ function renderVehList() {
       </div>
       <span class="veh-status-chip" style="background:${col}20;color:${col}">${lbl}</span>
     </div>`;
-  }).join('');
+  };
+  let html = active.length === 0
+    ? `<div class="veh-empty" style="padding:24px 0"><p style="margin:0;color:var(--tx3)">Nenhum veículo ativo.</p></div>`
+    : active.map(cardHtml).join('');
+  if (inactive.length > 0) {
+    html += `<div class="veh-section-title veh-archive-heading">Vendidos e arquivados (${inactive.length})</div>`;
+    html += inactive.map(cardHtml).join('');
+  }
+  list.innerHTML = html;
 }
 
 function renderVehDetail(id) {
@@ -3430,6 +3441,7 @@ function renderVehDetail(id) {
   const linkedExps  = (v.linkedExpenses  || []).map(eid => (D.expenses  || []).find(e => e.id === eid)).filter(Boolean);
   const linkedPends = (v.linkedPendencias|| []).map(pid => (D.pendencias|| []).find(p => p.id === pid)).filter(Boolean);
   const history = (v.history || []).slice().reverse();
+  const canHardDelete = history.length === 0 && (v.linkedExpenses||[]).length === 0 && (v.linkedPendencias||[]).length === 0;
 
   cont.innerHTML = `
     <div class="veh-detail-topbar">
@@ -3490,8 +3502,9 @@ function renderVehDetail(id) {
       </div>`).join('')}</div>` : ''}
     <div class="veh-detail-footer">
       <button class="btn btn-secondary" onclick="openVehForm('${v.id}')">Editar</button>
-      <button class="btn veh-btn-danger" onclick="deleteVehicle('${v.id}')">Excluir</button>
-    </div>`;
+      <button class="btn btn-secondary" onclick="archiveVehicle('${v.id}')">Arquivar</button>
+    </div>
+    ${canHardDelete ? `<div class="veh-hard-delete-row"><button class="btn-text-danger" onclick="deleteVehicle('${v.id}')">Excluir definitivamente</button></div>` : ''}`;
 }
 
 function openVehForm(id) {
@@ -3526,7 +3539,7 @@ function openVehForm(id) {
     <div class="form-group">
       <label class="form-label">Status</label>
       <select class="form-input" id="vf-status">
-        ${Object.entries(VEH_STATUS_LABELS).map(([k,l]) => `<option value="${k}" ${(v?.status||'em_uso')===k?'selected':''}>${l}</option>`).join('')}
+        ${Object.entries(VEH_STATUS_LABELS).filter(([k]) => k !== 'arquivado').map(([k,l]) => `<option value="${k}" ${(v?.status||'em_uso')===k?'selected':''}>${l}</option>`).join('')}
       </select>
     </div>
     <div class="form-group">
@@ -3584,12 +3597,30 @@ function saveVehicle() {
   gdToast(idx >= 0 ? 'Veículo atualizado.' : 'Veículo adicionado.');
 }
 
-function deleteVehicle(id) {
-  if (!confirm('Excluir este veículo?')) return;
-  D.vehicles = (D.vehicles || []).filter(v => v.id !== id);
+function archiveVehicle(id) {
+  const v = (D.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  if (v.status === 'arquivado') { gdToast('Veículo já está arquivado.'); return; }
+  v.status = 'arquivado';
   save();
   renderVehList();
-  gdToast('Veículo excluído.');
+  gdToast('Veículo arquivado. Histórico e vínculos preservados.');
+}
+
+function deleteVehicle(id) {
+  const v = (D.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  const hasHistory = (v.history || []).length > 0;
+  const hasLinks   = (v.linkedExpenses || []).length > 0 || (v.linkedPendencias || []).length > 0;
+  if (hasHistory || hasLinks) {
+    gdToast('Veículo com histórico ou vínculos não pode ser excluído. Use "Arquivar".');
+    return;
+  }
+  if (!confirm('Excluir permanentemente este veículo? Esta ação não pode ser desfeita.')) return;
+  D.vehicles = (D.vehicles || []).filter(x => x.id !== id);
+  save();
+  renderVehList();
+  gdToast('Veículo excluído definitivamente.');
 }
 
 function onVehPhotoChange(input) {
