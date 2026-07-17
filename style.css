@@ -2483,7 +2483,7 @@ textarea.form-input{resize:none;font-family:inherit}
 
 /* Fix 3: Cat list — vertical, replaces horizontal pills */
 #cat-legend { display: flex; flex-direction: column; gap: 0; overflow-x: visible; padding: 0 2px 4px; }
-.cat-row { display: grid; grid-template-columns: 12px 1fr 56px 70px 30px; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
+.cat-row { display: grid; grid-template-columns: 10px 1fr 78px 30px 60px; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
 .cat-row:first-child { border-top: none; }
 .cat-row-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .cat-row-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

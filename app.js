@@ -845,7 +845,7 @@ function renderBigDonut(svgId, pillsId, totalElId, items) {
 }
 
 // Vertical category list: top 5 + Outros, with bar, value and % of total (0–100%)
-function renderCatList(elId, items) {
+function renderCatRows(elId, items) {
   var el = document.getElementById(elId);
   if (!el) return;
   var total = items.reduce(function(s, it) { return s + it.value; }, 0);
@@ -862,9 +862,9 @@ function renderCatList(elId, items) {
     return '<div class="cat-row">' +
       '<span class="cat-row-dot" style="background:' + it.color + '"></span>' +
       '<span class="cat-row-name">' + it.label + '</span>' +
-      '<div class="cat-row-bar-wrap"><div class="cat-row-bar" style="width:' + pct + '%;background:' + it.color + '"></div></div>' +
       '<span class="cat-row-val">' + R(it.value) + '</span>' +
       '<span class="cat-row-pct">' + pct + '%</span>' +
+      '<div class="cat-row-bar-wrap"><div class="cat-row-bar" style="width:' + pct + '%;background:' + it.color + '"></div></div>' +
     '</div>';
   }).join('');
 }
@@ -1138,7 +1138,7 @@ function renderMes() {
   mExps.forEach(e=>{ catMap[e.category]=(catMap[e.category]||0)+e.amount; });
   const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,color:PALETTE[i%PALETTE.length]}));
   renderBigDonut('cat-donut','cat-legend','cat-donut-total',catItems);
-  renderCatList('cat-legend', catItems);
+  renderCatRows('cat-legend', catItems);
 
   const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:p.color})).filter(i=>i.value>0);
   renderDonut('plat-donut','plat-legend',platItems);
