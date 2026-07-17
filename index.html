@@ -24,7 +24,7 @@
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=47">
+<link rel="stylesheet" href="style.css?v=48">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -452,11 +452,11 @@
           <div class="mes-stat-lbl">Gastos</div>
           <div class="mes-stat-val mes-stat-exp" id="mes-exp">—</div>
         </div>
-        <div class="mes-stat">
-          <div class="mes-stat-lbl">Reserva</div>
-          <div class="mes-stat-val mes-stat-resv" id="mes-resv">—</div>
-        </div>
       </div>
+    </div>
+    <div class="mes-resv-bar">
+      <span class="mes-resv-lbl">Guardado na reserva</span>
+      <span class="mes-resv-val" id="mes-resv">—</span>
     </div>
   </div>
 
@@ -1202,7 +1202,7 @@
   </div>
 </div>
 
-<script src="app.js?v=54"></script>
+<script src="app.js?v=55"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

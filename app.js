@@ -1571,63 +1571,99 @@ function renderInsights(off) {
   var cur = getMonthData(off);
   if (cur.income.total === 0 && cur.expenses.total === 0) { el.innerHTML = ''; return; }
 
-  var prev = getMonthData(off - 1);
-  var insights = [];
+  // For partial current month, compare only equivalent days of previous month
+  var isPartial = off === 0 && cur.period.pctPassed < 100;
+  var prev = isPartial
+    ? getMonthData(off - 1, { throughDay: cur.period.dayOfMonth })
+    : getMonthData(off - 1);
 
-  // 1. Reserve deposits
-  if (cur.reserve.totalDeposited > 0) {
-    var n = cur.reserve.deposits.length;
-    insights.push('💰 ' + n + (n === 1 ? ' aporte' : ' aportes') + ' na reserva · <b>' + R(cur.reserve.totalDeposited) + '</b> guardados');
+  var inc = cur.income.total, exp = cur.expenses.total, liq = cur.result.net;
+  var prevInc = prev.income.total, prevExp = prev.expenses.total, prevLiq = prev.result.net;
+
+  var insight = null; // { text, state } — state: 'pos' | 'warn' | 'neutral'
+
+  // 1. Budget utilization warning (≥90% of income already spent)
+  if (!insight && inc > 0 && exp / inc >= 0.90) {
+    var usedPct = Math.round(exp / inc * 100);
+    insight = {
+      text: 'Você já utilizou <b>' + usedPct + '%</b> da receita registrada neste mês.',
+      state: 'warn'
+    };
   }
 
-  // 2. Vehicle with most cost this month
-  if (cur.vehicles.byCost.length > 0) {
-    var tv = cur.vehicles.byCost[0];
-    insights.push('🚗 <b>' + tv.name + '</b> — <b>' + R(tv.cost) + '</b> em gastos no período');
-  }
-
-  // 3. Category that declined most vs previous month (positive framing first)
-  if (prev.expenses.total > 0 && cur.expenses.byCategory.length > 0 && insights.length < 3) {
-    var prevCM = {};
-    prev.expenses.byCategory.forEach(function(c) { prevCM[c.cat] = c.amount; });
-    var bestDecline = null, bestGrowth = null;
-    cur.expenses.byCategory.forEach(function(c) {
-      var p = prevCM[c.cat] || 0;
-      if (!p || p < 30) return;
-      var pct = Math.round((c.amount - p) / p * 100);
-      if (pct <= -12 && (!bestDecline || pct < bestDecline.pct)) bestDecline = { cat: c.cat, pct: Math.abs(pct) };
-      if (pct >= 15 && c.amount > 50 && (!bestGrowth || pct > bestGrowth.pct)) bestGrowth = { cat: c.cat, pct: pct, amt: c.amount };
-    });
-    if (bestDecline) {
-      insights.push('📉 Gastos com <b>' + bestDecline.cat + '</b> caíram <b>' + bestDecline.pct + '%</b> em relação ao mês anterior');
-    } else if (bestGrowth) {
-      insights.push('📈 <b>' + bestGrowth.cat + '</b> cresceu <b>' + bestGrowth.pct + '%</b> em relação ao mês anterior');
+  // 2. Expense comparison vs previous period (≥10% change worth noting)
+  if (!insight && prevExp > 30) {
+    var diffPct = Math.round((exp - prevExp) / prevExp * 100);
+    if (diffPct <= -10) {
+      insight = {
+        text: 'Você gastou <b>' + Math.abs(diffPct) + '% menos</b> que no mesmo período do mês passado.',
+        state: 'pos'
+      };
+    } else if (diffPct >= 15) {
+      insight = {
+        text: 'Seus gastos subiram <b>' + diffPct + '%</b> em relação ao mesmo período do mês passado.',
+        state: 'warn'
+      };
     }
   }
 
-  // 4. Largest single expense (if > 20% of total and > R$100)
-  if (cur.expenses.topExpense && insights.length < 3) {
-    var te = cur.expenses.topExpense;
-    var tePct = cur.expenses.total > 0 ? Math.round(te.amount / cur.expenses.total * 100) : 0;
-    if (tePct >= 20 && te.amount >= 100) {
-      insights.push('💸 Maior gasto: <b>' + (te.description || te.category) + '</b> — <b>' + R(te.amount) + '</b> (' + tePct + '% do total)');
+  // 3. Result improved driven mainly by expenses falling (not just income rising)
+  if (!insight && liq > 0 && prevLiq < liq && prevExp > exp && prevInc <= inc * 1.05) {
+    insight = {
+      text: 'Seu resultado melhorou principalmente porque os gastos caíram.',
+      state: 'pos'
+    };
+  }
+
+  // 4. Reserve deposited and result stays positive — highlight the positive behavior
+  if (!insight && cur.reserve.totalDeposited > 0 && liq >= 0) {
+    insight = {
+      text: 'Você guardou <b>' + R(cur.reserve.totalDeposited) + '</b> neste mês sem comprometer seu resultado.',
+      state: 'pos'
+    };
+  }
+
+  // 5. Top expense category dominates (≥30% of total expenses)
+  if (!insight && cur.expenses.byCategory.length > 0 && exp > 0) {
+    var top = cur.expenses.byCategory[0];
+    var topPct = Math.round(top.amount / exp * 100);
+    if (topPct >= 30 && top.amount >= 80) {
+      insight = {
+        text: '<b>' + top.cat + '</b> representa <b>' + topPct + '%</b> dos seus gastos neste mês.',
+        state: topPct >= 50 ? 'warn' : 'neutral'
+      };
     }
   }
 
-  // 5. Pendências completed this month
-  if (cur.pendencias.completedThisMonth.length > 0 && insights.length < 3) {
-    var np = cur.pendencias.completedThisMonth.length;
-    var totalP = cur.pendencias.completedThisMonth.reduce(function(s, p) { return s + (p.estimatedValue || 0); }, 0);
-    insights.push('✅ ' + np + (np === 1 ? ' pendência concluída' : ' pendências concluídas') + (totalP > 0 ? ' · <b>' + R(totalP) + '</b>' : '') + ' este mês');
+  // 6. Vehicle cost notable (≥20% of expenses)
+  if (!insight && cur.vehicles.byCost.length > 0 && exp > 0) {
+    var veh = cur.vehicles.byCost[0];
+    var vPct = Math.round(veh.cost / exp * 100);
+    if (vPct >= 20) {
+      insight = {
+        text: '<b>' + veh.name + '</b> representou <b>' + R(veh.cost) + '</b> em gastos neste período.',
+        state: 'neutral'
+      };
+    }
   }
 
-  var shown = insights.slice(0, 3);
-  if (!shown.length) { el.innerHTML = ''; return; }
+  // 7. Neutral fallback when there's data but no notable signal
+  if (!insight && (inc > 0 || exp > 0)) {
+    insight = {
+      text: liq > 0 ? 'Resultado positivo neste período.'
+          : liq < 0 ? 'Gastos superaram a receita neste período.'
+          : 'Receita e gastos equilibrados neste período.',
+      state: 'neutral'
+    };
+  }
 
+  if (!insight) { el.innerHTML = ''; return; }
+
+  var stateClass = insight.state === 'pos' ? '' : ' insight-' + insight.state;
   el.innerHTML =
-    '<div class="sec-title">Destaques do mês</div>' +
-    '<div class="card insights-card">' +
-      shown.map(function(txt) { return '<div class="insight-row">' + txt + '</div>'; }).join('') +
+    '<div class="sec-title">Destaque do mês</div>' +
+    '<div class="card insights-card' + stateClass + '">' +
+      '<div class="insight-row">' + insight.text + '</div>' +
     '</div>';
 }
 
