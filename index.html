@@ -24,7 +24,7 @@
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=46">
+<link rel="stylesheet" href="style.css?v=47">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -437,15 +437,26 @@
     <p class="month-summary-text" id="month-summary-text"></p>
   </div>
 
-  <div class="hero-card" id="hero-mes">
-    <div class="hero-top">
-      <span class="hero-lbl">Resultado do mês</span>
-      <span class="hero-val" id="mes-liq">$ 0,00</span>
-    </div>
-    <div class="hero-chips">
-      <div class="hero-chip"><span class="chip-dot dot-green"></span>Receita <b id="mes-inc">$ 0,00</b></div>
-      <div class="hero-chip"><span class="chip-dot dot-red"></span>Gastos <b id="mes-exp">$ 0,00</b></div>
-      <div class="hero-chip"><span class="chip-dot dot-gold"></span>Reserva <b id="mes-resv">$ 0,00</b></div>
+  <div class="hero-card pos" id="hero-mes">
+    <div class="mes-hero-body">
+      <div class="mes-hero-left">
+        <div class="mes-hero-lbl">Resultado do mês</div>
+        <div class="mes-hero-val" id="mes-liq">—</div>
+      </div>
+      <div class="mes-hero-right">
+        <div class="mes-stat">
+          <div class="mes-stat-lbl">Receita</div>
+          <div class="mes-stat-val mes-stat-inc" id="mes-inc">—</div>
+        </div>
+        <div class="mes-stat">
+          <div class="mes-stat-lbl">Gastos</div>
+          <div class="mes-stat-val mes-stat-exp" id="mes-exp">—</div>
+        </div>
+        <div class="mes-stat">
+          <div class="mes-stat-lbl">Reserva</div>
+          <div class="mes-stat-val mes-stat-resv" id="mes-resv">—</div>
+        </div>
+      </div>
     </div>
   </div>
 
