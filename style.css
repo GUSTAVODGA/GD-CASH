@@ -616,6 +616,14 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .res-hist-date{font-size:11.5px;color:var(--text3)}
 .res-hist-amt{font-weight:800;flex-shrink:0}
 .res-hist-del{background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:4px;flex-shrink:0}
+.res-hist-btns{display:flex;gap:2px;flex-shrink:0}
+.res-hist-edit{background:none;border:none;color:var(--ac);font-size:14px;cursor:pointer;padding:4px;opacity:.7}
+.res-hist-edit:active{opacity:1}
+/* Reserve withdrawal → expense question */
+.res-q-text{font-size:15px;font-weight:700;color:var(--tx);margin:4px 0 6px}
+.res-q-sub{font-size:13px;color:var(--tx2);margin:0 0 18px;line-height:1.5}
+.res-q-actions{display:flex;gap:10px}
+.res-q-btn{flex:1}
 
 /* ── Fixos ── */
 .fixed-total-card{text-align:center;margin-bottom:14px}
@@ -2153,33 +2161,82 @@ textarea.form-input{resize:none;font-family:inherit}
   border-bottom: 9px solid rgba(255,255,255,.75);
 }
 
-/* ── Quick-nav pills (secondary, no primary duplicate) ── */
-.hc-pills-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  padding: 12px 24px 4px;
+/* ── Ferramentas grid (home shortcuts) ── */
+.hc-tools {
+  padding: 4px 24px 8px;
 }
 
-.hc-pill {
-  background: rgba(12,18,64,.06);
-  border: 1px solid rgba(12,18,64,.08);
-  border-radius: 20px;
-  padding: 7px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--tx2);
+.hc-tools-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.hc-tool-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 10px 14px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
   cursor: pointer;
   font-family: inherit;
-  transition: background .15s, color .15s;
-}
-:root[data-theme="dark"] .hc-pill {
-  background: var(--surface2);
-  border-color: var(--border);
+  transition: background .15s, border-color .15s, transform .1s;
+  min-height: 82px;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.hc-pill:active {
+.hc-tool-item:active {
   background: var(--ac-t);
-  color: var(--ac);
   border-color: var(--ac-b);
+  transform: scale(0.97);
+}
+
+.hc-tool-ico {
+  display: flex;
+  align-items: center;
+  color: var(--ac);
+  opacity: 0.78;
+}
+
+.hc-tool-lbl {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--tx2);
+}
+
+.hc-tool-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: 10px;
+  padding: 2px 5px;
+  min-width: 16px;
+  text-align: center;
+}
+
+/* ── Reserve monthly note chip ── */
+.hc-resv-note {
+  margin: 0 24px 12px;
+  padding: 10px 14px;
+  background: rgba(22,163,74,.07);
+  border: 1px solid rgba(22,163,74,.16);
+  border-radius: 12px;
+  font-size: 12.5px;
+  color: var(--green);
+  font-weight: 500;
+  line-height: 1.45;
+}
+:root[data-theme="dark"] .hc-resv-note {
+  background: rgba(22,163,74,.10);
+  border-color: rgba(22,163,74,.22);
 }

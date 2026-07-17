@@ -1055,55 +1055,140 @@ function pickMonth(year, month) {
 // RENDER: RESERVA
 // ══════════════════════════════════════════
 function renderReserva() {
-  const emg=D.emergency;
-  const pct=emg.target>0?Math.min(100,(emg.current/emg.target)*100):0;
-  document.getElementById('res-total').textContent=R(emg.current);
-  document.getElementById('res-pct').textContent=`${Math.round(pct)}%`;
-  const ring=document.getElementById('res-ring-fill');
-  ring.style.strokeDasharray=`${RING_CIRC}`;
-  ring.style.strokeDashoffset=`${RING_CIRC*(1-pct/100)}`;
-  document.getElementById('res-meta').textContent=
-    `Meta: ${R(emg.target)} — faltam ${R(Math.max(0,emg.target-emg.current))}`;
-  const hist=document.getElementById('res-history');
-  hist.innerHTML=D.reservaHistory.length
-    ? [...D.reservaHistory].reverse().map(h=>`
-        <div class="res-hist-item">
+  const emg = D.emergency;
+  const pct = emg.target > 0 ? Math.min(100, (emg.current / emg.target) * 100) : 0;
+  document.getElementById('res-total').textContent = R(emg.current);
+  document.getElementById('res-pct').textContent = `${Math.round(pct)}%`;
+  const ring = document.getElementById('res-ring-fill');
+  ring.style.strokeDasharray = `${RING_CIRC}`;
+  ring.style.strokeDashoffset = `${RING_CIRC * (1 - pct / 100)}`;
+  document.getElementById('res-meta').textContent =
+    `Meta: ${R(emg.target)} — faltam ${R(Math.max(0, emg.target - emg.current))}`;
+  const hist = document.getElementById('res-history');
+  hist.innerHTML = D.reservaHistory.length
+    ? [...D.reservaHistory].reverse().map(h => {
+        const lbl = (h.type === 'dep' ? 'Aporte' : 'Retirada') + (h.note ? ` · ${h.note}` : '');
+        return `<div class="res-hist-item">
           <div class="res-hist-info">
-            <div class="res-hist-lbl">${h.note||(h.type==='dep'?'Depósito':'Retirada')}</div>
+            <div class="res-hist-lbl">${lbl}</div>
             <div class="res-hist-date">${fmtShort(h.date)}</div>
           </div>
-          <span class="res-hist-amt" style="color:${h.type==='dep'?'var(--green)':'var(--red)'}">
-            ${h.type==='dep'?'+':'−'}${R(h.amount)}
+          <span class="res-hist-amt" style="color:${h.type === 'dep' ? 'var(--green)' : 'var(--red)'}">
+            ${h.type === 'dep' ? '+' : '−'}${R(h.amount)}
           </span>
-          <button class="res-hist-del" onclick="deleteResHist('${h.id}')">✕</button>
-        </div>`).join('')
+          <div class="res-hist-btns">
+            <button class="res-hist-edit" onclick="editResHist('${h.id}')" title="Editar">✎</button>
+            <button class="res-hist-del" onclick="deleteResHist('${h.id}')" title="Excluir">✕</button>
+          </div>
+        </div>`;
+      }).join('')
     : '<div class="empty-state">Nenhuma movimentação ainda</div>';
 }
 
 function openResModal(type) {
-  const titles={dep:'Depositar na Reserva',ret:'Retirar da Reserva',meta:'Editar Meta'};
-  document.getElementById('res-modal-title').textContent=titles[type];
-  document.getElementById('res-modal-body').innerHTML=type==='meta'
-    ? `<div class="fg"><label class="fl">Meta da Reserva ($)</label>
+  const titles = { dep: 'Adicionar à reserva', ret: 'Retirar da reserva', meta: 'Editar Meta' };
+  document.getElementById('res-modal-title').textContent = titles[type];
+  document.getElementById('res-modal-body').innerHTML = type === 'meta'
+    ? `<div class="fg"><label class="fl">Meta da Reserva</label>
         <input class="fi" type="number" id="rm-meta" value="${D.emergency.target}" min="0" step="100"></div>
        <button class="btn btn-primary" onclick="saveResMeta()">Salvar Meta</button>`
-    : `<div class="fg"><label class="fl">Valor ($)</label>
-        <input class="fi" type="number" id="rm-val" min="0" step="0.01" placeholder="0.00"></div>
+    : `<div class="fg"><label class="fl">Valor</label>
+        <input class="fi" type="number" id="rm-val" min="0" step="0.01" placeholder="0,00"></div>
+       <div class="fg"><label class="fl">Data</label>
+        <input class="fi" type="date" id="rm-date" value="${todayStr()}" max="${todayStr()}"></div>
        <div class="fg"><label class="fl">Observação (opcional)</label>
-        <input class="fi" type="text" id="rm-note" placeholder="Ex: Salário, emergência..."></div>
+        <input class="fi" type="text" id="rm-note" placeholder="Ex: salário, emergência..."></div>
        <button class="btn btn-primary" onclick="saveResMove('${type}')">Confirmar</button>`;
   openOverlay('modal-res');
 }
 function saveResMeta() {
-  D.emergency.target=parseFloat(document.getElementById('rm-meta').value)||0;
+  D.emergency.target = parseFloat(document.getElementById('rm-meta').value) || 0;
   save(); closeOverlay('modal-res'); renderReserva();
 }
 function saveResMove(type) {
-  const val=parseFloat(document.getElementById('rm-val').value)||0;
-  const note=document.getElementById('rm-note').value.trim();
-  if(!val||val<=0){alert('Informe um valor válido.');return;}
-  D.emergency.current=type==='dep' ? D.emergency.current+val : Math.max(0,D.emergency.current-val);
-  D.reservaHistory.push({id:uid(),type,amount:val,note,date:todayStr()});
+  const val = parseFloat(document.getElementById('rm-val').value) || 0;
+  const note = document.getElementById('rm-note').value.trim();
+  const dateEl = document.getElementById('rm-date');
+  const date = (dateEl && dateEl.value) ? dateEl.value : todayStr();
+  if (!val || val <= 0) { alert('Informe um valor válido.'); return; }
+  D.emergency.current = type === 'dep' ? D.emergency.current + val : Math.max(0, D.emergency.current - val);
+  D.reservaHistory.push({ id: uid(), type, amount: val, note, date });
+  save(); renderReserva(); renderInicio();
+  if (type === 'ret') {
+    window._resRetData = { amount: val, note, date };
+    document.getElementById('res-modal-title').textContent = 'Registrar como gasto?';
+    document.getElementById('res-modal-body').innerHTML = `
+      <p class="res-q-text">Esse valor foi usado em uma despesa?</p>
+      <p class="res-q-sub">Se sim, abriremos o formulário já preenchido para você confirmar.</p>
+      <div class="res-q-actions">
+        <button class="btn btn-secondary res-q-btn" onclick="closeOverlay('modal-res')">Não</button>
+        <button class="btn btn-primary res-q-btn" onclick="openExpenseFromReserva()">Sim, registrar gasto</button>
+      </div>`;
+  } else {
+    closeOverlay('modal-res');
+  }
+}
+function openExpenseFromReserva() {
+  const d = window._resRetData || {};
+  closeOverlay('modal-res');
+  const targetDate = d.date || todayStr();
+  const amount = d.amount || 0;
+  const note = d.note || '';
+  const target = parseDate(targetDate);
+  const targetMon = getMonday(new Date(target));
+  const todayMon = getMonday(new Date());
+  const wOff = Math.round((targetMon.getTime() - todayMon.getTime()) / (7 * 24 * 60 * 60 * 1000));
+  const dow = target.getDay();
+  const dIdx = dow === 0 ? 6 : dow - 1;
+  const doOpen = () => {
+    weekOffset = wOff;
+    renderSemana();
+    setTimeout(() => {
+      openDayDetail(dIdx);
+      setTimeout(() => {
+        const expVal = document.getElementById('exp-val');
+        const expDesc = document.getElementById('exp-desc');
+        if (expVal) expVal.value = amount.toFixed(2);
+        if (expDesc && note) expDesc.value = note;
+        const sheet = document.querySelector('#modal-day-detail .sheet');
+        const expSec = document.getElementById('add-exp-section');
+        if (sheet && expSec) sheet.scrollTop = expSec.offsetTop - 20;
+      }, 400);
+    }, 300);
+  };
+  if (!document.getElementById('page-semana')?.classList.contains('active')) {
+    switchTab('semana');
+    setTimeout(doOpen, 350);
+  } else {
+    doOpen();
+  }
+}
+function editResHist(id) {
+  const h = D.reservaHistory.find(e => e.id === id);
+  if (!h) return;
+  const titles = { dep: 'Editar Aporte', ret: 'Editar Retirada' };
+  document.getElementById('res-modal-title').textContent = titles[h.type];
+  document.getElementById('res-modal-body').innerHTML = `
+    <div class="fg"><label class="fl">Valor</label>
+      <input class="fi" type="number" id="rm-val" min="0" step="0.01" value="${h.amount}"></div>
+    <div class="fg"><label class="fl">Data</label>
+      <input class="fi" type="date" id="rm-date" value="${h.date}" max="${todayStr()}"></div>
+    <div class="fg"><label class="fl">Observação (opcional)</label>
+      <input class="fi" type="text" id="rm-note" value="${h.note || ''}"></div>
+    <button class="btn btn-primary" onclick="updateResHist('${h.id}')">Salvar</button>`;
+  openOverlay('modal-res');
+}
+function updateResHist(id) {
+  const val = parseFloat(document.getElementById('rm-val').value) || 0;
+  const note = document.getElementById('rm-note').value.trim();
+  const dateEl = document.getElementById('rm-date');
+  const date = (dateEl && dateEl.value) ? dateEl.value : todayStr();
+  if (!val || val <= 0) { alert('Informe um valor válido.'); return; }
+  const idx = D.reservaHistory.findIndex(h => h.id === id);
+  if (idx === -1) return;
+  D.reservaHistory[idx] = { ...D.reservaHistory[idx], amount: val, note, date };
+  D.emergency.current = D.reservaHistory.reduce((s, h) => h.type === 'dep' ? s + h.amount : s - h.amount, 0);
+  D.emergency.current = Math.max(0, D.emergency.current);
   save(); closeOverlay('modal-res'); renderReserva();
 }
 // ══════════════════════════════════════════
@@ -1382,9 +1467,10 @@ function checkGoalNotifications() {
 }
 
 function deleteResHist(id) {
-  if(!D.reservaHistory.find(h=>h.id===id)) return;
-  D.reservaHistory=D.reservaHistory.filter(h=>h.id!==id);
-  D.emergency.current = D.reservaHistory.reduce((s,h) => h.type==='dep' ? s+h.amount : s-h.amount, 0);
+  if (!D.reservaHistory.find(h => h.id === id)) return;
+  if (!confirm('Excluir esta movimentação?')) return;
+  D.reservaHistory = D.reservaHistory.filter(h => h.id !== id);
+  D.emergency.current = D.reservaHistory.reduce((s, h) => h.type === 'dep' ? s + h.amount : s - h.amount, 0);
   D.emergency.current = Math.max(0, D.emergency.current);
   save(); renderReserva();
 }
@@ -2560,6 +2646,29 @@ function renderHomeNew() {
     } else {
       pendSection.style.display = 'none';
     }
+  }
+
+  // Reserve movement note (visible only when there are reserve changes this month)
+  const resvChip = document.getElementById('home-resv-note');
+  if (resvChip) {
+    const resvNet = sumMonthReserva(monthOffset);
+    if (resvNet > 0) {
+      resvChip.style.display = '';
+      resvChip.innerHTML = `↑ Você guardou <strong>${R(resvNet)}</strong> na reserva em ${fmtMonthYear(monthOffset)}.`;
+    } else if (resvNet < 0) {
+      resvChip.style.display = '';
+      resvChip.innerHTML = `↓ Você retirou <strong>${R(Math.abs(resvNet))}</strong> da reserva em ${fmtMonthYear(monthOffset)}.`;
+    } else {
+      resvChip.style.display = 'none';
+    }
+  }
+
+  // Tools section — badge showing count of open pendências
+  const toolsBadge = document.getElementById('tools-pend-badge');
+  if (toolsBadge) {
+    const openCount = (D.pendencias || []).filter(p => p.status === 'aberta').length;
+    toolsBadge.textContent = openCount > 9 ? '9+' : openCount;
+    toolsBadge.style.display = openCount > 0 ? '' : 'none';
   }
 }
 

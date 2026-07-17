@@ -24,7 +24,7 @@
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=42">
+<link rel="stylesheet" href="style.css?v=43">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -293,14 +293,54 @@
     </button>
   </div>
 
-  <!-- ── 9. NAVEGAÇÃO RÁPIDA ── -->
-  <div class="hc-pills-wrap">
-    <button class="hc-pill" onclick="switchTab('conversor')">Conversor</button>
-    <button class="hc-pill" onclick="switchTab('lembretes')">Lembretes</button>
-    <button class="hc-pill" onclick="switchTab('fixos')">Fixos</button>
-    <button class="hc-pill" onclick="switchTab('pendencias')">Pendências</button>
-    <button class="hc-pill" onclick="switchTab('reserva')">Reserva</button>
-    <button class="hc-pill" onclick="switchTab('metas')">Metas</button>
+  <!-- ── RESERVA DO MÊS — shown only when relevant ── -->
+  <div class="hc-resv-note" id="home-resv-note" style="display:none"></div>
+
+  <!-- ── 9. FERRAMENTAS ── -->
+  <div class="hc-tools">
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">Ferramentas</span>
+    </div>
+    <div class="hc-tools-grid">
+      <button class="hc-tool-item" onclick="switchTab('pendencias')">
+        <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="18" height="18" rx="2"/>
+          <line x1="16" y1="2" x2="16" y2="6"/>
+          <line x1="8" y1="2" x2="8" y2="6"/>
+          <line x1="3" y1="10" x2="21" y2="10"/>
+          <polyline points="9 16 11 18 15 14"/>
+        </svg>
+        <span class="hc-tool-lbl">Pendências</span>
+        <span class="hc-tool-badge" id="tools-pend-badge" style="display:none">0</span>
+      </button>
+      <button class="hc-tool-item" onclick="switchTab('fixos')">
+        <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="17 1 21 5 17 9"/>
+          <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+          <polyline points="7 23 3 19 7 15"/>
+          <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+        </svg>
+        <span class="hc-tool-lbl">Fixos</span>
+      </button>
+      <button class="hc-tool-item" onclick="switchTab('metas')">
+        <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="6"/>
+          <circle cx="12" cy="12" r="2"/>
+        </svg>
+        <span class="hc-tool-lbl">Metas</span>
+      </button>
+      <button class="hc-tool-item" onclick="switchTab('conversor')">
+        <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 3 4 7l4 4"/>
+          <path d="M4 7h16"/>
+          <path d="m16 21 4-4-4-4"/>
+          <path d="M20 17H4"/>
+        </svg>
+        <span class="hc-tool-lbl">Conversor</span>
+      </button>
+    </div>
   </div>
   <div style="height:56px"></div>
 
@@ -364,7 +404,7 @@
   <div class="res-meta-row" id="res-meta">Meta: $ 0,00</div>
 
   <div class="res-actions">
-    <button class="pill pill-dep" onclick="openResModal('dep')">＋ Depositar</button>
+    <button class="pill pill-dep" onclick="openResModal('dep')">＋ Adicionar</button>
     <button class="pill pill-ret" onclick="openResModal('ret')">－ Retirar</button>
     <button class="pill pill-meta" onclick="openResModal('meta')">🎯 Meta</button>
   </div>
@@ -1022,7 +1062,7 @@
   </div>
 </div>
 
-<script src="app.js?v=50"></script>
+<script src="app.js?v=51"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
