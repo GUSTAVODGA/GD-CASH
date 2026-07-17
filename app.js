@@ -164,7 +164,7 @@ const TAB_HELP = {
   mes: {
     icon: '📊',
     title: 'Aba Mês',
-    text: 'Visão completa do mês: líquido, gráfico de gastos por categoria, receita por plataforma e histórico dos últimos 6 meses. Toque no mês para navegar.',
+    text: 'Visão completa do mês: resultado, gráfico de gastos por categoria, receita por plataforma e histórico dos últimos 6 meses. Toque no mês para navegar.',
   },
   fixos: {
     icon: '🔁',
@@ -1201,7 +1201,7 @@ function buildMonthSummary(off) {
   const parts = [];
 
   if (!isPast && !hasEnoughData) {
-    parts.push(`Mês começando — ${daysWithData} dia${daysWithData!==1?'s':''} registrado${daysWithData!==1?'s':''}. Saldo até agora: <b>${R(liq)}</b>. Continue registrando pra ter uma análise completa.`);
+    parts.push(`Mês começando — ${daysWithData} dia${daysWithData!==1?'s':''} registrado${daysWithData!==1?'s':''}. Resultado até agora: <b>${R(liq)}</b>. Continue registrando pra ter uma análise completa.`);
     return parts[0];
   }
 
@@ -1211,9 +1211,9 @@ function buildMonthSummary(off) {
     else if (liq>0 && savingsRate>=25)
       parts.push(`Boa disciplina: você guardou <b>${savingsRate}%</b> da receita esse mês.`);
     else if (liq>0 && incChange!==null && incChange<-10)
-      parts.push(`Receita caiu <b>${Math.abs(incChange)}%</b>, mas o saldo fechou positivo em <b>${R(liq)}</b>.`);
+      parts.push(`Receita caiu <b>${Math.abs(incChange)}%</b>, mas o resultado fechou positivo em <b>${R(liq)}</b>.`);
     else if (liq>0)
-      parts.push(`Mês fechado no azul: <b>${R(liq)}</b> de saldo positivo.`);
+      parts.push(`Mês fechado no azul: <b>${R(liq)}</b> de resultado positivo.`);
     else
       parts.push(`Mês pesado — gastos superaram a receita em <b>${R(Math.abs(liq))}</b>. Acontece, o importante é saber.`);
     if (topCat && topCatPct>=30)
@@ -1228,7 +1228,7 @@ function buildMonthSummary(off) {
     else if (incChange!==null && inc>=(prevInc*(pctPassed/100)*1.15))
       parts.push(`Ritmo acima do esperado — mais forte que no mesmo ponto do mês passado.`);
     else
-      parts.push(`<b>${pctPassed}%</b> do mês passou. Saldo atual: <b>${R(liq)}</b>.`);
+      parts.push(`<b>${pctPassed}%</b> do mês passou. Resultado atual: <b>${R(liq)}</b>.`);
     if (topCat && topCatPct>=40)
       parts.push(`<b>${topCat[0]}</b> está pesando bastante: ${topCatPct}% dos gastos do mês.`);
     if (incChange!==null && incChange<-20 && pctPassed>40)
@@ -1932,7 +1932,7 @@ function shareMonthReport() {
   ctx.font = 'bold 100px system-ui,sans-serif';
   ctx.fillText(R(liq), 80, 390);
   ctx.fillStyle='rgba(245,246,248,0.4)'; ctx.font='500 28px system-ui,sans-serif';
-  ctx.fillText('Líquido do mês',80,435);
+  ctx.fillText('Resultado do mês',80,435);
 
   // Divider
   ctx.fillStyle='rgba(255,255,255,0.07)'; ctx.fillRect(80,470,920,1);
@@ -2234,7 +2234,7 @@ function emailMonthReport() {
   const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp;
   const mLabel=fmtMonthYear(monthOffset);
   const subject = `Avenco — Resumo ${mLabel}`;
-  const body = `Resumo financeiro: ${mLabel}\n\nReceita:  ${R(inc)}\nGastos:   ${R(exp)}\nLíquido:  ${R(liq)}\n\nReserva de emergência: ${R(D.emergency.current)}\n\n---\nGerado pelo Avenco`;
+  const body = `Resumo financeiro: ${mLabel}\n\nReceita:   ${R(inc)}\nGastos:    ${R(exp)}\nResultado: ${R(liq)}\n\nReserva de emergência: ${R(D.emergency.current)}\n\n---\nGerado pelo Avenco`;
   window.open(`mailto:${currentUser?.email||''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
 }
 
@@ -2570,8 +2570,8 @@ function buildMonthInsight(inc, exp) {
   if (inc === 0)  return `${R(exp)} em gastos lançados. Nenhuma receita registrada ainda.`;
   const ratio = exp / inc;
   if (liq >= 0) {
-    if (ratio < 0.5) return `Mês excelente: só ${Math.round(ratio*100)}% da receita foi gasta. Você ficou com ${R(liq)} líquido.`;
-    if (ratio < 0.8) return `Mês equilibrado: ${Math.round(ratio*100)}% da receita foi para gastos. Saldo de ${R(liq)}.`;
+    if (ratio < 0.5) return `Mês excelente: só ${Math.round(ratio*100)}% da receita foi gasta. Você ficou com ${R(liq)} de resultado.`;
+    if (ratio < 0.8) return `Mês equilibrado: ${Math.round(ratio*100)}% da receita foi para gastos. Resultado de ${R(liq)}.`;
     return `Mês apertado: ${Math.round(ratio*100)}% da receita foi consumida. Sobraram ${R(liq)}.`;
   }
   return `Atenção: os gastos superaram a receita em ${R(Math.abs(liq))} este mês.`;
@@ -2988,7 +2988,7 @@ function initSettingsExtras() {
 // ══════════════════════════════════════════
 const PEND_CAT_LABELS = { carro:'🚗 Carro', casa:'🏠 Casa', documento:'📄 Documento', financeiro:'💰 Financeiro', pessoal:'👤 Pessoal', outra:'📌 Outra' };
 const PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baixa' };
-let pendFilter = 'abertas';
+var pendFilter = 'abertas';
 
 function renderPendInicio() {
   const el = document.getElementById('pend-inicio-card');
