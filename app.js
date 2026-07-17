@@ -844,6 +844,31 @@ function renderBigDonut(svgId, pillsId, totalElId, items) {
     </div>`).join('');
 }
 
+// Vertical category list: top 5 + Outros, with bar, value and % of total (0–100%)
+function renderCatList(elId, items) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  var total = items.reduce(function(s, it) { return s + it.value; }, 0);
+  if (!total) return;
+  var top = items.slice(0, 5);
+  var rest = items.slice(5);
+  var rows = top.slice();
+  if (rest.length > 0) {
+    var otherVal = rest.reduce(function(s, it) { return s + it.value; }, 0);
+    rows.push({ label: 'Outros', value: otherVal, color: '#9CA3AF' });
+  }
+  el.innerHTML = rows.map(function(it) {
+    var pct = Math.round(it.value / total * 100);
+    return '<div class="cat-row">' +
+      '<span class="cat-row-dot" style="background:' + it.color + '"></span>' +
+      '<span class="cat-row-name">' + it.label + '</span>' +
+      '<div class="cat-row-bar-wrap"><div class="cat-row-bar" style="width:' + pct + '%;background:' + it.color + '"></div></div>' +
+      '<span class="cat-row-val">' + R(it.value) + '</span>' +
+      '<span class="cat-row-pct">' + pct + '%</span>' +
+    '</div>';
+  }).join('');
+}
+
 // ══════════════════════════════════════════
 // RENDER: SEMANA
 // ══════════════════════════════════════════
@@ -1113,6 +1138,7 @@ function renderMes() {
   mExps.forEach(e=>{ catMap[e.category]=(catMap[e.category]||0)+e.amount; });
   const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,color:PALETTE[i%PALETTE.length]}));
   renderBigDonut('cat-donut','cat-legend','cat-donut-total',catItems);
+  renderCatList('cat-legend', catItems);
 
   const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:p.color})).filter(i=>i.value>0);
   renderDonut('plat-donut','plat-legend',platItems);
@@ -1476,15 +1502,15 @@ function renderWeekInsight(off) {
   if (!insight && prevIncEquiv > 30) {
     var incDiff = Math.round(((inc - prevIncEquiv) / prevIncEquiv) * 100);
     if (incDiff >= 15) {
-      insight = {
-        text: 'Receita <b>' + incDiff + '% acima</b> do mesmo período da semana passada.',
-        state: 'pos'
-      };
+      var iTxt = incDiff <= 100
+        ? 'Receita <b>' + incDiff + '% acima</b> do mesmo período da semana passada.'
+        : 'Receita bastante acima do mesmo período da semana passada.';
+      insight = { text: iTxt, state: 'pos' };
     } else if (incDiff <= -15) {
-      insight = {
-        text: 'Receita <b>' + Math.abs(incDiff) + '% abaixo</b> do mesmo período da semana passada.',
-        state: 'warn'
-      };
+      var iTxt = Math.abs(incDiff) <= 100
+        ? 'Receita <b>' + Math.abs(incDiff) + '% abaixo</b> do mesmo período da semana passada.'
+        : 'Receita bastante abaixo do mesmo período da semana passada.';
+      insight = { text: iTxt, state: 'warn' };
     }
   }
 
@@ -1495,10 +1521,10 @@ function renderWeekInsight(off) {
     if (expDiff >= 15 && incDiff2 >= 10) {
       insight = { text: 'Os gastos aumentaram, mas sua receita também cresceu.', state: 'neutral' };
     } else if (expDiff >= 20 && incDiff2 < 10) {
-      insight = {
-        text: 'Gastos <b>' + expDiff + '% acima</b> do mesmo período da semana passada.',
-        state: 'warn'
-      };
+      var eTxt = expDiff <= 100
+        ? 'Gastos <b>' + expDiff + '% acima</b> do mesmo período da semana passada.'
+        : 'Gastos bastante acima do mesmo período da semana passada.';
+      insight = { text: eTxt, state: 'warn' };
     }
   }
 
@@ -1619,12 +1645,18 @@ function renderComparativo(off) {
   function mkDelta(curVal, prevVal, lessIsGood) {
     var diff = curVal - prevVal;
     if (diff === 0) return { text: 'Igual', color: 'var(--text3)' };
-    var pct = prevVal > 0 ? Math.round(Math.abs(diff) / prevVal * 100) : null;
     var isGood = lessIsGood ? diff < 0 : diff > 0;
     var arrow = diff > 0 ? '▲' : '▼';
     var absDiff = Math.abs(diff);
-    var txt = arrow + ' ' + R(diff > 0 ? diff : -diff);
-    if (pct !== null) txt += ' (' + pct + '%)';
+    var txt;
+    if (prevVal <= 0) {
+      txt = arrow + ' ' + R(absDiff);
+    } else {
+      var pct = Math.round(absDiff / prevVal * 100);
+      txt = pct <= 100
+        ? arrow + ' ' + R(absDiff) + ' (' + pct + '%)'
+        : arrow + ' ' + R(absDiff);
+    }
     return { text: txt, color: isGood ? 'var(--green)' : 'var(--red)' };
   }
 
@@ -1655,7 +1687,10 @@ function renderComparativo(off) {
       var pct = Math.round((c.amount - p) / p * 100);
       if (Math.abs(pct) < 12) return null;
       var good = pct < 0;
-      return '<span class="comp-cat-chip ' + (good ? 'gn' : 'rd') + '">' + c.cat + ' ' + (pct > 0 ? '▲' : '▼') + Math.abs(pct) + '%</span>';
+      var badge = Math.abs(pct) <= 100
+        ? (pct > 0 ? '▲' : '▼') + Math.abs(pct) + '%'
+        : (pct > 0 ? '▲ ' : '▼ ') + R(Math.abs(c.amount - p));
+      return '<span class="comp-cat-chip ' + (good ? 'gn' : 'rd') + '">' + c.cat + ' ' + badge + '</span>';
     }).filter(Boolean).slice(0, 3);
     if (chips.length) catChips = '<div class="comp-cats">' + chips.join('') + '</div>';
   }
@@ -1726,15 +1761,15 @@ function renderInsights(off) {
   if (!insight && prevExp > 30) {
     var diffPct = Math.round((exp - prevExp) / prevExp * 100);
     if (diffPct <= -10) {
-      insight = {
-        text: 'Você gastou <b>' + Math.abs(diffPct) + '% menos</b> que no mesmo período do mês passado.',
-        state: 'pos'
-      };
+      var downTxt = Math.abs(diffPct) <= 100
+        ? 'Você gastou <b>' + Math.abs(diffPct) + '% menos</b> que no mesmo período do mês passado.'
+        : 'Você gastou <b>' + R(Math.abs(exp - prevExp)) + ' a menos</b> que no mesmo período do mês passado.';
+      insight = { text: downTxt, state: 'pos' };
     } else if (diffPct >= 15) {
-      insight = {
-        text: 'Seus gastos subiram <b>' + diffPct + '%</b> em relação ao mesmo período do mês passado.',
-        state: 'warn'
-      };
+      var upTxt = diffPct <= 100
+        ? 'Seus gastos subiram <b>' + diffPct + '%</b> em relação ao mesmo período do mês passado.'
+        : 'Seus gastos aumentaram bastante em relação ao mesmo período anterior.';
+      insight = { text: upTxt, state: 'warn' };
     }
   }
 

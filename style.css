@@ -2473,3 +2473,28 @@ textarea.form-input{resize:none;font-family:inherit}
 
 /* 3-line safety cap for all insight rows */
 .insight-row { -webkit-line-clamp: 3; -webkit-box-orient: vertical; display: -webkit-box !important; overflow: hidden; }
+
+/* ══ FIXES: Reserva, Comparativos, Donut, Semana Responsivo ══ */
+
+/* Fix 1: Reserve chip clickable */
+.hc-resv-note { cursor: pointer; }
+.hc-resv-note:hover { opacity: .88; }
+.hc-resv-note:active { opacity: .7; }
+
+/* Fix 3: Cat list — vertical, replaces horizontal pills */
+#cat-legend { display: flex; flex-direction: column; gap: 0; overflow-x: visible; padding: 0 2px 4px; }
+.cat-row { display: grid; grid-template-columns: 12px 1fr 56px 70px 30px; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid var(--border); }
+.cat-row:first-child { border-top: none; }
+.cat-row-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.cat-row-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cat-row-bar-wrap { height: 4px; border-radius: 4px; background: var(--border); overflow: hidden; }
+.cat-row-bar { height: 100%; border-radius: 4px; transition: width .5s cubic-bezier(.35,.07,.24,.95); }
+.cat-row-val { font-size: 12px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.cat-row-pct { font-size: 11px; font-weight: 700; color: var(--text3); text-align: right; white-space: nowrap; }
+
+/* Fix 4: Semana hero — responsive value, no line-break on R$ */
+#hero-semana .hero-val { font-size: clamp(24px, 8vw, 38px); white-space: nowrap; letter-spacing: -1.5px; }
+
+/* Fix 4: Platform cards — scroll-snap so no card is cut off */
+#page-semana .plat-cards { scroll-snap-type: x mandatory; padding-right: 16px; }
+#page-semana .plat-c { scroll-snap-align: start; flex-shrink: 0; }

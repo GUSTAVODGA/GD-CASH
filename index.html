@@ -24,7 +24,7 @@
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=49">
+<link rel="stylesheet" href="style.css?v=50">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -294,7 +294,7 @@
   </div>
 
   <!-- ── RESERVA DO MÊS — shown only when relevant ── -->
-  <div class="hc-resv-note" id="home-resv-note" style="display:none"></div>
+  <div class="hc-resv-note" id="home-resv-note" style="display:none" onclick="switchTab('reserva')" role="button" tabindex="0"></div>
 
   <!-- ── 9. FERRAMENTAS ── -->
   <div class="hc-tools">
@@ -323,13 +323,11 @@
         </svg>
         <span class="hc-tool-lbl">Fixos</span>
       </button>
-      <button class="hc-tool-item" onclick="switchTab('metas')">
+      <button class="hc-tool-item" onclick="switchTab('reserva')">
         <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"/>
-          <circle cx="12" cy="12" r="6"/>
-          <circle cx="12" cy="12" r="2"/>
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
-        <span class="hc-tool-lbl">Metas</span>
+        <span class="hc-tool-lbl">Reserva</span>
       </button>
       <button class="hc-tool-item" onclick="switchTab('conversor')">
         <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -1204,7 +1202,7 @@
   </div>
 </div>
 
-<script src="app.js?v=56"></script>
+<script src="app.js?v=57"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
