@@ -24,7 +24,7 @@
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=44">
+<link rel="stylesheet" href="style.css?v=45">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -736,10 +736,14 @@
     <div id="add-exp-section">
       <div class="dd-section-lbl">Adicionar gasto</div>
       <div class="fi-row" style="margin-bottom:8px">
-        <select class="fi" id="exp-cat" style="flex:1"></select>
+        <select class="fi" id="exp-cat" style="flex:1" onchange="_onExpCatChange()"></select>
         <input class="fi" type="number" id="exp-val" min="0" step="0.01" placeholder="Valor" style="flex:1">
       </div>
       <input class="fi" type="text" id="exp-desc" placeholder="Descrição (ex: Shell, Pizza, Spotify...)" style="margin-bottom:8px">
+      <select class="fi" id="exp-veh-sel" style="display:none;width:100%;margin-bottom:8px"></select>
+      <div id="exp-veh-link-row" style="display:none;margin-bottom:8px">
+        <button type="button" class="btn-text-sm" onclick="_showExpVehManual()">🚗 Vincular a veículo</button>
+      </div>
       <button class="btn btn-primary" onclick="addExpense()">+ Adicionar gasto</button>
     </div>
 
@@ -802,13 +806,19 @@
     </div>
     <div class="form-group">
       <label class="form-label">Categoria</label>
-      <select class="form-select" id="pend-cat-sel">
+      <select class="form-select" id="pend-cat-sel" onchange="_onPendCatChange()">
         <option value="carro">🚗 Carro</option>
         <option value="casa">🏠 Casa</option>
         <option value="documento">📄 Documento</option>
         <option value="financeiro">💰 Financeiro</option>
         <option value="pessoal" selected>👤 Pessoal</option>
         <option value="outra">📌 Outra</option>
+      </select>
+    </div>
+    <div class="form-group" id="pend-veh-row" style="display:none">
+      <label class="form-label">Veículo (opcional)</label>
+      <select class="form-select" id="pend-veh-sel">
+        <option value="">— Nenhum —</option>
       </select>
     </div>
     <div class="form-group">
@@ -1178,7 +1188,7 @@
   </div>
 </div>
 
-<script src="app.js?v=52"></script>
+<script src="app.js?v=53"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

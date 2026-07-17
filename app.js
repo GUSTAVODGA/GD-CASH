@@ -371,6 +371,7 @@ function openDayDetail(idx) {
   selDayIdx = idx;
   document.querySelectorAll('#days-grid .day-btn').forEach((btn, i) => btn.classList.toggle('sel', i === idx));
   populateExpCatSel();
+  _onExpCatChange();
   renderDayDetail();
   openOverlay('modal-day-detail');
 }
@@ -930,19 +931,93 @@ function populateExpCatSel() {
   document.getElementById('exp-cat').innerHTML=D.expCats.map(c=>`<option value="${c}">${c}</option>`).join('');
 }
 
+function _isVehCat(cat) {
+  if (!cat) return false;
+  const c = cat.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return /gasolina|combustiv|manutenc|estacion|pedagio|seguro|ipva|carro|oficina|revisao|pneu|troca|lubrific/.test(c);
+}
+
+function _populateExpVehSel() {
+  const sel = document.getElementById('exp-veh-sel');
+  if (!sel) return;
+  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado');
+  sel.innerHTML = '<option value="">— Veículo (opcional) —</option>' + vehs.map(v => `<option value="${v.id}">${escHtml(v.name)}</option>`).join('');
+}
+
+function _onExpCatChange() {
+  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado');
+  const vehSel   = document.getElementById('exp-veh-sel');
+  const linkRow  = document.getElementById('exp-veh-link-row');
+  if (!vehSel || vehs.length === 0) { if (vehSel) vehSel.style.display = 'none'; if (linkRow) linkRow.style.display = 'none'; return; }
+  const cat = document.getElementById('exp-cat')?.value || '';
+  if (_isVehCat(cat)) {
+    _populateExpVehSel();
+    vehSel.style.display = '';
+    if (linkRow) linkRow.style.display = 'none';
+  } else {
+    vehSel.style.display = 'none';
+    if (linkRow) linkRow.style.display = '';
+  }
+}
+
+function _showExpVehManual() {
+  _populateExpVehSel();
+  const vehSel  = document.getElementById('exp-veh-sel');
+  const linkRow = document.getElementById('exp-veh-link-row');
+  if (vehSel) vehSel.style.display = '';
+  if (linkRow) linkRow.style.display = 'none';
+}
+
+function _populatePendVehSel() {
+  const sel = document.getElementById('pend-veh-sel');
+  if (!sel) return;
+  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado');
+  sel.innerHTML = '<option value="">— Nenhum —</option>' + vehs.map(v => `<option value="${v.id}">${escHtml(v.name)}</option>`).join('');
+}
+
+function _onPendCatChange() {
+  const cat   = document.getElementById('pend-cat-sel')?.value || '';
+  const vehs  = (D.vehicles || []).filter(v => v.status !== 'arquivado');
+  const vehRow = document.getElementById('pend-veh-row');
+  if (!vehRow) return;
+  if (vehs.length === 0 || cat !== 'carro') {
+    vehRow.style.display = 'none';
+  } else {
+    _populatePendVehSel();
+    vehRow.style.display = '';
+  }
+}
+
 function addExpense() {
   const date=selDate(), cat=document.getElementById('exp-cat').value;
   const val=parseFloat(document.getElementById('exp-val').value);
   const desc=document.getElementById('exp-desc').value.trim();
   if(!val||val<=0){alert('Informe um valor válido.');return;}
-  D.expenses.push({id:uid(),date,category:cat,amount:val,description:desc});
+  const vehSel = document.getElementById('exp-veh-sel');
+  const vehicleId = (vehSel && vehSel.style.display !== 'none') ? (vehSel.value || null) : null;
+  const expObj = {id:uid(),date,category:cat,amount:val,description:desc};
+  if (vehicleId) expObj.vehicleId = vehicleId;
+  D.expenses.push(expObj);
+  if (vehicleId) {
+    const veh = (D.vehicles||[]).find(v => v.id === vehicleId);
+    if (veh) { if (!veh.linkedExpenses) veh.linkedExpenses=[]; if (!veh.linkedExpenses.includes(expObj.id)) veh.linkedExpenses.push(expObj.id); }
+  }
   document.getElementById('exp-val').value='';
   document.getElementById('exp-desc').value='';
   haptic(10); save(); refreshAfterDayEdit();
   notifyRegistered(val, desc || cat, cat);
 }
 
-function deleteExpense(id) { D.expenses=D.expenses.filter(e=>e.id!==id); save(); refreshAfterDayEdit(); }
+function deleteExpense(id) {
+  const exp = D.expenses.find(e => e.id === id);
+  if (exp?.vehicleId) {
+    const veh = (D.vehicles||[]).find(v => v.id === exp.vehicleId);
+    if (veh) veh.linkedExpenses = (veh.linkedExpenses||[]).filter(eid => eid !== id);
+  }
+  D.expenses=D.expenses.filter(e=>e.id!==id);
+  save();
+  refreshAfterDayEdit();
+}
 
 // ══════════════════════════════════════════
 // RENDER: MÊS
@@ -2423,8 +2498,10 @@ function flyNumber(amount, fromEl) {
 }
 
 // ══════════════════════════════════════════
-// PATRIMÔNIO — VEÍCULOS (module state — must be before firebase init)
+// MODULE CONSTANTS — must be before firebase init (avoids TDZ when init throws)
 // ══════════════════════════════════════════
+var PEND_CAT_LABELS  = { carro:'🚗 Carro', casa:'🏠 Casa', documento:'📄 Documento', financeiro:'💰 Financeiro', pessoal:'👤 Pessoal', outra:'📌 Outra' };
+var PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baixa' };
 var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
 var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
 var _vehDetailId = null;
@@ -2432,6 +2509,16 @@ var _vehEventTarget = null;
 var _vehLinkExpTarget = null;
 var _vehLinkPendTarget = null;
 var _vehStatusTarget = null;
+var _pendVehicleId = null;
+var qaType = 'rec';
+var CAT_KEYWORDS = {
+  'Alimentação': ['mercado', 'supermercado', 'ifood', 'rappi', 'pizza', 'burger', 'restaurante', 'lanche', 'comida', 'padaria', 'açaí'],
+  'Transporte': ['uber', 'gasolina', '99', 'combustível', 'posto', 'estacionamento', 'ônibus', 'metrô', 'taxi'],
+  'Moradia': ['aluguel', 'condomínio', 'água', 'luz', 'energia', 'gás', 'internet', 'net'],
+  'Lazer': ['cinema', 'netflix', 'spotify', 'show', 'festa', 'bar', 'balada', 'jogo', 'steam'],
+  'Saúde': ['farmácia', 'remédio', 'médico', 'academia', 'plano', 'consulta', 'dentista'],
+  'Serviços': ['salão', 'barbearia', 'lavanderia', 'conserto', 'manutenção'],
+};
 
 // ══════════════════════════════════════════
 // INIT
@@ -2919,16 +3006,6 @@ function toggleDacc(i) {
 // ══════════════════════════════════════════
 // QUICK ADD SHEET
 // ══════════════════════════════════════════
-let qaType = 'rec';
-
-const CAT_KEYWORDS = {
-  'Alimentação': ['mercado', 'supermercado', 'ifood', 'rappi', 'pizza', 'burger', 'restaurante', 'lanche', 'comida', 'padaria', 'açaí'],
-  'Transporte': ['uber', 'gasolina', '99', 'combustível', 'posto', 'estacionamento', 'ônibus', 'metrô', 'taxi'],
-  'Moradia': ['aluguel', 'condomínio', 'água', 'luz', 'energia', 'gás', 'internet', 'net'],
-  'Lazer': ['cinema', 'netflix', 'spotify', 'show', 'festa', 'bar', 'balada', 'jogo', 'steam'],
-  'Saúde': ['farmácia', 'remédio', 'médico', 'academia', 'plano', 'consulta', 'dentista'],
-  'Serviços': ['salão', 'barbearia', 'lavanderia', 'conserto', 'manutenção'],
-};
 
 function qaSuggestCat() {
   const desc = document.getElementById('qa-desc')?.value?.toLowerCase() || '';
@@ -3011,7 +3088,16 @@ function qaConfirm() {
     }
   } else {
     const cat = document.getElementById('qa-cat-sel')?.value || (D.expCats[0] || 'Outros');
-    D.expenses.push({ id: uid(), date, category: cat, description: desc || cat, amount: amt });
+    const thisVehicleId = _pendVehicleId;
+    _pendVehicleId = null;
+    const expId = uid();
+    const expObj = { id: expId, date, category: cat, description: desc || cat, amount: amt };
+    if (thisVehicleId) expObj.vehicleId = thisVehicleId;
+    D.expenses.push(expObj);
+    if (thisVehicleId) {
+      const veh = (D.vehicles||[]).find(v => v.id === thisVehicleId);
+      if (veh) { if (!veh.linkedExpenses) veh.linkedExpenses=[]; if (!veh.linkedExpenses.includes(expId)) veh.linkedExpenses.push(expId); }
+    }
     save();
     checkBudgetAlerts(cat);
     notifyRegistered(amt, desc || cat, cat);
@@ -3135,8 +3221,6 @@ function initSettingsExtras() {
 // ══════════════════════════════════════════
 // PENDÊNCIAS
 // ══════════════════════════════════════════
-const PEND_CAT_LABELS = { carro:'🚗 Carro', casa:'🏠 Casa', documento:'📄 Documento', financeiro:'💰 Financeiro', pessoal:'👤 Pessoal', outra:'📌 Outra' };
-const PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baixa' };
 var pendFilter = 'abertas';
 
 function renderPendInicio() {
@@ -3257,6 +3341,17 @@ function openPendenciaModal(id) {
   modal.querySelector('#pend-deadline').value = p ? (p.deadline || '') : '';
   modal.querySelector('#pend-value').value = p ? (p.estimatedValue || '') : '';
   modal.querySelector('#pend-note').value = p ? (p.note || '') : '';
+  _onPendCatChange();
+  if (p?.vehicleId) {
+    const vehRow = document.getElementById('pend-veh-row');
+    if (vehRow) vehRow.style.display = '';
+    _populatePendVehSel();
+    const vehSel = document.getElementById('pend-veh-sel');
+    if (vehSel) vehSel.value = p.vehicleId;
+  } else {
+    const vehSel = document.getElementById('pend-veh-sel');
+    if (vehSel) vehSel.value = '';
+  }
   openOverlay('modal-pendencia');
 }
 
@@ -3270,12 +3365,35 @@ function savePendencia() {
   const valRaw = parseFloat(document.getElementById('pend-value')?.value);
   const estimatedValue = valRaw > 0 ? valRaw : null;
   const note = document.getElementById('pend-note')?.value?.trim() || '';
+  const pendVehRow = document.getElementById('pend-veh-row');
+  const vehicleId = (pendVehRow && pendVehRow.style.display !== 'none')
+    ? (document.getElementById('pend-veh-sel')?.value || null) : null;
   if (!D.pendencias) D.pendencias = [];
   if (id) {
     const idx = D.pendencias.findIndex(p => p.id === id);
-    if (idx >= 0) D.pendencias[idx] = { ...D.pendencias[idx], title, category: cat, priority: prio, deadline, estimatedValue, note };
+    if (idx >= 0) {
+      const old = D.pendencias[idx];
+      const oldVehId = old.vehicleId || null;
+      if (oldVehId && oldVehId !== vehicleId) {
+        const oldVeh = (D.vehicles||[]).find(v => v.id === oldVehId);
+        if (oldVeh) oldVeh.linkedPendencias = (oldVeh.linkedPendencias||[]).filter(pid => pid !== id);
+      }
+      const updated = { ...old, title, category: cat, priority: prio, deadline, estimatedValue, note };
+      if (vehicleId) updated.vehicleId = vehicleId; else delete updated.vehicleId;
+      D.pendencias[idx] = updated;
+      if (vehicleId && vehicleId !== oldVehId) {
+        const newVeh = (D.vehicles||[]).find(v => v.id === vehicleId);
+        if (newVeh) { if (!newVeh.linkedPendencias) newVeh.linkedPendencias=[]; if (!newVeh.linkedPendencias.includes(id)) newVeh.linkedPendencias.push(id); }
+      }
+    }
   } else {
-    D.pendencias.push({ id: uid(), title, category: cat, priority: prio, deadline, estimatedValue, note, status: 'aberta', createdAt: todayStr() });
+    const pObj = { id: uid(), title, category: cat, priority: prio, deadline, estimatedValue, note, status: 'aberta', createdAt: todayStr() };
+    if (vehicleId) pObj.vehicleId = vehicleId;
+    D.pendencias.push(pObj);
+    if (vehicleId) {
+      const veh = (D.vehicles||[]).find(v => v.id === vehicleId);
+      if (veh) { if (!veh.linkedPendencias) veh.linkedPendencias=[]; if (!veh.linkedPendencias.includes(pObj.id)) veh.linkedPendencias.push(pObj.id); }
+    }
   }
   save();
   closeOverlay('modal-pendencia');
@@ -3304,6 +3422,7 @@ function completePendencia(id) {
 }
 
 function openPendenciaAsExpense(p) {
+  _pendVehicleId = p.vehicleId || null;
   const platSel = document.getElementById('qa-plat-sel');
   if (platSel) platSel.innerHTML = D.platforms.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('');
   const catSel = document.getElementById('qa-cat-sel');
