@@ -164,7 +164,7 @@ const TAB_HELP = {
   mes: {
     icon: '📊',
     title: 'Aba Mês',
-    text: 'Visão completa do mês: líquido, gráfico de gastos por categoria, receita por plataforma e histórico dos últimos 6 meses. Toque no mês para navegar.',
+    text: 'Visão completa do mês: resultado, gráfico de gastos por categoria, receita por plataforma e histórico dos últimos 6 meses. Toque no mês para navegar.',
   },
   fixos: {
     icon: '🔁',
@@ -323,6 +323,7 @@ function renderInicio() {
 
   renderRecentTx();
   renderInicioCards();
+  renderHomeNew();
 }
 
 function renderRecentTx() {
@@ -1200,7 +1201,7 @@ function buildMonthSummary(off) {
   const parts = [];
 
   if (!isPast && !hasEnoughData) {
-    parts.push(`Mês começando — ${daysWithData} dia${daysWithData!==1?'s':''} registrado${daysWithData!==1?'s':''}. Saldo até agora: <b>${R(liq)}</b>. Continue registrando pra ter uma análise completa.`);
+    parts.push(`Mês começando — ${daysWithData} dia${daysWithData!==1?'s':''} registrado${daysWithData!==1?'s':''}. Resultado até agora: <b>${R(liq)}</b>. Continue registrando pra ter uma análise completa.`);
     return parts[0];
   }
 
@@ -1210,9 +1211,9 @@ function buildMonthSummary(off) {
     else if (liq>0 && savingsRate>=25)
       parts.push(`Boa disciplina: você guardou <b>${savingsRate}%</b> da receita esse mês.`);
     else if (liq>0 && incChange!==null && incChange<-10)
-      parts.push(`Receita caiu <b>${Math.abs(incChange)}%</b>, mas o saldo fechou positivo em <b>${R(liq)}</b>.`);
+      parts.push(`Receita caiu <b>${Math.abs(incChange)}%</b>, mas o resultado fechou positivo em <b>${R(liq)}</b>.`);
     else if (liq>0)
-      parts.push(`Mês fechado no azul: <b>${R(liq)}</b> de saldo positivo.`);
+      parts.push(`Mês fechado no azul: <b>${R(liq)}</b> de resultado positivo.`);
     else
       parts.push(`Mês pesado — gastos superaram a receita em <b>${R(Math.abs(liq))}</b>. Acontece, o importante é saber.`);
     if (topCat && topCatPct>=30)
@@ -1227,7 +1228,7 @@ function buildMonthSummary(off) {
     else if (incChange!==null && inc>=(prevInc*(pctPassed/100)*1.15))
       parts.push(`Ritmo acima do esperado — mais forte que no mesmo ponto do mês passado.`);
     else
-      parts.push(`<b>${pctPassed}%</b> do mês passou. Saldo atual: <b>${R(liq)}</b>.`);
+      parts.push(`<b>${pctPassed}%</b> do mês passou. Resultado atual: <b>${R(liq)}</b>.`);
     if (topCat && topCatPct>=40)
       parts.push(`<b>${topCat[0]}</b> está pesando bastante: ${topCatPct}% dos gastos do mês.`);
     if (incChange!==null && incChange<-20 && pctPassed>40)
@@ -1931,7 +1932,7 @@ function shareMonthReport() {
   ctx.font = 'bold 100px system-ui,sans-serif';
   ctx.fillText(R(liq), 80, 390);
   ctx.fillStyle='rgba(245,246,248,0.4)'; ctx.font='500 28px system-ui,sans-serif';
-  ctx.fillText('Líquido do mês',80,435);
+  ctx.fillText('Resultado do mês',80,435);
 
   // Divider
   ctx.fillStyle='rgba(255,255,255,0.07)'; ctx.fillRect(80,470,920,1);
@@ -2233,7 +2234,7 @@ function emailMonthReport() {
   const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp;
   const mLabel=fmtMonthYear(monthOffset);
   const subject = `Avenco — Resumo ${mLabel}`;
-  const body = `Resumo financeiro: ${mLabel}\n\nReceita:  ${R(inc)}\nGastos:   ${R(exp)}\nLíquido:  ${R(liq)}\n\nReserva de emergência: ${R(D.emergency.current)}\n\n---\nGerado pelo Avenco`;
+  const body = `Resumo financeiro: ${mLabel}\n\nReceita:   ${R(inc)}\nGastos:    ${R(exp)}\nResultado: ${R(liq)}\n\nReserva de emergência: ${R(D.emergency.current)}\n\n---\nGerado pelo Avenco`;
   window.open(`mailto:${currentUser?.email||''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
 }
 
@@ -2415,6 +2416,258 @@ function renderInicioCards() {
   if (greet) { greet.textContent = 'Olá, '; const b = document.createElement('b'); b.textContent = nome; greet.appendChild(b); }
 
   renderPendInicio();
+}
+
+// ══════════════════════════════════════════
+// HOME SCREEN — redesign
+// ══════════════════════════════════════════
+function renderHomeNew() {
+  // 1. Hero — use real monthOffset so period matches user's selection
+  const hour = new Date().getHours();
+  const saudacao = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  const nome = currentUser?.displayName?.split(' ')[0] || '';
+  const greetEl = document.getElementById('home-greeting');
+  if (greetEl) greetEl.textContent = saudacao + (nome ? ', ' + nome : '');
+
+  const monthEl = document.getElementById('home-month');
+  if (monthEl) {
+    const d = new Date(); d.setMonth(d.getMonth() + monthOffset, 1);
+    monthEl.textContent = d.toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
+  }
+
+  const inc = sumMonthIncome(monthOffset), exp = sumMonthExpenses(monthOffset), liq = inc - exp;
+
+  const balEl = document.getElementById('home-balance');
+  if (balEl) {
+    balEl.className = 'hc-balance ' + (liq >= 0 ? 'pos' : 'neg');
+    if (inc === 0 && exp === 0) { balEl.textContent = '—'; }
+    else animCount(balEl, liq, 700);
+  }
+  const incEl = document.getElementById('home-inc');
+  const expEl = document.getElementById('home-exp');
+  if (incEl) incEl.textContent = inc === 0 ? '—' : R(inc);
+  if (expEl) expEl.textContent = exp === 0 ? '—' : R(exp);
+
+  // 2. Chart
+  setTimeout(drawHomeChart, 40);
+
+  // 3. Insight — show only when there's actual data
+  const insightWrap = document.getElementById('home-insight');
+  const insightText = document.getElementById('home-insight-text');
+  if (insightWrap && insightText) {
+    if (inc > 0 || exp > 0) {
+      insightWrap.style.display = '';
+      insightText.textContent = buildMonthInsight(inc, exp);
+    } else {
+      insightWrap.style.display = 'none';
+    }
+  }
+
+  // 4. Timeline — pendencias with deadlines
+  const hoje = todayStr();
+  const upcoming = (D.pendencias || [])
+    .filter(p => p.status === 'aberta' && p.deadline)
+    .sort((a, b) => a.deadline.localeCompare(b.deadline))
+    .slice(0, 4);
+
+  const tlWrap = document.getElementById('home-timeline-wrap');
+  const tlEl   = document.getElementById('home-timeline');
+  if (tlWrap && tlEl) {
+    if (upcoming.length > 0) {
+      tlWrap.style.display = '';
+      tlEl.innerHTML = upcoming.map(p => {
+        const isOv  = p.deadline < hoje;
+        const isTod = p.deadline === hoje;
+        const dt = parseDate(p.deadline).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'});
+        const dateLabel = isOv ? 'Vencida' : isTod ? 'Hoje' : dt;
+        const dayNum = isOv ? '!' : isTod ? '◆' : parseDate(p.deadline).getDate();
+        const badgeCls = p.priority === 'alta' ? 'hc-tl-badge--alta' : p.priority === 'media' ? 'hc-tl-badge--media' : 'hc-tl-badge--baixa';
+        const dateCls = isOv ? ' hc-tl-overdue' : isTod ? ' hc-tl-today' : '';
+        return `<div class="hc-tl-item">
+          <div class="hc-tl-badge ${badgeCls}">${dayNum}</div>
+          <div class="hc-tl-info">
+            <div class="hc-tl-name">${p.title}</div>
+            <div class="hc-tl-date-label${dateCls}">${dateLabel}</div>
+          </div>
+          <div class="hc-tl-right">${p.estimatedValue ? `<div class="hc-tl-amount">${R(p.estimatedValue)}</div>` : ''}</div>
+        </div>`;
+      }).join('');
+    } else {
+      tlWrap.style.display = 'none';
+    }
+  }
+
+  // 5. Meta atual
+  const activeGoals = (D.goals || []).filter(g => !g.completed);
+  const goalSection = document.getElementById('home-goal-section');
+  const goalEl      = document.getElementById('home-goal');
+  if (goalSection && goalEl) {
+    if (activeGoals.length > 0) {
+      const g = activeGoals[0];
+      const saved   = g.saved   || 0;
+      const target  = g.target  || 0;
+      const pct     = target > 0 ? Math.min(100, Math.round(saved / target * 100)) : 0;
+      const remains = Math.max(0, target - saved);
+      goalSection.style.display = '';
+      goalEl.innerHTML = `
+        <div class="hc-goal-name">${g.name || 'Meta'}</div>
+        <div class="hc-goal-row">
+          <div class="hc-goal-saved">${R(saved)} guardados</div>
+          <div class="hc-goal-pct-big">${pct}%</div>
+        </div>
+        <div class="hc-goal-bar-track">
+          <div class="hc-goal-bar-fill" style="width:${pct}%"></div>
+        </div>
+        <div class="hc-goal-meta">
+          <span>Meta: ${R(target)}</span>
+          <span>Faltam ${R(remains)}</span>
+        </div>`;
+    } else {
+      goalSection.style.display = 'none';
+    }
+  }
+
+  // 6. Pendências relevantes (vencidas ou alta prioridade)
+  const relevantPend = (D.pendencias || [])
+    .filter(p => p.status === 'aberta' && ((p.deadline && p.deadline <= hoje) || p.priority === 'alta'))
+    .sort((a, b) => {
+      const aS = (a.deadline && a.deadline < hoje) ? 0 : a.priority === 'alta' ? 1 : 2;
+      const bS = (b.deadline && b.deadline < hoje) ? 0 : b.priority === 'alta' ? 1 : 2;
+      return aS - bS || (a.deadline || '9999').localeCompare(b.deadline || '9999');
+    })
+    .slice(0, 5);
+
+  const pendSection = document.getElementById('home-pend-section');
+  const pendListEl  = document.getElementById('home-pend-list');
+  if (pendSection && pendListEl) {
+    if (relevantPend.length > 0) {
+      pendSection.style.display = '';
+      pendListEl.innerHTML = relevantPend.map(p => {
+        const isOv  = p.deadline && p.deadline < hoje;
+        const isTod = p.deadline === hoje;
+        const dt    = p.deadline ? parseDate(p.deadline).toLocaleDateString('pt-BR', {day:'2-digit',month:'short'}) : '';
+        const barCls = p.priority === 'alta' ? 'hc-pend-bar--alta' : p.priority === 'media' ? 'hc-pend-bar--media' : 'hc-pend-bar--baixa';
+        const dateCls = isOv ? ' hc-pend-overdue' : isTod ? ' hc-pend-today' : '';
+        return `<div class="hc-pend-item" onclick="switchTab('pendencias')">
+          <div class="hc-pend-bar ${barCls}"></div>
+          <div class="hc-pend-info">
+            <div class="hc-pend-name">${p.title}</div>
+            ${dt ? `<div class="hc-pend-date${dateCls}">${isOv?'Venceu ':''}${dt}</div>` : ''}
+          </div>
+          ${p.estimatedValue ? `<div class="hc-pend-amount">${R(p.estimatedValue)}</div>` : ''}
+        </div>`;
+      }).join('');
+    } else {
+      pendSection.style.display = 'none';
+    }
+  }
+}
+
+function buildMonthInsight(inc, exp) {
+  const liq = inc - exp;
+  if (inc === 0 && exp === 0) return 'Nenhuma movimentação registrada este mês. Comece lançando sua primeira receita ou gasto.';
+  if (exp === 0)  return `Receita de ${R(inc)} registrada — nenhum gasto lançado até agora.`;
+  if (inc === 0)  return `${R(exp)} em gastos lançados. Nenhuma receita registrada ainda.`;
+  const ratio = exp / inc;
+  if (liq >= 0) {
+    if (ratio < 0.5) return `Mês excelente: só ${Math.round(ratio*100)}% da receita foi gasta. Você ficou com ${R(liq)} de resultado.`;
+    if (ratio < 0.8) return `Mês equilibrado: ${Math.round(ratio*100)}% da receita foi para gastos. Resultado de ${R(liq)}.`;
+    return `Mês apertado: ${Math.round(ratio*100)}% da receita foi consumida. Sobraram ${R(liq)}.`;
+  }
+  return `Atenção: os gastos superaram a receita em ${R(Math.abs(liq))} este mês.`;
+}
+
+function drawHomeChart() {
+  const canvas  = document.getElementById('home-chart');
+  const emptyEl = document.getElementById('home-chart-empty');
+  const legendEl = document.getElementById('home-chart-legend');
+  if (!canvas) return;
+
+  const months = [];
+  for (let i = -5; i <= 0; i++) {
+    const d = new Date(); d.setMonth(d.getMonth() + i, 1);
+    const lbl = d.toLocaleDateString('pt-BR', {month: 'short'}).replace('.', '');
+    months.push({ lbl, inc: sumMonthIncome(i), exp: sumMonthExpenses(i) });
+  }
+
+  const hasData = months.some(m => m.inc > 0 || m.exp > 0);
+
+  // Empty state
+  if (!hasData) {
+    canvas.style.display  = 'none';
+    if (emptyEl)  emptyEl.style.display  = '';
+    if (legendEl) legendEl.style.display = 'none';
+    return;
+  }
+
+  canvas.style.display  = '';
+  if (emptyEl)  emptyEl.style.display  = 'none';
+  if (legendEl) legendEl.style.display = '';
+
+  if (!canvas.offsetWidth) return;
+  const dpr = window.devicePixelRatio || 1;
+  const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
+  canvas.width = cw * dpr; canvas.height = ch * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const maxVal = Math.max(...months.flatMap(m => [m.inc, m.exp]), 1);
+  const padT = 6, padB = 22, padL = 0, padR = 0;
+  const chartW = cw - padL - padR, chartH = ch - padT - padB;
+  const groupW = chartW / months.length;
+  const barW   = Math.min(groupW * 0.27, 15);
+  const barGap = groupW * 0.055;
+
+  const isDark    = document.documentElement.dataset.theme === 'dark';
+  const incColor  = isDark ? '#5B8AF5' : '#1D4ED8';
+  const expColor  = isDark ? 'rgba(91,138,245,.38)' : '#93C5FD';
+  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(12,18,64,.06)';
+  const lblColor  = isDark ? 'rgba(232,237,255,.35)' : 'rgba(12,18,64,.33)';
+
+  ctx.clearRect(0, 0, cw, ch);
+
+  // grid lines
+  for (let i = 1; i <= 3; i++) {
+    const y = padT + (chartH / 4) * i;
+    ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(chartW, y); ctx.stroke();
+  }
+
+  months.forEach((m, i) => {
+    const cx   = padL + (i + 0.5) * groupW;
+    const incH = Math.max((m.inc / maxVal) * chartH, 2);
+    const expH = Math.max((m.exp / maxVal) * chartH, 2);
+
+    ctx.fillStyle = incColor; ctx.globalAlpha = 0.82;
+    homeRoundRect(ctx, cx - barW - barGap / 2, padT + chartH - incH, barW, incH, 3);
+    ctx.fill();
+
+    ctx.fillStyle = expColor; ctx.globalAlpha = 0.66;
+    homeRoundRect(ctx, cx + barGap / 2, padT + chartH - expH, barW, expH, 3);
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = lblColor;
+    ctx.font = `600 10px Inter, -apple-system, sans-serif`;
+    ctx.textAlign = 'center';
+    const lbl = m.lbl.charAt(0).toUpperCase() + m.lbl.slice(1, 3);
+    ctx.fillText(lbl, cx, padT + chartH + 16);
+  });
+}
+
+function homeRoundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, h / 2, w / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
 }
 
 // ══════════════════════════════════════════
@@ -2735,7 +2988,7 @@ function initSettingsExtras() {
 // ══════════════════════════════════════════
 const PEND_CAT_LABELS = { carro:'🚗 Carro', casa:'🏠 Casa', documento:'📄 Documento', financeiro:'💰 Financeiro', pessoal:'👤 Pessoal', outra:'📌 Outra' };
 const PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baixa' };
-let pendFilter = 'abertas';
+var pendFilter = 'abertas';
 
 function renderPendInicio() {
   const el = document.getElementById('pend-inicio-card');

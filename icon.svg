@@ -1,14 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- App icon background: squircle matching iOS spec -->
-  <rect width="512" height="512" rx="115" fill="#0A0A0A"/>
-  <!-- Upper chevron -->
-  <path d="M 154 258 L 256 94 L 358 258"
-    stroke="#ffd60a" stroke-width="62"
-    stroke-linecap="round" stroke-linejoin="round"
-    fill="none"/>
-  <!-- Lower chevron -->
-  <path d="M 154 418 L 256 254 L 358 418"
-    stroke="#ffd60a" stroke-width="62"
-    stroke-linecap="round" stroke-linejoin="round"
-    fill="none"/>
+  <defs>
+    <!-- Deep navy → cobalt → bright blue: full vertical depth -->
+    <linearGradient id="bg" x1="0" y1="512" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#0C2494"/>
+      <stop offset="55%"  stop-color="#1D4ED8"/>
+      <stop offset="100%" stop-color="#4A7AF5"/>
+    </linearGradient>
+    <!-- Specular highlight: polished-glass feel, top-center glow -->
+    <radialGradient id="shine" cx="50%" cy="-5%" r="65%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Edge vignette: subtle darkening gives depth and pop -->
+    <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+      <stop offset="0%"   stop-color="#000000" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.22"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <rect width="512" height="512" fill="url(#shine)"/>
+  <rect width="512" height="512" fill="url(#vignette)"/>
+
+  <!-- Near-equilateral triangle (H/W ≈ √3/2), optically centered
+       Width 316 px  |  Height 272 px  |  Geometric center y ≈ 254 -->
+  <path d="M256,118 L98,390 L414,390 Z"
+    fill="none"
+    stroke="#FFFFFF"
+    stroke-opacity="0.96"
+    stroke-width="34"
+    stroke-linejoin="round"
+    stroke-linecap="round"/>
 </svg>
