@@ -22,13 +22,13 @@
   <rect width="512" height="512" fill="url(#shine)"/>
   <rect width="512" height="512" fill="url(#vignette)"/>
 
-  <!-- Near-equilateral triangle (H/W ≈ √3/2), optically centered
-       Width 316 px  |  Height 272 px  |  Geometric center y ≈ 254 -->
-  <path d="M256,118 L98,390 L414,390 Z"
+  <!-- Triangle ~50% of icon width — refined, breathing room on all sides
+       Vertex-to-vertex 240 px wide | Height 208 px | Centroid y ≈ 260 -->
+  <path d="M256,122 L136,330 L376,330 Z"
     fill="none"
     stroke="#FFFFFF"
     stroke-opacity="0.96"
-    stroke-width="34"
+    stroke-width="26"
     stroke-linejoin="round"
     stroke-linecap="round"/>
 </svg>
