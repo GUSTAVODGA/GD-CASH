@@ -24,7 +24,7 @@
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=43">
+<link rel="stylesheet" href="style.css?v=44">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -771,6 +771,22 @@
       <button class="more-item" onclick="switchMore('pendencias')">
         <span class="more-icon">📋</span><span>Pendências</span>
       </button>
+      <button class="more-item" onclick="closeOverlay('modal-more');openOverlay('modal-patrimonio')">
+        <span class="more-icon">🚗</span><span>Patrimônio</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Patrimônio -->
+<div class="overlay" id="modal-patrimonio">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Patrimônio</div>
+    <div class="more-grid">
+      <button class="more-item" onclick="closeOverlay('modal-patrimonio');setTimeout(()=>switchTab('patrimonio'),50)">
+        <span class="more-icon">🚗</span><span>Veículos</span>
+      </button>
     </div>
   </div>
 </div>
@@ -1048,6 +1064,106 @@
   </div>
 </div>
 
+<!-- ════ PATRIMÔNIO — VEÍCULOS ════ -->
+<section class="page" id="page-patrimonio">
+  <div class="page-header-row" style="padding:0 20px;margin-top:12px">
+    <div class="page-header-title">Veículos</div>
+    <button class="veh-add-btn" id="veh-add-btn" onclick="openVehForm()">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Novo
+    </button>
+  </div>
+  <div id="veh-list-view" style="padding:0 16px">
+    <div id="veh-list" class="veh-list"></div>
+  </div>
+  <div id="veh-detail-view" style="display:none;padding:0 16px">
+    <div id="veh-detail-cont"></div>
+  </div>
+  <div id="veh-form-view" style="display:none;padding:0 16px">
+    <div id="veh-form-cont"></div>
+  </div>
+</section>
+
+<!-- Apontamento de veículo -->
+<div class="overlay" id="modal-veh-event">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="veh-event-modal-title">Apontamento</div>
+    <div class="form-group">
+      <label class="form-label">Tipo</label>
+      <select class="form-input" id="ve-type" onchange="_vehEventTypeToggle()">
+        <option value="evento">Evento / manutenção</option>
+        <option value="km_update">Atualizar quilometragem</option>
+      </select>
+    </div>
+    <div class="form-group" id="ve-note-row">
+      <label class="form-label">Descrição</label>
+      <input class="form-input" id="ve-note" type="text" placeholder="Ex: Troca de óleo, revisão…">
+    </div>
+    <div class="form-group" id="ve-km-row" style="display:none">
+      <label class="form-label">Quilometragem atual</label>
+      <input class="form-input" id="ve-km" type="number" min="0" placeholder="Ex: 52000">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Valor (opcional)</label>
+      <input class="form-input" id="ve-amount" type="number" min="0" step="0.01" placeholder="0,00">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Data</label>
+      <input class="form-input" id="ve-date" type="date">
+    </div>
+    <button class="btn btn-primary" onclick="saveVehEvent()">Salvar</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-veh-event')">Cancelar</button>
+  </div>
+</div>
+
+<!-- Vincular despesa -->
+<div class="overlay" id="modal-veh-link-exp">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Vincular despesa</div>
+    <div class="form-group">
+      <label class="form-label">Selecione a despesa</label>
+      <select class="form-input" id="vle-exp-sel" size="6" style="height:auto;padding:4px"></select>
+    </div>
+    <button class="btn btn-primary" onclick="saveVehLinkExp()">Vincular</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-veh-link-exp')">Cancelar</button>
+  </div>
+</div>
+
+<!-- Vincular pendência -->
+<div class="overlay" id="modal-veh-link-pend">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Vincular pendência</div>
+    <div class="form-group">
+      <label class="form-label">Selecione a pendência</label>
+      <select class="form-input" id="vlp-pend-sel" size="6" style="height:auto;padding:4px"></select>
+    </div>
+    <button class="btn btn-primary" onclick="saveVehLinkPend()">Vincular</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-veh-link-pend')">Cancelar</button>
+  </div>
+</div>
+
+<!-- Status do veículo -->
+<div class="overlay" id="modal-veh-status">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Alterar status</div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-input" id="vs-status">
+        <option value="em_uso">Em uso</option>
+        <option value="na_oficina">Na oficina</option>
+        <option value="a_venda">À venda</option>
+        <option value="vendido">Vendido</option>
+      </select>
+    </div>
+    <button class="btn btn-primary" onclick="saveVehStatus()">Salvar</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-veh-status')">Cancelar</button>
+  </div>
+</div>
+
 <!-- ════ NOTIF PERMISSION PROMPT ════ -->
 <div class="overlay" id="modal-notif-perm">
   <div class="sheet">
@@ -1062,7 +1178,7 @@
   </div>
 </div>
 
-<script src="app.js?v=51"></script>
+<script src="app.js?v=52"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
