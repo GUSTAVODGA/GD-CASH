@@ -2,9 +2,15 @@
   <defs>
     <linearGradient id="bg" x1="0%" y1="100%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#1A42C8"/>
-      <stop offset="100%" stop-color="#3B7EF6"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
     </linearGradient>
   </defs>
   <rect width="512" height="512" fill="url(#bg)"/>
-  <polygon points="256,130 96,392 416,392" fill="white" fill-opacity="0.95"/>
+  <!-- Triângulo vazado — stroke branco, sem preenchimento -->
+  <path d="M256,138 L100,386 L412,386 Z"
+    fill="none"
+    stroke="white"
+    stroke-width="40"
+    stroke-linejoin="round"
+    stroke-linecap="round"/>
 </svg>
