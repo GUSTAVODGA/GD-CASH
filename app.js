@@ -702,6 +702,76 @@ function getMonthWeeks(off=0) {
 }
 
 // ══════════════════════════════════════════
+// HISTÓRICO E COMPARATIVOS — API DE DADOS
+// ══════════════════════════════════════════
+// getMonthData(off, opts) — retorna dados estruturados de qualquer mês.
+// opts.throughDay: limita ao dia N do mês (para comparação de período parcial).
+// Projetado para consulta futura por IA ou scripts externos.
+function getMonthData(off, opts) {
+  var throughDay = opts && opts.throughDay;
+  var d0 = new Date(); d0.setMonth(d0.getMonth() + off, 1);
+  var year = d0.getFullYear(), month = d0.getMonth();
+  var daysInMonth = new Date(year, month + 1, 0).getDate();
+  var now = new Date(); now.setHours(0, 0, 0, 0);
+  var isCurrentMonth = off === 0;
+  var dayOfMonth = throughDay ? Math.min(throughDay, daysInMonth) : (isCurrentMonth ? now.getDate() : daysInMonth);
+  var pctPassed = Math.round((dayOfMonth / daysInMonth) * 100);
+
+  var dates = [];
+  for (var i = 1; i <= dayOfMonth; i++) {
+    dates.push(year + '-' + String(month + 1).padStart(2, '0') + '-' + String(i).padStart(2, '0'));
+  }
+  var datesSet = new Set(dates);
+  var daysWithData = dates.filter(function(dt) { return sumDayIncome(dt) > 0 || getDayExpenses(dt).length > 0; }).length;
+
+  var inc = dates.reduce(function(s, dt) {
+    return s + D.platforms.reduce(function(ss, p) { return ss + getDayPlatIncome(dt, p.id); }, 0);
+  }, 0);
+  var incByPlatform = D.platforms.map(function(p) {
+    return { id: p.id, name: p.name, amount: dates.reduce(function(s, dt) { return s + getDayPlatIncome(dt, p.id); }, 0) };
+  }).filter(function(p) { return p.amount > 0; });
+
+  var mExps = D.expenses.filter(function(e) { return datesSet.has(e.date); });
+  var exp = mExps.reduce(function(s, e) { return s + e.amount; }, 0);
+  var catMap = {};
+  mExps.forEach(function(e) { catMap[e.category] = (catMap[e.category] || 0) + e.amount; });
+  var byCategory = Object.entries(catMap).sort(function(a, b) { return b[1] - a[1]; }).map(function(entry) {
+    return { cat: entry[0], amount: entry[1], pct: exp > 0 ? Math.round(entry[1] / exp * 100) : 0 };
+  });
+  var topExpense = mExps.slice().sort(function(a, b) { return b.amount - a.amount; })[0] || null;
+
+  var resvMoves = D.reservaHistory.filter(function(h) { return datesSet.has(h.date); });
+  var resvDeps = resvMoves.filter(function(h) { return h.type === 'dep'; });
+  var resvRets = resvMoves.filter(function(h) { return h.type === 'ret'; });
+  var resvDeposited = resvDeps.reduce(function(s, h) { return s + h.amount; }, 0);
+  var resvWithdrawn = resvRets.reduce(function(s, h) { return s + h.amount; }, 0);
+
+  var vehCostMap = {};
+  mExps.filter(function(e) { return e.vehicleId; }).forEach(function(e) {
+    vehCostMap[e.vehicleId] = (vehCostMap[e.vehicleId] || 0) + e.amount;
+  });
+  var byVehicle = Object.entries(vehCostMap).map(function(entry) {
+    var veh = (D.vehicles || []).find(function(v) { return v.id === entry[0]; });
+    return { id: entry[0], name: veh ? veh.name : 'Veículo', cost: entry[1] };
+  }).sort(function(a, b) { return b.cost - a.cost; });
+
+  var pendCompleted = (D.pendencias || []).filter(function(p) {
+    return p.status === 'concluida' && p.completedAt && datesSet.has(p.completedAt);
+  });
+
+  return {
+    period: { off: off, year: year, month: month, label: fmtMonthYear(off), isCurrentMonth: isCurrentMonth, pctPassed: pctPassed, dayOfMonth: dayOfMonth, daysInMonth: daysInMonth, daysWithData: daysWithData },
+    income: { total: inc, byPlatform: incByPlatform },
+    expenses: { total: exp, byCategory: byCategory, topExpense: topExpense },
+    result: { net: inc - exp, savingsRate: inc > 0 ? Math.round(((inc - exp) / inc) * 100) : 0 },
+    reserve: { net: resvDeposited - resvWithdrawn, deposits: resvDeps, withdrawals: resvRets, totalDeposited: resvDeposited, totalWithdrawn: resvWithdrawn },
+    goals: { active: D.goals || [] },
+    pendencias: { completedThisMonth: pendCompleted },
+    vehicles: { byCost: byVehicle },
+  };
+}
+
+// ══════════════════════════════════════════
 // DONUT CHART (dependency-free SVG renderer)
 // ══════════════════════════════════════════
 function renderDonut(svgId, legendId, items) {
@@ -1091,6 +1161,8 @@ function renderMes() {
   document.getElementById('s2s-bars').innerHTML=weeksHTML+totalHTML;
   renderTrendsChart();
   renderCatBudgets();
+  renderComparativo(monthOffset);
+  renderInsights(monthOffset);
 }
 function changeMonth(dir) { monthOffset+=dir; renderMes(); }
 
@@ -1408,6 +1480,155 @@ function buildMonthSummary(off) {
     }
   }
   return parts.join(' ') || null;
+}
+
+// ══════════════════════════════════════════
+// COMPARATIVO MENSAL
+// ══════════════════════════════════════════
+function renderComparativo(off) {
+  var el = document.getElementById('mes-comp-section');
+  if (!el) return;
+
+  var cur = getMonthData(off);
+
+  // For current in-progress month compare only the same # of days in prev month
+  var isPartialCurrent = off === 0 && cur.period.dayOfMonth < cur.period.daysInMonth;
+  var prev = isPartialCurrent ? getMonthData(off - 1, { throughDay: cur.period.dayOfMonth }) : getMonthData(off - 1);
+
+  // Don't show if previous month has absolutely no data
+  if (prev.income.total === 0 && prev.expenses.total === 0) { el.innerHTML = ''; return; }
+
+  var prevLabel = isPartialCurrent
+    ? (fmtMonthYear(off - 1) + ' (1–' + cur.period.dayOfMonth + ')')
+    : fmtMonthYear(off - 1);
+
+  // delta helper — returns display text and color
+  // lessIsGood: spending less is positive (expenses)
+  function mkDelta(curVal, prevVal, lessIsGood) {
+    var diff = curVal - prevVal;
+    if (diff === 0) return { text: 'Igual', color: 'var(--text3)' };
+    var pct = prevVal > 0 ? Math.round(Math.abs(diff) / prevVal * 100) : null;
+    var isGood = lessIsGood ? diff < 0 : diff > 0;
+    var arrow = diff > 0 ? '▲' : '▼';
+    var absDiff = Math.abs(diff);
+    var txt = arrow + ' ' + R(diff > 0 ? diff : -diff);
+    if (pct !== null) txt += ' (' + pct + '%)';
+    return { text: txt, color: isGood ? 'var(--green)' : 'var(--red)' };
+  }
+
+  var incD = mkDelta(cur.income.total, prev.income.total, false);
+  var expD = mkDelta(cur.expenses.total, prev.expenses.total, true);
+  var resD = mkDelta(cur.result.net, prev.result.net, false);
+  var rvD  = mkDelta(cur.reserve.net, prev.reserve.net, false);
+
+  var partialNote = isPartialCurrent
+    ? '<div class="comp-note">Mês em andamento — comparando primeiros ' + cur.period.dayOfMonth + ' dias</div>'
+    : '';
+
+  // Reserve row: only show if either month had any reserve movement
+  var hasReserve = cur.reserve.net !== 0 || prev.reserve.net !== 0;
+  var resvSign = cur.reserve.net >= 0 ? (cur.reserve.net > 0 ? '+' : '') : '';
+  var resvRow = hasReserve
+    ? '<div class="comp-row"><span class="comp-lbl">Reserva</span><span class="comp-cur" style="color:' + (cur.reserve.net >= 0 ? 'var(--green)' : 'var(--red)') + '">' + resvSign + R(cur.reserve.net) + '</span><span class="comp-delta" style="color:' + rvD.color + '">' + rvD.text + '</span></div>'
+    : '';
+
+  // Top category changes (only if prev has expense data and pct change >= 12)
+  var catChips = '';
+  if (prev.expenses.total > 0 && cur.expenses.byCategory.length > 0) {
+    var prevCatMap = {};
+    prev.expenses.byCategory.forEach(function(c) { prevCatMap[c.cat] = c.amount; });
+    var chips = cur.expenses.byCategory.slice(0, 4).map(function(c) {
+      var p = prevCatMap[c.cat] || 0;
+      if (!p || p < 20) return null;
+      var pct = Math.round((c.amount - p) / p * 100);
+      if (Math.abs(pct) < 12) return null;
+      var good = pct < 0;
+      return '<span class="comp-cat-chip ' + (good ? 'gn' : 'rd') + '">' + c.cat + ' ' + (pct > 0 ? '▲' : '▼') + Math.abs(pct) + '%</span>';
+    }).filter(Boolean).slice(0, 3);
+    if (chips.length) catChips = '<div class="comp-cats">' + chips.join('') + '</div>';
+  }
+
+  var resultSign = cur.result.net >= 0 ? '' : '';
+  el.innerHTML =
+    '<div class="sec-title">Comparativo com ' + prevLabel + '</div>' +
+    '<div class="card comp-card">' +
+      partialNote +
+      '<div class="comp-row"><span class="comp-lbl">Receita</span><span class="comp-cur">' + R(cur.income.total) + '</span><span class="comp-delta" style="color:' + incD.color + '">' + incD.text + '</span></div>' +
+      '<div class="comp-row"><span class="comp-lbl">Gastos</span><span class="comp-cur">' + R(cur.expenses.total) + '</span><span class="comp-delta" style="color:' + expD.color + '">' + expD.text + '</span></div>' +
+      '<div class="comp-row"><span class="comp-lbl">Resultado</span><span class="comp-cur" style="color:' + (cur.result.net >= 0 ? 'var(--green)' : 'var(--red)') + '">' + R(cur.result.net) + '</span><span class="comp-delta" style="color:' + resD.color + '">' + resD.text + '</span></div>' +
+      resvRow +
+      catChips +
+    '</div>';
+}
+
+// ══════════════════════════════════════════
+// INSIGHTS DETERMINÍSTICOS
+// ══════════════════════════════════════════
+function renderInsights(off) {
+  var el = document.getElementById('mes-insights-section');
+  if (!el) return;
+
+  var cur = getMonthData(off);
+  if (cur.income.total === 0 && cur.expenses.total === 0) { el.innerHTML = ''; return; }
+
+  var prev = getMonthData(off - 1);
+  var insights = [];
+
+  // 1. Reserve deposits
+  if (cur.reserve.totalDeposited > 0) {
+    var n = cur.reserve.deposits.length;
+    insights.push('💰 ' + n + (n === 1 ? ' aporte' : ' aportes') + ' na reserva · <b>' + R(cur.reserve.totalDeposited) + '</b> guardados');
+  }
+
+  // 2. Vehicle with most cost this month
+  if (cur.vehicles.byCost.length > 0) {
+    var tv = cur.vehicles.byCost[0];
+    insights.push('🚗 <b>' + tv.name + '</b> — <b>' + R(tv.cost) + '</b> em gastos no período');
+  }
+
+  // 3. Category that declined most vs previous month (positive framing first)
+  if (prev.expenses.total > 0 && cur.expenses.byCategory.length > 0 && insights.length < 3) {
+    var prevCM = {};
+    prev.expenses.byCategory.forEach(function(c) { prevCM[c.cat] = c.amount; });
+    var bestDecline = null, bestGrowth = null;
+    cur.expenses.byCategory.forEach(function(c) {
+      var p = prevCM[c.cat] || 0;
+      if (!p || p < 30) return;
+      var pct = Math.round((c.amount - p) / p * 100);
+      if (pct <= -12 && (!bestDecline || pct < bestDecline.pct)) bestDecline = { cat: c.cat, pct: Math.abs(pct) };
+      if (pct >= 15 && c.amount > 50 && (!bestGrowth || pct > bestGrowth.pct)) bestGrowth = { cat: c.cat, pct: pct, amt: c.amount };
+    });
+    if (bestDecline) {
+      insights.push('📉 Gastos com <b>' + bestDecline.cat + '</b> caíram <b>' + bestDecline.pct + '%</b> em relação ao mês anterior');
+    } else if (bestGrowth) {
+      insights.push('📈 <b>' + bestGrowth.cat + '</b> cresceu <b>' + bestGrowth.pct + '%</b> em relação ao mês anterior');
+    }
+  }
+
+  // 4. Largest single expense (if > 20% of total and > R$100)
+  if (cur.expenses.topExpense && insights.length < 3) {
+    var te = cur.expenses.topExpense;
+    var tePct = cur.expenses.total > 0 ? Math.round(te.amount / cur.expenses.total * 100) : 0;
+    if (tePct >= 20 && te.amount >= 100) {
+      insights.push('💸 Maior gasto: <b>' + (te.description || te.category) + '</b> — <b>' + R(te.amount) + '</b> (' + tePct + '% do total)');
+    }
+  }
+
+  // 5. Pendências completed this month
+  if (cur.pendencias.completedThisMonth.length > 0 && insights.length < 3) {
+    var np = cur.pendencias.completedThisMonth.length;
+    var totalP = cur.pendencias.completedThisMonth.reduce(function(s, p) { return s + (p.estimatedValue || 0); }, 0);
+    insights.push('✅ ' + np + (np === 1 ? ' pendência concluída' : ' pendências concluídas') + (totalP > 0 ? ' · <b>' + R(totalP) + '</b>' : '') + ' este mês');
+  }
+
+  var shown = insights.slice(0, 3);
+  if (!shown.length) { el.innerHTML = ''; return; }
+
+  el.innerHTML =
+    '<div class="sec-title">Destaques do mês</div>' +
+    '<div class="card insights-card">' +
+      shown.map(function(txt) { return '<div class="insight-row">' + txt + '</div>'; }).join('') +
+    '</div>';
 }
 
 // ══════════════════════════════════════════
