@@ -2462,3 +2462,14 @@ textarea.form-input{resize:none;font-family:inherit}
 .insights-card.insight-neutral { background: var(--surface2) !important; border: 1px solid var(--border) !important; }
 .insights-card.insight-neutral .insight-row { color: var(--text2); }
 .insights-card.insight-neutral .insight-row b { color: var(--text); }
+
+/* ══ SEMANA TAB — alinhamento visual com a Home e aba Mês ══ */
+#page-semana { background: #F2F0EA; }
+:root[data-theme="dark"] #page-semana { background: var(--surface); }
+
+/* Insight semanal — espaçamento entre hero e plataformas */
+#sem-insight-section { margin-bottom: 4px; }
+#sem-insight-section .insights-card { border-radius: 16px; }
+
+/* 3-line safety cap for all insight rows */
+.insight-row { -webkit-line-clamp: 3; -webkit-box-orient: vertical; display: -webkit-box !important; overflow: hidden; }

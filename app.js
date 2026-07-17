@@ -874,6 +874,7 @@ function renderSemana() {
   }).join('');
 
   renderWeekGoal();
+  renderWeekInsight(weekOffset);
   renderDayAccordion();
 }
 
@@ -1404,7 +1405,118 @@ function openWeekGoalModal() {
 function saveWeekGoal() {
   const val = parseFloat(document.getElementById('wg-val').value) || 0;
   D.weeklyGoal = val;
-  save(); closeOverlay('modal-week-goal'); renderWeekGoal();
+  save(); closeOverlay('modal-week-goal'); renderWeekGoal(); renderWeekInsight(weekOffset);
+}
+
+function renderWeekInsight(off) {
+  var el = document.getElementById('sem-insight-section');
+  if (!el) return;
+
+  var inc = sumWeekIncome(off);
+  var exp = sumWeekExpenses(off);
+  var liq = inc - exp;
+  var goal = D.weeklyGoal || 0;
+
+  if (inc === 0 && exp === 0) {
+    el.innerHTML =
+      '<div class="card insights-card insight-neutral">' +
+        '<div class="insight-row">Ainda não há dados para analisar esta semana.</div>' +
+      '</div>';
+    return;
+  }
+
+  var dates = weekDates(off);
+  var today = todayStr();
+  var isCurrentWeek = off === 0;
+  var todayIdx = dates.indexOf(today);
+  var daysElapsed = isCurrentWeek ? (todayIdx >= 0 ? todayIdx + 1 : 7) : 7;
+  var daysLeft = isCurrentWeek && todayIdx >= 0 ? 6 - todayIdx : 0;
+
+  // For fair comparison: only count the same number of elapsed days from previous week
+  var prevIncEquiv = isCurrentWeek && daysElapsed < 7
+    ? weekDates(off - 1).slice(0, daysElapsed).reduce(function(s, d) { return s + sumDayIncome(d); }, 0)
+    : sumWeekIncome(off - 1);
+  var prevExpEquiv = isCurrentWeek && daysElapsed < 7
+    ? (function() { var ds = weekDates(off - 1).slice(0, daysElapsed); return D.expenses.filter(function(e) { return ds.includes(e.date); }).reduce(function(s, e) { return s + e.amount; }, 0); })()
+    : sumWeekExpenses(off - 1);
+
+  var insight = null;
+
+  // 1. Goal achieved
+  if (!insight && goal > 0 && inc >= goal) {
+    insight = { text: 'Meta da semana atingida com <b>' + R(inc) + '</b>.', state: 'pos' };
+  }
+
+  // 2. Goal progress + daily pace (current week, ≥40% done, days left)
+  if (!insight && goal > 0 && inc < goal && isCurrentWeek && daysLeft > 0) {
+    var needed = goal - inc;
+    var pct = Math.round((inc / goal) * 100);
+    var perDay = Math.ceil(needed / daysLeft);
+    if (pct >= 40) {
+      insight = {
+        text: 'Faltam <b>' + R(needed) + '</b> para a meta. São <b>' + R(perDay) + '</b> por dia até domingo.',
+        state: 'pos'
+      };
+    }
+  }
+
+  // 3. Behind pace vs goal (current week, ≥2 days elapsed, ≥20% behind expected)
+  if (!insight && goal > 0 && isCurrentWeek && daysElapsed >= 2) {
+    var expected = (goal / 7) * daysElapsed;
+    var behindPct = expected > 0 ? Math.round(((expected - inc) / expected) * 100) : 0;
+    if (behindPct >= 20 && daysLeft > 0) {
+      insight = {
+        text: 'Você está <b>' + behindPct + '% abaixo</b> do ritmo necessário para bater a meta.',
+        state: 'warn'
+      };
+    }
+  }
+
+  // 4. Income comparison vs equivalent period of previous week (≥15% change)
+  if (!insight && prevIncEquiv > 30) {
+    var incDiff = Math.round(((inc - prevIncEquiv) / prevIncEquiv) * 100);
+    if (incDiff >= 15) {
+      insight = {
+        text: 'Receita <b>' + incDiff + '% acima</b> do mesmo período da semana passada.',
+        state: 'pos'
+      };
+    } else if (incDiff <= -15) {
+      insight = {
+        text: 'Receita <b>' + Math.abs(incDiff) + '% abaixo</b> do mesmo período da semana passada.',
+        state: 'warn'
+      };
+    }
+  }
+
+  // 5. Expenses up but income also grew — neutral framing
+  if (!insight && prevExpEquiv > 0 && prevIncEquiv > 0) {
+    var expDiff = Math.round(((exp - prevExpEquiv) / prevExpEquiv) * 100);
+    var incDiff2 = Math.round(((inc - prevIncEquiv) / prevIncEquiv) * 100);
+    if (expDiff >= 15 && incDiff2 >= 10) {
+      insight = { text: 'Os gastos aumentaram, mas sua receita também cresceu.', state: 'neutral' };
+    } else if (expDiff >= 20 && incDiff2 < 10) {
+      insight = {
+        text: 'Gastos <b>' + expDiff + '% acima</b> do mesmo período da semana passada.',
+        state: 'warn'
+      };
+    }
+  }
+
+  // 6. Neutral fallback
+  if (!insight) {
+    insight = {
+      text: liq > 0 ? 'Resultado positivo nesta semana.'
+          : liq < 0 ? 'Gastos superaram a receita nesta semana.'
+          : 'Receita e gastos equilibrados nesta semana.',
+      state: 'neutral'
+    };
+  }
+
+  var stateClass = insight.state === 'pos' ? '' : ' insight-' + insight.state;
+  el.innerHTML =
+    '<div class="card insights-card' + stateClass + '">' +
+      '<div class="insight-row">' + capInsight(insight.text) + '</div>' +
+    '</div>';
 }
 
 // ══════════════════════════════════════════
@@ -1564,6 +1676,25 @@ function renderComparativo(off) {
 // ══════════════════════════════════════════
 // INSIGHTS DETERMINÍSTICOS
 // ══════════════════════════════════════════
+
+// Strip HTML tags, count plain-text chars, truncate at word boundary if > max
+function capInsight(html, max) {
+  max = max || 160;
+  var plain = html.replace(/<[^>]+>/g, '');
+  if (plain.length <= max) return html;
+  var cut = max - 3;
+  while (cut > max * 0.6 && plain[cut] !== ' ') cut--;
+  var out = '', count = 0, inTag = false;
+  for (var i = 0; i < html.length; i++) {
+    if (html[i] === '<') inTag = true;
+    if (!inTag) count++;
+    out += html[i];
+    if (html[i] === '>') inTag = false;
+    if (!inTag && count >= cut) { out += '…'; break; }
+  }
+  return out;
+}
+
 function renderInsights(off) {
   var el = document.getElementById('mes-insights-section');
   if (!el) return;
@@ -1663,7 +1794,7 @@ function renderInsights(off) {
   el.innerHTML =
     '<div class="sec-title">Destaque do mês</div>' +
     '<div class="card insights-card' + stateClass + '">' +
-      '<div class="insight-row">' + insight.text + '</div>' +
+      '<div class="insight-row">' + capInsight(insight.text) + '</div>' +
     '</div>';
 }
 

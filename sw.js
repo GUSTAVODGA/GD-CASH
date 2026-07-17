@@ -1,10 +1,10 @@
-const CACHE = 'avenco-v13';
+const CACHE = 'avenco-v14';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './style.css?v=48',
-  './app.js?v=55',
+  './style.css?v=49',
+  './app.js?v=56',
 ];
 
 self.addEventListener('install', e => {
