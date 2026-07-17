@@ -1774,8 +1774,10 @@ function buildDemoData() {
     ],
     emergency: { target:10000, current:3200 },
     reservaHistory: [
-      { id:'rh1', type:'dep', amount:500, note:'Salário extra',  date: prev[0] },
-      { id:'rh2', type:'dep', amount:300, note:'Freela',          date: w[0]   },
+      { id:'rh1', type:'dep', amount:1500, note:'Reserva mensal', date: prev[0] },
+      { id:'rh2', type:'dep', amount:1200, note:'Salário extra',  date: prev[2] },
+      { id:'rh3', type:'dep', amount:800,  note:'Freela',          date: w[0]   },
+      { id:'rh4', type:'ret', amount:300,  note:'Compras urgentes', date: w[1]  },
     ],
     goals: [
       { id:'gd1', name:'iPhone 16 Pro', emoji:'📱', target:8000, saved:2400, deadline:'2026-12-31', note:'', lastNotif:'' },
