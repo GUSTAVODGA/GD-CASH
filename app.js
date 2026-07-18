@@ -57,10 +57,14 @@ function initFirebase() {
       loginScreen.style.display = 'none';
       avatarBtn.style.display   = '';
       avatarImg.src = user.photoURL || '';
-      await loadFromCloud();
+      // Render immediately with localStorage data so PWA first paint shows values
+      initTheme();
       document.getElementById('curr-chip').textContent = currSym;
       renderInicio();
-      initTheme();
+      await loadFromCloud();
+      // Re-render after cloud sync in case remote data differs
+      document.getElementById('curr-chip').textContent = currSym;
+      renderInicio();
       initSettingsExtras();
       checkNotifPrompt();
       // FAB só na aba Semana
@@ -2127,10 +2131,23 @@ function deleteCat(i) {
 // ══════════════════════════════════════════
 // OVERLAY
 // ══════════════════════════════════════════
-function openOverlay(id)  { document.getElementById(id).classList.add('open'); }
-function closeOverlay(id) { document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }));
-document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.overlay.open').forEach(o=>o.classList.remove('open')); });
+let _scrollY = 0;
+function openOverlay(id) {
+  _scrollY = window.scrollY;
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${_scrollY}px`;
+  document.body.style.width = '100%';
+  document.getElementById(id).classList.add('open');
+}
+function closeOverlay(id) {
+  document.getElementById(id).classList.remove('open');
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.width = '';
+  window.scrollTo(0, _scrollY);
+}
+document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) closeOverlay(o.id); }));
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.overlay.open').forEach(o=>closeOverlay(o.id)); });
 
 // Refresh Semana hero when day-detail panel closes (any close path)
 new MutationObserver((mutations) => {

@@ -406,7 +406,7 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 
 /* ── Page ── */
 .page{display:none;padding:16px;max-width:560px;margin:0 auto}
-.page.active{display:block;animation:page-in .32s cubic-bezier(.22,.68,0,1.2) both}
+.page.active{display:block;min-height:100dvh;animation:page-in .32s cubic-bezier(.22,.68,0,1.2) both}
 
 /* ── Card stagger (added by JS on tab switch) ── */
 .tab-fresh .card,.tab-fresh .hero-card{
@@ -719,7 +719,6 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .overlay{
   position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:100;display:flex;align-items:flex-end;justify-content:center;
   opacity:0;pointer-events:none;transition:opacity .25s;
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
 }
 .overlay.open{opacity:1;pointer-events:auto}
 .sheet{
