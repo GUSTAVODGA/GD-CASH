@@ -57,14 +57,17 @@ function initFirebase() {
       loginScreen.style.display = 'none';
       avatarBtn.style.display   = '';
       avatarImg.src = user.photoURL || '';
-      // Render immediately with localStorage data so PWA first paint shows values
+      // Render immediately with localStorage data (first paint — no cloud wait)
       initTheme();
       document.getElementById('curr-chip').textContent = currSym;
       renderInicio();
+      // Sync with cloud; re-render only if data actually changed
+      const _tsBeforeSync = D.updatedAt || 0;
       await loadFromCloud();
-      // Re-render after cloud sync in case remote data differs
-      document.getElementById('curr-chip').textContent = currSym;
-      renderInicio();
+      if ((D.updatedAt || 0) !== _tsBeforeSync) {
+        document.getElementById('curr-chip').textContent = currSym;
+        renderInicio();
+      }
       initSettingsExtras();
       checkNotifPrompt();
       // FAB só na aba Semana
@@ -416,7 +419,16 @@ function refreshAfterDayEdit() {
 
 // ── Mais / FAB ──
 function openMoreMenu() { openOverlay('modal-more'); }
-function switchMore(tab) { closeOverlay('modal-more'); setTimeout(() => switchTab(tab), 50); }
+function switchMore(tab) {
+  // Fechar overlay sem restaurar scroll (vai para nova aba, não volta à posição anterior)
+  const o = document.getElementById('modal-more');
+  o.classList.remove('open');
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.width = '';
+  window.scrollTo(0, 0);
+  switchTab(tab);
+}
 
 let _fabOpen = false;
 function toggleFabMenu() { haptic(6); _fabOpen ? closeFabMenu() : openFabMenu(); }

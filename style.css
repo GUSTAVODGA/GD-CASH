@@ -1254,9 +1254,7 @@ main{background:var(--bg);min-height:100dvh}
   70%{transform:scale(1.04)}
   100%{opacity:1;transform:scale(1)}
 }
-.overlay.open .sheet{
-  animation:slide-up .3s cubic-bezier(.32,.72,0,1) both;
-}
+/* sheet enters via transform transition defined above — no second animation needed */
 
 /* ══════════════════════════════════════════
    TYPOGRAPHY REFINEMENTS
@@ -2675,3 +2673,145 @@ select.fi {
 .fixed-paused .fixed-name { text-decoration: line-through; }
 .fixed-paused-badge { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; vertical-align: middle; text-decoration: none !important; }
 .icon-btn-pause { color: var(--text3); }
+
+/* ══════════════════════════════════════════
+   FOCUS — acessibilidade / teclado
+   ══════════════════════════════════════════ */
+*:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVIDADE — TABLET 768px+
+   ══════════════════════════════════════════ */
+@media (min-width: 768px) {
+  .page { max-width: 720px; }
+
+  /* Tools grid: 4 colunas em vez de 2 */
+  .hc-tools-grid { grid-template-columns: repeat(4, 1fr); }
+
+  /* Nav items com mais espaço */
+  .nav-item { min-width: 90px; padding: 8px 12px; }
+
+  /* Sheet mais larga */
+  .sheet { max-width: 600px; }
+
+  /* Formulários não ocupam toda a largura */
+  .form-group, .fg { max-width: 560px; }
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVIDADE — DESKTOP 1200px+
+   ══════════════════════════════════════════ */
+@media (min-width: 1200px) {
+  /* Corpo desloca à direita para abrir espaço para a barra lateral */
+  body {
+    padding-bottom: 0;
+    padding-left: 220px;
+  }
+
+  /* ── Barra lateral (ex-nav inferior) ── */
+  .bottom-nav {
+    left: 0; top: 0; bottom: 0; right: auto;
+    width: 220px; height: 100dvh;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    padding: 68px 12px 32px;
+    border-top: none;
+    border-right: 1px solid var(--border);
+    border-radius: 0;
+    overflow: hidden;
+  }
+
+  /* Rótulo "Avenco" no topo da barra lateral */
+  .bottom-nav::before {
+    content: 'Avenco';
+    display: block;
+    font-size: 17px;
+    font-weight: 900;
+    color: var(--ac);
+    letter-spacing: -.5px;
+    padding: 0 14px 16px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Itens da nav: horizontais com ícone + texto */
+  .nav-item {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    min-width: unset;
+    width: 100%;
+    letter-spacing: -.1px;
+  }
+
+  .nav-item svg { width: 19px; height: 19px; }
+
+  .nav-item.active {
+    background: var(--ac-t);
+    color: var(--ac);
+  }
+
+  /* ── Topbar permanece sticky mas respeita o padding-left do body ── */
+  .topbar { position: sticky; top: 0; }
+
+  /* ── Main e páginas ── */
+  main { background: var(--bg); min-height: 100dvh; }
+
+  .page {
+    max-width: 1060px;
+    margin: 0 auto;
+    padding: 28px 48px 48px;
+  }
+
+  /* Home gerencia próprio padding via hc-* */
+  #page-inicio { padding: 0; }
+
+  /* ── Layouts de conteúdo em 2 colunas onde faz sentido ── */
+
+  /* Tools grid: 4 colunas */
+  .hc-tools-grid { grid-template-columns: repeat(4, 1fr); }
+
+  /* Sheet centrada */
+  .sheet { max-width: 640px; }
+
+  /* Formulários com max-width confortável */
+  .form-group, .fg { max-width: 600px; }
+
+  /* Goal cards em 2 colunas */
+  #goals-list { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  #goals-list .goal-card { margin-bottom: 0; }
+
+  /* Fixos em 2 colunas */
+  #fixed-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #fixed-list .fixed-item { margin-bottom: 0; }
+
+  /* Pendências em 2 colunas */
+  #pend-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #pend-list .pend-item { margin-bottom: 0; }
+
+  /* Estados vazios centralizados */
+  .empty-state { max-width: 400px; margin: 0 auto; }
+}
+
+/* ── Hover state para desktop com mouse ── */
+@media (min-width: 1200px) and (hover: hover) {
+  .nav-item:not(.active):hover { background: var(--ol2); }
+  .settings-row:hover { background: var(--ol1); }
+  .hc-tool-item:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
+}
+
+/* ══════════════════════════════════════════
+   RESPONSIVIDADE — SEM RELOAD AO GIRAR
+   ══════════════════════════════════════════ */
+@media (prefers-reduced-motion: no-preference) {
+  .bottom-nav { transition: width .25s ease, padding .25s ease; }
+}
