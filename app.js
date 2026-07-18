@@ -73,12 +73,15 @@ function initFirebase() {
       // FAB só na aba Semana
       const fab = document.getElementById('global-fab');
       if (fab) fab.style.display = 'none';
-      checkGoalNotifications();
-      checkReminders();
-      checkPendenciasDeadlines();
-      checkOnboarding();
-      checkInstallBanner();
-      handleShortcut();
+      // Defer non-critical checks so the first paint completes before they run
+      setTimeout(() => {
+        checkGoalNotifications();
+        checkReminders();
+        checkPendenciasDeadlines();
+        checkOnboarding();
+        checkInstallBanner();
+        handleShortcut();
+      }, 100);
     } else {
       currentUser = null;
       loginScreen.style.display = 'flex';
@@ -3887,7 +3890,7 @@ function renderAjustes() {
       <div class="sdivider"></div>
       <div class="srow srow-muted">
         <span class="srow-icon">${ic.info}</span>
-        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v30</div></div>
+        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v31</div></div>
       </div>
       <div class="sdivider"></div>
       <div class="srow srow-muted">

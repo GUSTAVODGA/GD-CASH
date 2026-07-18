@@ -26,9 +26,9 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
 <link rel="stylesheet" href="style.css?v=61">
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
 </head>
 <body>
 
@@ -1224,7 +1224,43 @@
   </div>
 </div>
 
-<script src="app.js?v=70"></script>
+<script>
+// Pre-render: show greeting and month immediately from localStorage (before Firebase loads)
+(function(){
+  try {
+    var h = new Date().getHours();
+    var greet = h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    var gEl = document.getElementById('home-greeting');
+    if (gEl) gEl.textContent = greet;
+    var mEl = document.getElementById('home-month');
+    if (mEl) {
+      var now = new Date();
+      mEl.textContent = now.toLocaleDateString('pt-BR', {month:'long', year:'numeric'});
+    }
+    var raw = localStorage.getItem('gdcash_v1');
+    if (raw) {
+      var d = JSON.parse(raw);
+      var sym = localStorage.getItem('gdcash_currency') || 'R$';
+      var now2 = new Date();
+      var pfx = now2.getFullYear() + '-' + String(now2.getMonth()+1).padStart(2,'0');
+      var inc = 0, exp = 0;
+      var di = d.dailyIncome || {};
+      Object.keys(di).forEach(function(dt) { if (dt.slice(0,7) === pfx) { var pm = di[dt]; Object.keys(pm).forEach(function(k){ if (pm[k] > 0) inc += pm[k]; }); } });
+      (d.incomeItems || []).forEach(function(it){ if (it.date && it.date.slice(0,7) === pfx && it.status === 'paid') inc += (it.amount||0); });
+      (d.expenses || []).forEach(function(e){ if (e.date && e.date.slice(0,7) === pfx) exp += (e.amount||0); });
+      var liq = inc - exp;
+      var fmt = function(v){ var n=v||0, s=n<0?'−':''; return s+sym+' '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+      var bEl = document.getElementById('home-balance');
+      if (bEl) { bEl.className='hc-balance '+(liq>=0?'pos':'neg'); bEl.textContent=(inc===0&&exp===0)?'—':fmt(liq); }
+      var iEl = document.getElementById('home-inc');
+      if (iEl) iEl.textContent = inc===0?'—':fmt(inc);
+      var eEl = document.getElementById('home-exp');
+      if (eEl) eEl.textContent = exp===0?'—':fmt(exp);
+    }
+  } catch(e) {}
+})();
+</script>
+<script src="app.js?v=71" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
