@@ -97,7 +97,7 @@ function signInWithGoogle(forceSelect = false) {
     if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user') {
       auth.signInWithRedirect(provider);
     } else {
-      alert('Erro ao entrar: ' + err.message);
+      gdAlert({ title: 'Erro ao entrar', msg: err.message, type: 'error' });
     }
   });
 }
@@ -269,10 +269,13 @@ async function loadFromCloud() {
         try {
           const parsed = JSON.parse(local);
           if (Object.keys(parsed.dailyIncome || {}).length > 0) {
-            if (confirm('Encontramos dados salvos neste dispositivo. Deseja importar para a nuvem?')) {
-              D = parsed;
-              await saveToCloud();
-            }
+            gdConfirm({
+              title: 'Dados locais encontrados',
+              msg: 'Encontramos dados salvos neste dispositivo. Deseja importar para a nuvem?',
+              confirmText: 'Importar',
+              cancelText: 'Usar nuvem',
+              onConfirm: async () => { D = parsed; await saveToCloud(); },
+            });
           }
         } catch(e) {}
       }
@@ -526,19 +529,150 @@ let D = (() => {
   return defaultData();
 })();
 
-function gdToast(msg, duration=4000) {
-  let el = document.getElementById('gd-toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'gd-toast';
-    el.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#1a1a2e;color:#e8e7f4;padding:12px 20px;border-radius:12px;font-size:14px;z-index:9999;max-width:320px;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.5);border:1px solid #25273a;transition:opacity .3s';
-    document.body.appendChild(el);
+// ══════════════════════════════════════════
+// MODAL SYSTEM
+// ══════════════════════════════════════════
+
+/* ── Toast ── */
+(function() {
+  let _wrap = null;
+  function _wrap_el() {
+    if (!_wrap || !_wrap.isConnected) {
+      _wrap = document.createElement('div');
+      _wrap.className = 'av-toast-wrap';
+      document.body.appendChild(_wrap);
+    }
+    return _wrap;
   }
-  el.textContent = msg;
-  el.style.opacity = '1';
-  clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.opacity = '0'; }, duration);
+  const ICONS = {
+    success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    error:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+    warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+    info:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
+  };
+  window.gdToast = function(msg, opts) {
+    if (typeof opts === 'number') opts = { duration: opts };
+    const { type, duration = 3800 } = opts || {};
+    const wrap = _wrap_el();
+    const el = document.createElement('div');
+    el.className = 'av-toast' + (type ? ' av-toast--' + type : '');
+    if (type && ICONS[type]) {
+      const ic = document.createElement('span');
+      ic.className = 'av-toast-icon';
+      ic.innerHTML = ICONS[type];
+      el.appendChild(ic);
+    }
+    const ms = document.createElement('span');
+    ms.className = 'av-toast-msg';
+    ms.textContent = msg;
+    el.appendChild(ms);
+    wrap.appendChild(el);
+    function dismiss() {
+      el.classList.add('hiding');
+      setTimeout(() => el.parentNode && el.parentNode.removeChild(el), 240);
+    }
+    const t = setTimeout(dismiss, duration);
+    el.addEventListener('click', () => { clearTimeout(t); dismiss(); });
+  };
+})();
+
+/* ── Dialog helpers ── */
+function _esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function _gdDialog({ title, msg, icon, iconCls, actions, onEscOrBackdrop } = {}) {
+  const prev = document.getElementById('_av_dlg');
+  if (prev) prev.remove();
+
+  const ov = document.createElement('div');
+  ov.id = '_av_dlg';
+  ov.className = 'av-overlay';
+  ov.setAttribute('role', 'dialog');
+  ov.setAttribute('aria-modal', 'true');
+  if (title) ov.setAttribute('aria-label', title);
+
+  const useRow = actions.length > 1;
+  let html = '<div class="av-dialog" role="document">';
+  if (icon) html += `<div class="av-dialog-icon ${iconCls || ''}">${icon}</div>`;
+  if (title) html += `<div class="av-dialog-title">${_esc(title)}</div>`;
+  if (msg)   html += `<div class="av-dialog-msg">${_esc(msg)}</div>`;
+  html += `<div class="av-dialog-actions${useRow ? ' av-row' : ''}">`;
+  actions.forEach((a, i) => {
+    html += `<button class="btn ${a.cls || 'btn-secondary'}" data-av-i="${i}">${_esc(a.label)}</button>`;
+  });
+  html += '</div></div>';
+  ov.innerHTML = html;
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => ov.classList.add('open'));
+
+  let _kh;
+  function close(cb) {
+    ov.classList.remove('open');
+    document.removeEventListener('keydown', _kh, true);
+    setTimeout(() => ov.parentNode && ov.parentNode.removeChild(ov), 230);
+    cb?.();
+  }
+
+  ov.addEventListener('click', e => { if (e.target === ov && onEscOrBackdrop) close(onEscOrBackdrop); });
+  _kh = e => { if (e.key === 'Escape' && onEscOrBackdrop) { e.stopImmediatePropagation(); close(onEscOrBackdrop); } };
+  document.addEventListener('keydown', _kh, true);
+
+  ov.querySelectorAll('[data-av-i]').forEach(btn => {
+    btn.addEventListener('click', () => close(actions[+btn.dataset.avI].fn));
+  });
+  setTimeout(() => ov.querySelector('.btn')?.focus(), 60);
 }
+
+window.gdConfirm = function({ title, msg, confirmText = 'Confirmar', cancelText = 'Cancelar', variant = 'default', onConfirm, onCancel } = {}) {
+  const IC = {
+    danger:  { svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>', cls: 'av-dialog-icon--danger' },
+    warning: { svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>', cls: 'av-dialog-icon--warning' },
+  };
+  const ic = IC[variant] || null;
+  const confirmCls = variant === 'danger' ? 'btn-danger' : 'btn-primary';
+  _gdDialog({
+    title, msg,
+    icon: ic?.svg, iconCls: ic?.cls,
+    actions: [
+      { label: cancelText,  cls: 'btn-ghost', fn: onCancel },
+      { label: confirmText, cls: confirmCls,  fn: onConfirm },
+    ],
+    onEscOrBackdrop: onCancel,
+  });
+};
+
+window.gdAlert = function({ title, msg, btnText = 'OK', type = 'info', onClose } = {}) {
+  const IC = {
+    error:   { svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>', cls: 'av-dialog-icon--danger' },
+    success: { svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>', cls: 'av-dialog-icon--success' },
+    warning: { svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>', cls: 'av-dialog-icon--warning' },
+    info:    { svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>', cls: 'av-dialog-icon--info' },
+  };
+  const ic = IC[type] || IC.info;
+  _gdDialog({
+    title, msg,
+    icon: ic.svg, iconCls: ic.cls,
+    actions: [{ label: btnText, cls: 'btn-primary', fn: onClose }],
+    onEscOrBackdrop: onClose,
+  });
+};
+
+window.gdLoading = function(show, text = 'Carregando...') {
+  let el = document.getElementById('_av_ldg');
+  if (show) {
+    if (!el) {
+      el = document.createElement('div');
+      el.id = '_av_ldg';
+      el.className = 'av-loading-overlay';
+      el.innerHTML = '<div class="av-loading-spinner"></div><div class="av-loading-text"></div>';
+      document.body.appendChild(el);
+    }
+    el.querySelector('.av-loading-text').textContent = text;
+    requestAnimationFrame(() => el.classList.add('visible'));
+  } else if (el) {
+    el.classList.remove('visible');
+    setTimeout(() => el.parentNode && el.parentNode.removeChild(el), 210);
+  }
+};
 
 function save() {
   try { localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch(e) {
@@ -570,7 +704,7 @@ function importData(event) {
       const required = ['platforms','expenses','dailyIncome'];
       const missing = required.filter(k => !parsed[k] || typeof parsed[k] !== 'object');
       if (missing.length) {
-        alert('Arquivo inválido: campos obrigatórios ausentes (' + missing.join(', ') + '). Selecione um backup exportado pelo Avenco.');
+        gdToast('Arquivo inválido: campos obrigatórios ausentes (' + missing.join(', ') + ').', { type: 'error' });
         return;
       }
       const def = defaultData();
@@ -583,10 +717,10 @@ function importData(event) {
       D.fixedExpenses = Array.isArray(parsed.fixedExpenses) ? parsed.fixedExpenses : def.fixedExpenses || [];
       D.pendencias = Array.isArray(parsed.pendencias) ? parsed.pendencias : def.pendencias || [];
       save();
-      alert('Dados importados com sucesso!');
-      location.reload();
+      gdToast('Dados importados com sucesso!', { type: 'success' });
+      setTimeout(() => location.reload(), 1400);
     } catch(e) {
-      alert('Arquivo inválido. Selecione um backup exportado pelo app.');
+      gdToast('Arquivo inválido. Selecione um backup exportado pelo app.', { type: 'error' });
     }
   };
   reader.readAsText(file);
@@ -1006,7 +1140,7 @@ function addIncomeItem() {
   const amt  = parseFloat(document.getElementById('ii-amt').value);
   const note = document.getElementById('ii-note').value.trim();
   const status = document.getElementById('ii-status').value;
-  if(!amt||amt<=0){ alert('Informe um valor.'); return; }
+  if(!amt||amt<=0){ gdToast('Informe um valor.', { type: 'error' }); return; }
   if(!D.incomeItems) D.incomeItems=[];
   D.incomeItems.push({id:uid(),date,platformId:pid,amount:amt,note,status});
   document.getElementById('ii-amt').value='';
@@ -1102,7 +1236,7 @@ function addExpense() {
   const date=selDate(), cat=document.getElementById('exp-cat').value;
   const val=parseFloat(document.getElementById('exp-val').value);
   const desc=document.getElementById('exp-desc').value.trim();
-  if(!val||val<=0){alert('Informe um valor válido.');return;}
+  if(!val||val<=0){gdToast('Informe um valor válido.', { type: 'error' });return;}
   const vehSel = document.getElementById('exp-veh-sel');
   const vehicleId = (vehSel && vehSel.style.display !== 'none') ? (vehSel.value || null) : null;
   const expObj = {id:uid(),date,category:cat,amount:val,description:desc};
@@ -1301,7 +1435,7 @@ function saveResMove(type) {
   const note = document.getElementById('rm-note').value.trim();
   const dateEl = document.getElementById('rm-date');
   const date = (dateEl && dateEl.value) ? dateEl.value : todayStr();
-  if (!val || val <= 0) { alert('Informe um valor válido.'); return; }
+  if (!val || val <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   D.emergency.current = type === 'dep' ? D.emergency.current + val : Math.max(0, D.emergency.current - val);
   D.reservaHistory.push({ id: uid(), type, amount: val, note, date });
   save(); renderReserva(); renderInicio();
@@ -1374,7 +1508,7 @@ function updateResHist(id) {
   const note = document.getElementById('rm-note').value.trim();
   const dateEl = document.getElementById('rm-date');
   const date = (dateEl && dateEl.value) ? dateEl.value : todayStr();
-  if (!val || val <= 0) { alert('Informe um valor válido.'); return; }
+  if (!val || val <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   const idx = D.reservaHistory.findIndex(h => h.id === id);
   if (idx === -1) return;
   D.reservaHistory[idx] = { ...D.reservaHistory[idx], amount: val, note, date };
@@ -1434,7 +1568,7 @@ function shareApp() {
   if (navigator.share) {
     navigator.share({ title: 'Avenco', text, url }).catch(() => {});
   } else {
-    navigator.clipboard?.writeText(url).then(() => alert('Link copiado! Cole e envie para quem quiser.'));
+    navigator.clipboard?.writeText(url).then(() => gdToast('Link copiado! Cole e envie para quem quiser.', { type: 'success' }));
   }
 }
 
@@ -1941,7 +2075,7 @@ function saveGoal() {
   const saved = parseFloat(document.getElementById('goal-saved-inp').value) || 0;
   const deadline = document.getElementById('goal-deadline').value;
   const note = document.getElementById('goal-note').value.trim();
-  if (!name || !target || !deadline) { alert('Preencha nome, valor e prazo.'); return; }
+  if (!name || !target || !deadline) { gdToast('Preencha nome, valor e prazo.', { type: 'error' }); return; }
   if (id) {
     const idx = D.goals.findIndex(g => g.id === id);
     if (idx !== -1) D.goals[idx] = { ...D.goals[idx], name, emoji, target, saved, deadline, note };
@@ -1953,9 +2087,13 @@ function saveGoal() {
 }
 
 function deleteGoal(id) {
-  if (!confirm('Excluir esta meta?')) return;
-  D.goals = D.goals.filter(g => g.id !== id);
-  save(); renderGoals();
+  gdConfirm({
+    title: 'Excluir meta',
+    msg: 'Deseja excluir esta meta permanentemente?',
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => { D.goals = D.goals.filter(g => g.id !== id); save(); renderGoals(); },
+  });
 }
 
 function openAddToGoal(id) {
@@ -1970,7 +2108,7 @@ function openAddToGoal(id) {
 function saveGoalDep() {
   const id = document.getElementById('goal-dep-id').value;
   const val = parseFloat(document.getElementById('goal-dep-val').value) || 0;
-  if (!val || val <= 0) { alert('Informe um valor válido.'); return; }
+  if (!val || val <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   const g = D.goals.find(g => g.id === id);
   if (!g) return;
   g.saved = (g.saved || 0) + val;
@@ -2007,11 +2145,18 @@ function checkGoalNotifications() {
 
 function deleteResHist(id) {
   if (!D.reservaHistory.find(h => h.id === id)) return;
-  if (!confirm('Excluir esta movimentação?')) return;
-  D.reservaHistory = D.reservaHistory.filter(h => h.id !== id);
-  D.emergency.current = D.reservaHistory.reduce((s, h) => h.type === 'dep' ? s + h.amount : s - h.amount, 0);
-  D.emergency.current = Math.max(0, D.emergency.current);
-  save(); renderReserva();
+  gdConfirm({
+    title: 'Excluir movimentação',
+    msg: 'Deseja excluir esta movimentação da reserva?',
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => {
+      D.reservaHistory = D.reservaHistory.filter(h => h.id !== id);
+      D.emergency.current = D.reservaHistory.reduce((s, h) => h.type === 'dep' ? s + h.amount : s - h.amount, 0);
+      D.emergency.current = Math.max(0, D.emergency.current);
+      save(); renderReserva();
+    },
+  });
 }
 
 // ══════════════════════════════════════════
@@ -2068,7 +2213,7 @@ function saveFixed() {
   const amount=parseFloat(document.getElementById('fi-amount').value)||0;
   const category=document.getElementById('fi-cat').value;
   const dueDay=parseInt(document.getElementById('fi-day').value)||null;
-  if(!name||!amount){alert('Preencha nome e valor.');return;}
+  if(!name||!amount){gdToast('Preencha nome e valor.', { type: 'error' });return;}
   if(id) { const idx=D.fixedExpenses.findIndex(f=>f.id===id); if(idx!==-1) D.fixedExpenses[idx]={...D.fixedExpenses[idx],name,amount,category,dueDay}; }
   else D.fixedExpenses.push({id:uid(),name,amount,category,dueDay});
   save(); closeOverlay('modal-fixed'); renderFixos();
@@ -2089,7 +2234,7 @@ function openPlatSettings() {
 }
 function cyclePlatColor(i) { const idx=PALETTE.indexOf(D.platforms[i].color); D.platforms[i].color=PALETTE[(idx+1)%PALETTE.length]; save(); openPlatSettings(); }
 function addPlatform() { D.platforms.push({id:uid(),name:'Nova Fonte',color:PALETTE[D.platforms.length%PALETTE.length]}); save(); openPlatSettings(); }
-function deletePlatform(i) { if(D.platforms.length<=1){alert('Mantenha ao menos 1 plataforma.');return;} D.platforms.splice(i,1); save(); openPlatSettings(); }
+function deletePlatform(i) { if(D.platforms.length<=1){gdToast('Mantenha ao menos 1 plataforma.', { type: 'error' });return;} D.platforms.splice(i,1); save(); openPlatSettings(); }
 
 // ══════════════════════════════════════════
 // CATEGORY MANAGEMENT
@@ -2111,8 +2256,8 @@ function renderCatList() {
 function addCat() {
   const inp = document.getElementById('new-cat-input');
   const name = inp.value.trim();
-  if (!name) { alert('Informe um nome para a categoria.'); return; }
-  if (D.expCats.includes(name)) { alert('Categoria já existe.'); return; }
+  if (!name) { gdToast('Informe um nome para a categoria.', { type: 'error' }); return; }
+  if (D.expCats.includes(name)) { gdToast('Categoria já existe.', { type: 'error' }); return; }
   D.expCats.push(name);
   save();
   inp.value = '';
@@ -2131,11 +2276,23 @@ function renameCat(i, name) {
 function deleteCat(i) {
   const name = D.expCats[i];
   const inUse = D.expenses.some(e => e.category === name);
-  if (inUse && !confirm(`A categoria "${name}" está em uso em alguns gastos. Deseja mesmo excluir? Os gastos ficarão com a categoria anterior.`)) return;
-  D.expCats.splice(i, 1);
-  save();
-  renderCatList();
-  populateExpCatSel();
+  const doDelete = () => {
+    D.expCats.splice(i, 1);
+    save();
+    renderCatList();
+    populateExpCatSel();
+  };
+  if (inUse) {
+    gdConfirm({
+      title: 'Categoria em uso',
+      msg: `A categoria "${name}" está em uso em alguns gastos. Deseja mesmo excluir? Os gastos ficarão com a categoria anterior.`,
+      confirmText: 'Excluir',
+      variant: 'warning',
+      onConfirm: doDelete,
+    });
+  } else {
+    doDelete();
+  }
 }
 
 // ══════════════════════════════════════════
@@ -2747,7 +2904,7 @@ function openBudgetModal() {
 function saveCatBudget() {
   const cat = document.getElementById('budget-cat-sel').value;
   const limit = parseFloat(document.getElementById('budget-limit-val').value);
-  if (!limit || limit <= 0) { alert('Informe um valor válido.'); return; }
+  if (!limit || limit <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   if (!D.catBudgets) D.catBudgets = {};
   D.catBudgets[cat] = limit;
   save();
@@ -2816,7 +2973,7 @@ function saveLembrete() {
   const date = document.getElementById('lem-date').value;
   const notifDaysBefore = parseInt(document.getElementById('lem-notif').value) || 0;
   const repeat = document.getElementById('lem-repeat').value;
-  if (!name || !date) { alert('Preencha nome e data.'); return; }
+  if (!name || !date) { gdToast('Preencha nome e data.', { type: 'error' }); return; }
   if (!D.reminders) D.reminders = [];
   if (id) {
     const idx = D.reminders.findIndex(r => r.id === id);
@@ -2891,7 +3048,7 @@ function exportCSV() {
 
 function exportCalendar() {
   const fixed = (D.fixedExpenses||[]).filter(f => f.dueDay);
-  if (!fixed.length) { alert('Cadastre gastos fixos com dia de vencimento antes de exportar.'); return; }
+  if (!fixed.length) { gdToast('Cadastre gastos fixos com dia de vencimento antes de exportar.', { type: 'error' }); return; }
   const now = new Date();
   let events = '';
   fixed.forEach(f => {
@@ -2975,11 +3132,17 @@ function initLongPress() {
       item.classList.add('tx-pressing');
       setTimeout(() => item.classList.remove('tx-pressing'), 300);
       const { type, id } = item.dataset;
-      if (confirm('Excluir esta movimentação?')) {
-        if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); }
-        else if (type === 'inc') { D.incomeItems = (D.incomeItems||[]).filter(it => it.id !== id); }
-        save(); renderInicio();
-      }
+      gdConfirm({
+        title: 'Excluir movimentação',
+        msg: 'Deseja excluir esta movimentação?',
+        confirmText: 'Excluir',
+        variant: 'danger',
+        onConfirm: () => {
+          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); }
+          else if (type === 'inc') { D.incomeItems = (D.incomeItems||[]).filter(it => it.id !== id); }
+          save(); renderInicio();
+        },
+      });
     }, 550);
   }, { passive: true });
   list.addEventListener('touchend', cancel, { passive: true });
@@ -3598,7 +3761,7 @@ function openQuickAdd() {
 
 function qaConfirm() {
   const amt = parseFloat(document.getElementById('qa-amt-input')?.value);
-  if (!amt || amt <= 0) { alert('Informe um valor válido.'); return; }
+  if (!amt || amt <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   const date = document.getElementById('qa-date')?.value || todayStr();
   const desc = document.getElementById('qa-desc')?.value || '';
 
@@ -3659,12 +3822,12 @@ function notifyRegistered(amount, label, category) {
 // ══════════════════════════════════════════
 async function requestNotifPermission() {
   closeOverlay('modal-notif-perm');
-  if (!('Notification' in window)) { alert('Seu navegador não suporta notificações.'); return; }
+  if (!('Notification' in window)) { gdToast('Seu navegador não suporta notificações.', { type: 'error' }); return; }
   const perm = await Notification.requestPermission();
   if (perm === 'granted') {
     localStorage.setItem('gdcash_notif_enabled', '1');
     scheduleDailyReminder();
-    alert('Notificações ativadas! Você receberá um lembrete diário às 21h.');
+    gdToast('Notificações ativadas! Você receberá um lembrete diário às 21h.', { type: 'success' });
   }
 }
 
@@ -4077,7 +4240,7 @@ function openPendenciaModal(id) {
 
 function savePendencia() {
   const title = document.getElementById('pend-title-input')?.value?.trim();
-  if (!title) { alert('Informe um título para a pendência.'); return; }
+  if (!title) { gdToast('Informe um título para a pendência.', { type: 'error' }); return; }
   const id = document.getElementById('pend-id')?.value;
   const cat = document.getElementById('pend-cat-sel')?.value || 'pessoal';
   const prio = document.getElementById('pend-prio-sel')?.value || 'media';
@@ -4133,11 +4296,16 @@ function completePendencia(id) {
   renderPendInicio();
   haptic(15);
   if (p.estimatedValue && p.estimatedValue > 0) {
-    if (confirm(`Pendência concluída! Deseja registrar o valor estimado (${R(p.estimatedValue)}) como gasto?`)) {
-      openPendenciaAsExpense(p);
-    }
+    gdConfirm({
+      title: 'Pendência concluída',
+      msg: `Deseja registrar o valor estimado (${R(p.estimatedValue)}) como gasto?`,
+      confirmText: 'Registrar',
+      cancelText: 'Não',
+      onConfirm: () => openPendenciaAsExpense(p),
+      onCancel: () => gdToast('Pendência concluída!', { type: 'success' }),
+    });
   } else {
-    gdToast('Pendência concluída! ✓');
+    gdToast('Pendência concluída!', { type: 'success' });
   }
 }
 
@@ -4172,13 +4340,20 @@ function reopenPendencia(id) {
 }
 
 function deletePendencia(id) {
-  if (!confirm('Excluir esta pendência?')) return;
-  D.pendencias = (D.pendencias || []).filter(p => p.id !== id);
-  save();
-  renderPendList();
-  renderPendInicio();
-  haptic(10);
-  gdToast('Pendência excluída.');
+  gdConfirm({
+    title: 'Excluir pendência',
+    msg: 'Deseja excluir esta pendência permanentemente?',
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => {
+      D.pendencias = (D.pendencias || []).filter(p => p.id !== id);
+      save();
+      renderPendList();
+      renderPendInicio();
+      haptic(10);
+      gdToast('Pendência excluída.', { type: 'success' });
+    },
+  });
 }
 
 function checkPendenciasDeadlines() {
@@ -4453,14 +4628,21 @@ function deleteVehicle(id) {
   const hasHistory = (v.history || []).length > 0;
   const hasLinks   = (v.linkedExpenses || []).length > 0 || (v.linkedPendencias || []).length > 0;
   if (hasHistory || hasLinks) {
-    gdToast('Veículo com histórico ou vínculos não pode ser excluído. Use "Arquivar".');
+    gdToast('Veículo com histórico ou vínculos não pode ser excluído. Use "Arquivar".', { type: 'error' });
     return;
   }
-  if (!confirm('Excluir permanentemente este veículo? Esta ação não pode ser desfeita.')) return;
-  D.vehicles = (D.vehicles || []).filter(x => x.id !== id);
-  save();
-  renderVehList();
-  gdToast('Veículo excluído definitivamente.');
+  gdConfirm({
+    title: 'Excluir veículo',
+    msg: 'Excluir permanentemente este veículo? Esta ação não pode ser desfeita.',
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => {
+      D.vehicles = (D.vehicles || []).filter(x => x.id !== id);
+      save();
+      renderVehList();
+      gdToast('Veículo excluído definitivamente.', { type: 'success' });
+    },
+  });
 }
 
 function onVehPhotoChange(input) {

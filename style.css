@@ -3021,3 +3021,132 @@ button.srow-muted:active { background: none; }
   .srow { padding: 0 18px; }
   .sdivider { margin-left: 54px; }
 }
+
+/* ══ AVENCO — Dialog & Toast system ══ */
+
+/* ── Dialog backdrop ── */
+.av-overlay {
+  position: fixed; inset: 0; z-index: 1200;
+  background: rgba(13,20,64,.52);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+.av-overlay.open { opacity: 1; pointer-events: all; }
+
+/* ── Dialog card ── */
+.av-dialog {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 30px 24px 22px;
+  width: 100%; max-width: 356px;
+  box-shadow: 0 8px 40px rgba(13,20,64,.18), 0 2px 12px rgba(13,20,64,.12);
+  transform: scale(.88) translateY(18px);
+  opacity: 0;
+  transition: transform .26s cubic-bezier(.34,1.52,.64,1), opacity .2s;
+}
+.av-overlay.open .av-dialog { transform: scale(1) translateY(0); opacity: 1; }
+
+/* ── Dialog icon ── */
+.av-dialog-icon {
+  width: 58px; height: 58px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 18px;
+}
+.av-dialog-icon--danger  { background: var(--rd-t);                    color: var(--rd); }
+.av-dialog-icon--warning { background: rgba(217,119,6,.12);             color: #D97706;   }
+.av-dialog-icon--success { background: var(--gn-t);                    color: var(--gn); }
+.av-dialog-icon--info    { background: var(--ac-t);                    color: var(--ac); }
+
+/* ── Dialog text ── */
+.av-dialog-title {
+  font-size: 17px; font-weight: 700;
+  color: var(--tx); text-align: center;
+  margin-bottom: 8px; line-height: 1.3;
+}
+.av-dialog-msg {
+  font-size: 14px; color: var(--tx2);
+  text-align: center; line-height: 1.58;
+  margin-bottom: 24px;
+}
+
+/* ── Dialog actions ── */
+.av-dialog-actions { display: flex; flex-direction: column; gap: 8px; }
+.av-dialog-actions.av-row { flex-direction: row; }
+.av-dialog-actions.av-row .btn { flex: 1; }
+
+/* ── Toast container ── */
+.av-toast-wrap {
+  position: fixed;
+  bottom: calc(86px + env(safe-area-inset-bottom, 0px));
+  left: 50%; transform: translateX(-50%);
+  z-index: 1300;
+  width: max-content; max-width: min(380px, calc(100vw - 32px));
+  pointer-events: none;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px;
+}
+
+/* ── Toast item ── */
+.av-toast {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 13px 16px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px; font-weight: 500; line-height: 1.45;
+  color: var(--tx); background: var(--surface);
+  box-shadow: 0 6px 28px rgba(13,20,64,.16), 0 2px 8px rgba(13,20,64,.10);
+  border: 1px solid var(--border-strong);
+  pointer-events: all;
+  animation: av-toast-in .28s cubic-bezier(.34,1.46,.64,1) forwards;
+}
+.av-toast.hiding { animation: av-toast-out .22s ease forwards; }
+.av-toast-icon { flex-shrink: 0; width: 17px; height: 17px; margin-top: 1px; }
+.av-toast-msg  { flex: 1; }
+
+.av-toast--success { border-left: 3.5px solid var(--gn); }
+.av-toast--error   { border-left: 3.5px solid var(--rd); }
+.av-toast--warning { border-left: 3.5px solid #D97706; }
+.av-toast--info    { border-left: 3.5px solid var(--ac); }
+
+@keyframes av-toast-in {
+  from { opacity: 0; transform: translateY(16px) scale(.94); }
+  to   { opacity: 1; transform: translateY(0)    scale(1);   }
+}
+@keyframes av-toast-out {
+  from { opacity: 1; transform: translateY(0)    scale(1);   }
+  to   { opacity: 0; transform: translateY(-8px) scale(.96); }
+}
+
+/* ── Loading overlay ── */
+.av-loading-overlay {
+  position: fixed; inset: 0; z-index: 1400;
+  background: rgba(13,20,64,.58);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  gap: 18px;
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s;
+}
+.av-loading-overlay.visible { opacity: 1; pointer-events: all; }
+.av-loading-spinner {
+  width: 46px; height: 46px; border-radius: 50%;
+  border: 3.5px solid rgba(255,255,255,.22);
+  border-top-color: #fff;
+  animation: btn-spin .72s linear infinite;
+}
+.av-loading-text {
+  font-size: 15px; font-weight: 600; color: #fff;
+  letter-spacing: .01em; text-align: center; max-width: 240px;
+}
+
+/* ── Dark mode refinements ── */
+:root[data-theme="dark"] .av-overlay  { background: rgba(0,0,0,.68); }
+:root[data-theme="dark"] .av-dialog   { border: 1px solid var(--border-strong); box-shadow: 0 8px 40px rgba(0,0,0,.55), 0 2px 12px rgba(0,0,0,.4); }
+:root[data-theme="dark"] .av-toast    { box-shadow: 0 6px 28px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35); }
+:root[data-theme="dark"] .av-dialog-icon--warning { color: #FBBF24; }
+:root[data-theme="dark"] .av-toast--warning { border-left-color: #FBBF24; }
