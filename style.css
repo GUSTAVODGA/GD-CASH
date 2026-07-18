@@ -64,7 +64,7 @@
   --neg: var(--red);
 }
 :root[data-theme="dark"] {
-  --bg: #07091A;
+  --bg: #0F1629;
   --surface: #0F1629;
   --surface2: #161D35;
   --surface3: #1D2542;
@@ -403,6 +403,9 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .nav-item svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .nav-item.active{color:var(--gold)}
 .nav-item.active svg{filter:drop-shadow(0 0 5px rgba(255,214,10,.4))}
+
+/* ── Main container fills viewport so body never shows through ── */
+main{background:var(--bg);min-height:100dvh}
 
 /* ── Page ── */
 .page{display:none;padding:16px;max-width:560px;margin:0 auto}
