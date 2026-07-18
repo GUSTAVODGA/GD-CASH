@@ -1630,8 +1630,8 @@ function buildMonthSummary(off) {
 function toggleCompDetails(btn) {
   var d = btn.nextElementSibling;
   var open = d.style.display === 'block';
-  d.style.display = open ? '' : 'block';
-  btn.textContent = open ? 'Ver detalhes ›' : 'Ocultar detalhes';
+  d.style.display = open ? 'none' : 'block';
+  btn.textContent = open ? 'Ver detalhes ↓' : 'Ocultar detalhes ↑';
 }
 
 function renderComparativo(off) {
@@ -1727,7 +1727,7 @@ function renderComparativo(off) {
     '<div class="card comp-card">' +
       '<div class="comp-period">' + periodNote + '</div>' +
       '<div class="comp-lines">' + incLine + expLine + resLine + resvLine + '</div>' +
-      '<button class="comp-toggle" onclick="toggleCompDetails(this)">Ver detalhes ›</button>' +
+      '<button class="comp-toggle" onclick="toggleCompDetails(this)">Ver detalhes ↓</button>' +
       '<div class="comp-details" style="display:none">' + detailsHtml + '</div>' +
     '</div>';
 }
