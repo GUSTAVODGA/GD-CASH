@@ -2179,7 +2179,6 @@ new MutationObserver((mutations) => {
 // TABS
 // ══════════════════════════════════════════
 function switchTab(tab) {
-  window.scrollTo(0, 0);
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   const page = document.getElementById('page-'+tab);
@@ -2208,6 +2207,9 @@ function switchTab(tab) {
     el.style.setProperty('--sd', (i*0.055)+'s');
   });
   setTimeout(()=>page.classList.remove('tab-fresh'), 900);
+  // Reset scroll AFTER all DOM mutations so iOS Safari doesn't re-adjust it
+  window.scrollTo(0, 0);
+  requestAnimationFrame(() => window.scrollTo(0, 0));
 }
 
 // ══════════════════════════════════════════
@@ -3885,7 +3887,7 @@ function renderAjustes() {
       <div class="sdivider"></div>
       <div class="srow srow-muted">
         <span class="srow-icon">${ic.info}</span>
-        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v28</div></div>
+        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v29</div></div>
       </div>
       <div class="sdivider"></div>
       <div class="srow srow-muted">
@@ -4224,6 +4226,7 @@ function _vehShowView(id) {
 function renderVehList() {
   _vehDetailId = null;
   _vehShowView('veh-list-view');
+  window.scrollTo(0, 0);
   const list = document.getElementById('veh-list');
   if (!list) return;
   const vehicles = D.vehicles || [];
