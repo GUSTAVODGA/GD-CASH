@@ -536,6 +536,7 @@ let D = (() => {
 /* ── Toast ── */
 (function() {
   let _wrap = null;
+  let _lastMsg = '', _lastTime = 0;
   function _wrap_el() {
     if (!_wrap || !_wrap.isConnected) {
       _wrap = document.createElement('div');
@@ -553,6 +554,10 @@ let D = (() => {
   window.gdToast = function(msg, opts) {
     if (typeof opts === 'number') opts = { duration: opts };
     const { type, duration = 3800 } = opts || {};
+    // Deduplication: mesma mensagem em menos de 600ms não acumula
+    const now = Date.now();
+    if (msg === _lastMsg && now - _lastTime < 600) return;
+    _lastMsg = msg; _lastTime = now;
     const wrap = _wrap_el();
     const el = document.createElement('div');
     el.className = 'av-toast' + (type ? ' av-toast--' + type : '');
@@ -583,6 +588,8 @@ function _gdDialog({ title, msg, icon, iconCls, actions, onEscOrBackdrop } = {})
   const prev = document.getElementById('_av_dlg');
   if (prev) prev.remove();
 
+  const _prevFocus = document.activeElement;
+
   const ov = document.createElement('div');
   ov.id = '_av_dlg';
   ov.className = 'av-overlay';
@@ -604,16 +611,30 @@ function _gdDialog({ title, msg, icon, iconCls, actions, onEscOrBackdrop } = {})
   document.body.appendChild(ov);
   requestAnimationFrame(() => ov.classList.add('open'));
 
-  let _kh;
+  let _kh, _closed = false;
   function close(cb) {
+    if (_closed) return;
+    _closed = true;
     ov.classList.remove('open');
     document.removeEventListener('keydown', _kh, true);
-    setTimeout(() => ov.parentNode && ov.parentNode.removeChild(ov), 230);
+    setTimeout(() => {
+      ov.parentNode && ov.parentNode.removeChild(ov);
+      try { _prevFocus?.focus?.(); } catch(e) {}
+    }, 230);
     cb?.();
   }
 
   ov.addEventListener('click', e => { if (e.target === ov && onEscOrBackdrop) close(onEscOrBackdrop); });
-  _kh = e => { if (e.key === 'Escape' && onEscOrBackdrop) { e.stopImmediatePropagation(); close(onEscOrBackdrop); } };
+  _kh = e => {
+    if (e.key === 'Escape' && onEscOrBackdrop) { e.stopImmediatePropagation(); close(onEscOrBackdrop); return; }
+    if (e.key === 'Tab') {
+      const focusable = [...ov.querySelectorAll('button:not([disabled])')];
+      if (focusable.length < 2) return;
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
+      else            { if (document.activeElement === last)  { e.preventDefault(); first.focus(); } }
+    }
+  };
   document.addEventListener('keydown', _kh, true);
 
   ov.querySelectorAll('[data-av-i]').forEach(btn => {
