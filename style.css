@@ -954,16 +954,17 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 /* ══════════════════════════════════════════
    MAIS MENU
    ══════════════════════════════════════════ */
-.more-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:6px}
+.more-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin-bottom:6px}
 .more-item{
   display:flex;flex-direction:column;align-items:center;gap:8px;
   padding:20px 10px;background:var(--ol1);
   border:1px solid var(--border);border-radius:16px;
   color:var(--text);font-size:13px;font-weight:700;cursor:pointer;
   transition:background .15s;
+  flex:0 0 calc(33.33% - 7px);
 }
 .more-item:active{background:var(--ol2)}
-.more-icon{font-size:26px}
+.more-icon{display:flex;align-items:center;justify-content:center;width:26px;height:26px;color:var(--ac)}
 
 /* ══════════════════════════════════════════
    INSTALL BANNER
@@ -2629,3 +2630,40 @@ select.fi {
 
 /* Goal cards — mesmo border-radius das telas Home */
 .goal-card { border-radius: 16px; }
+
+/* ── Icon action buttons (Fixos / Metas) ── */
+.icon-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 10px;
+  border: 1px solid var(--border); background: none;
+  color: var(--text3); cursor: pointer; flex-shrink: 0;
+  transition: background .15s, color .15s;
+}
+.icon-btn:active { background: var(--ol1); }
+.icon-btn-del { color: rgba(255,77,106,.6); border-color: rgba(255,77,106,.2); }
+.icon-btn-del:active { background: rgba(255,77,106,.08); }
+
+/* ── Empty state: two-line variant ── */
+.empty-state { color: var(--text3); font-size: 13px; text-align: center; padding: 28px 16px; }
+.empty-state-title { font-size: 14px; font-weight: 700; color: var(--text2); margin-bottom: 6px; }
+.empty-state-sub { font-size: 13px; color: var(--text3); line-height: 1.55; }
+
+/* ── Goal initial badge ── */
+.goal-initial {
+  width: 38px; height: 38px; border-radius: 12px;
+  background: var(--ac); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 800; flex-shrink: 0; line-height: 1;
+}
+
+/* ── Goal footer ── */
+.goal-footer { display: flex; justify-content: space-between; align-items: center; font-size: 12px; margin-bottom: 10px; gap: 4px; }
+.goal-pct-txt { font-weight: 900; font-size: 15px; color: var(--gold); flex-shrink: 0; }
+.goal-saved-txt { color: var(--text2); flex: 1; text-align: center; }
+.goal-footer-of { color: var(--text3); font-weight: 400; }
+
+/* ── Fixos near-due visual state ── */
+.fixed-near-due { border-left: 3px solid var(--gold) !important; padding-left: 10px; }
+.fixed-due-lbl { color: var(--text3); }
+.fixed-due-lbl.fixed-due-near { color: #d97706; font-weight: 700; }
+.fixed-due-lbl.fixed-due-over { color: var(--red); }

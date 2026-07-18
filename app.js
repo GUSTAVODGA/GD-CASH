@@ -1870,31 +1870,35 @@ function renderGoals() {
     const dl = parseDate(g.deadline);
     const daysLeft = Math.round((dl - today) / (1000*60*60*24));
     const done = g.saved >= g.target;
-    const statusTxt = done ? 'Meta atingida! 🎉'
+    const statusTxt = done ? 'Meta atingida!'
       : daysLeft < 0 ? 'Prazo encerrado'
       : daysLeft === 0 ? 'Hoje é o prazo!'
       : `${daysLeft} dia${daysLeft !== 1 ? 's' : ''} restantes`;
     const statusClass = done ? 'goal-done-txt' : daysLeft >= 0 && daysLeft <= 7 ? 'goal-urgent-txt' : '';
     const cardClass = done ? ' goal-done' : (!done && daysLeft >= 0 && daysLeft <= 7) ? ' goal-urgent' : '';
+    const initial = (g.name || '?').charAt(0).toUpperCase();
+    const iconHtml = g.emoji
+      ? `<span class="goal-emoji">${g.emoji}</span>`
+      : `<span class="goal-initial">${initial}</span>`;
     return `
       <div class="goal-card${cardClass}">
         <div class="goal-header">
-          <span class="goal-emoji">${g.emoji||'🎯'}</span>
+          ${iconHtml}
           <div class="goal-info">
             <div class="goal-name">${g.name}</div>
             <div class="goal-meta">${fmtShort(g.deadline)} · <span class="${statusClass}">${statusTxt}</span></div>
           </div>
           <div class="goal-btns">
-            <button class="fixed-del" onclick="openGoalModal('${g.id}')">···</button>
-            <button class="fixed-del" onclick="deleteGoal('${g.id}')">✕</button>
+            <button class="icon-btn" onclick="openGoalModal('${g.id}')" title="Editar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="icon-btn icon-btn-del" onclick="deleteGoal('${g.id}')" title="Excluir"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
           </div>
         </div>
         <div class="goal-bar-wrap">
           <div class="goal-bar-fill${done?' goal-bar-done':''}" style="width:${pct}%"></div>
         </div>
         <div class="goal-footer">
-          <span class="goal-saved-txt">${R(g.saved)} guardados</span>
           <span class="goal-pct-txt">${Math.round(pct)}%</span>
+          <span class="goal-saved-txt">${R(g.saved)} <span class="goal-footer-of">de</span> ${R(g.target)}</span>
           <span class="goal-left-txt">${done ? '' : 'Faltam '+R(left)}</span>
         </div>
         ${!done ? `<button class="btn btn-secondary goal-add-btn" onclick="openAddToGoal('${g.id}')">+ Adicionar valor</button>` : ''}
@@ -1943,7 +1947,7 @@ function deleteGoal(id) {
 function openAddToGoal(id) {
   const g = D.goals.find(g => g.id === id);
   if (!g) return;
-  document.getElementById('goal-dep-title').textContent = `${g.emoji||'🎯'} ${g.name}`;
+  document.getElementById('goal-dep-title').textContent = g.emoji ? `${g.emoji} ${g.name}` : g.name;
   document.getElementById('goal-dep-id').value = id;
   document.getElementById('goal-dep-val').value = '';
   openOverlay('modal-goal-dep');
@@ -2002,20 +2006,26 @@ function deleteResHist(id) {
 function renderFixos() {
   document.getElementById('fixed-total').textContent=R(D.fixedExpenses.reduce((s,f)=>s+f.amount,0));
   const list=document.getElementById('fixed-list');
-  list.innerHTML=D.fixedExpenses.length
-    ? D.fixedExpenses.map(f=>`
-        <div class="fixed-item">
-          <div class="fixed-info">
-            <div class="fixed-name">${f.name}</div>
-            <div class="fixed-meta">${f.category}${f.dueDay?' · Vence dia '+f.dueDay:''}</div>
-          </div>
-          <div class="fixed-right">
-            <span class="fixed-amt">${R(f.amount)}</span>
-            <button class="fixed-del" onclick="openFixedModal('${f.id}')">···</button>
-            <button class="fixed-del" onclick="deleteFixed('${f.id}')">✕</button>
-          </div>
-        </div>`).join('')
-    : '<div class="empty-state">Nenhum gasto fixo cadastrado</div>';
+  if (!D.fixedExpenses.length) { list.innerHTML='<div class="empty-state">Nenhum gasto fixo cadastrado</div>'; return; }
+  const todayDay = new Date().getDate();
+  list.innerHTML = D.fixedExpenses.map(f => {
+    const nearDue = f.dueDay && f.dueDay >= todayDay && f.dueDay <= todayDay + 3;
+    const overDue = f.dueDay && f.dueDay < todayDay;
+    const dueCls = nearDue ? ' fixed-due-near' : overDue ? ' fixed-due-over' : '';
+    const dueTxt = f.dueDay ? ` · <span class="fixed-due-lbl${dueCls}">Vence dia ${f.dueDay}</span>` : '';
+    return `
+      <div class="fixed-item${nearDue ? ' fixed-near-due' : ''}">
+        <div class="fixed-info">
+          <div class="fixed-name">${f.name}</div>
+          <div class="fixed-meta">${f.category}${dueTxt}</div>
+        </div>
+        <div class="fixed-right">
+          <span class="fixed-amt">${R(f.amount)}</span>
+          <button class="icon-btn" onclick="openFixedModal('${f.id}')" title="Editar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="icon-btn icon-btn-del" onclick="deleteFixed('${f.id}')" title="Excluir"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+        </div>
+      </div>`;
+  }).join('');
 }
 function openFixedModal(id) {
   const f=id?D.fixedExpenses.find(f=>f.id===id):null;
@@ -3712,7 +3722,9 @@ function renderPendList() {
   else if (pendFilter === 'concluidas') items = items.filter(p => p.status === 'concluida');
 
   if (items.length === 0) {
-    cont.innerHTML = `<div class="empty-state">${pendFilter === 'abertas' ? 'Nenhuma pendência em aberto. Toque em + para adicionar.' : 'Nenhuma pendência concluída.'}</div>`;
+    cont.innerHTML = pendFilter === 'abertas'
+      ? `<div class="empty-state"><div class="empty-state-title">Tudo resolvido por aqui.</div><div class="empty-state-sub">Crie uma pendência para acompanhar prazos e gastos futuros.</div></div>`
+      : `<div class="empty-state">Nenhuma pendência concluída.</div>`;
     return;
   }
 

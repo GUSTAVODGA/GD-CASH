@@ -24,7 +24,7 @@
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=52">
+<link rel="stylesheet" href="style.css?v=53">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -775,22 +775,24 @@
     <div class="sheet-title">Mais</div>
     <div class="more-grid">
       <button class="more-item" onclick="switchMore('fixos')">
-        <span class="more-icon">🔁</span><span>Fixos</span>
+        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
+        <span>Fixos</span>
       </button>
       <button class="more-item" onclick="switchMore('conversor')">
-        <span class="more-icon">💱</span><span>Conversor</span>
-      </button>
-      <button class="more-item" onclick="switchMore('ajustes')">
-        <span class="more-icon">⚙️</span><span>Ajustes</span>
-      </button>
-      <button class="more-item" onclick="switchMore('lembretes')">
-        <span class="more-icon">🔔</span><span>Lembretes</span>
+        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/></svg></span>
+        <span>Conversor</span>
       </button>
       <button class="more-item" onclick="switchMore('pendencias')">
-        <span class="more-icon">📋</span><span>Pendências</span>
+        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 12 2 2 4-4"/></svg></span>
+        <span>Pendências</span>
       </button>
       <button class="more-item" onclick="closeOverlay('modal-more');openOverlay('modal-patrimonio')">
-        <span class="more-icon">🚗</span><span>Patrimônio</span>
+        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="4" height="8" rx="1"/><rect x="9" y="8" width="4" height="14" rx="1"/><rect x="16" y="4" width="4" height="18" rx="1"/></svg></span>
+        <span>Patrimônio</span>
+      </button>
+      <button class="more-item" onclick="switchMore('ajustes')">
+        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg></span>
+        <span>Ajustes</span>
       </button>
     </div>
   </div>
@@ -803,7 +805,8 @@
     <div class="sheet-title">Patrimônio</div>
     <div class="more-grid">
       <button class="more-item" onclick="closeOverlay('modal-patrimonio');setTimeout(()=>switchTab('patrimonio'),50)">
-        <span class="more-icon">🚗</span><span>Veículos</span>
+        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="10" width="22" height="8" rx="2"/><path d="M5 10V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg></span>
+        <span>Veículos</span>
       </button>
     </div>
   </div>
@@ -1202,7 +1205,7 @@
   </div>
 </div>
 
-<script src="app.js?v=59"></script>
+<script src="app.js?v=60"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
