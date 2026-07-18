@@ -2,54 +2,104 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
 
 :root {
-  /* Layout */
+  /* ── Surfaces ── */
   --bg: #F2F0EA;
   --surface: #FFFFFF;
   --surface2: #F4F6FC;
   --surface3: #E6EBF6;
+  --topbar-bg: rgba(238,242,250,.96);
+  --nav-bg: rgba(255,255,255,.97);
+  /* ── Borders ── */
   --border: rgba(13,20,64,.07);
   --border-strong: rgba(13,20,64,.13);
+  /* ── Shadows ── */
   --shadow: 0 2px 14px rgba(13,20,64,.07);
   --shadow-sm: 0 1px 4px rgba(13,20,64,.05), 0 2px 8px rgba(13,20,64,.07);
   --shadow-card: 0 2px 16px rgba(13,20,64,.09), 0 4px 32px rgba(13,20,64,.06);
   --shadow-elevated: 0 4px 24px rgba(13,20,64,.13), 0 12px 40px rgba(13,20,64,.09);
-  --topbar-bg: rgba(238,242,250,.96);
-  --nav-bg: rgba(255,255,255,.97);
-  --radius: 20px;
+  /* ── Radius scale ── */
+  --radius-xs: 8px;
   --radius-sm: 14px;
-  /* Text */
+  --radius-md: 16px;
+  --radius: 20px;
+  --radius-lg: 26px;
+  --radius-full: 9999px;
+  /* ── Spacing scale ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  /* ── Typography scale ── */
+  --fs-xs: 10px;
+  --fs-sm: 12px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+  --fs-2xl: 28px;
+  --fs-3xl: 40px;
+  /* ── Component sizes ── */
+  --h-btn: 48px;
+  --h-input: 46px;
+  --h-icon-btn: 44px;
+  --icon-sm: 16px;
+  --icon-md: 20px;
+  --icon-lg: 24px;
+  /* ── Text — canonical ── */
   --tx: #0D1440;
   --tx2: rgba(13,20,64,.50);
   --tx3: rgba(13,20,64,.32);
-  --text: #0D1440;
-  --text2: rgba(13,20,64,.50);
-  --text3: rgba(13,20,64,.32);
-  /* Avenco Blue — primary brand */
+  /* Text — legacy aliases → canonical (both names work) */
+  --text: var(--tx);
+  --text2: var(--tx2);
+  --text3: var(--tx3);
+  /* Text — hyphenated aliases used by Pendências/Vehicles sections */
+  --text-1: var(--tx);
+  --text-2: var(--tx2);
+  /* Surface aliases (Pendências compat) */
+  --card: var(--surface);
+  --surface-2: var(--surface2);
+  --input-bg: var(--surface);
+  /* ── Brand — canonical ── */
   --ac: #2563EB;
   --ac-t: rgba(37,99,235,.10);
   --ac-b: rgba(37,99,235,.20);
-  --gold: #2563EB;
+  --ac2: #3B82F6;
   --gold-glow: rgba(37,99,235,.22);
-  --gold-raw: #2563EB;
-  --orange: #3B82F6;
-  /* Semantic */
+  /* Brand aliases */
+  --gold: var(--ac);
+  --gold-raw: var(--ac);
+  --orange: var(--ac2);
+  /* ── Semantic — canonical ── */
   --gn: #16A34A;
   --gn-t: rgba(22,163,74,.10);
-  --green: #16A34A;
-  --green-d: #15803D;
   --rd: #DC2626;
   --rd-t: rgba(220,38,38,.10);
-  --red: #DC2626;
-  --red-d: #B91C1C;
   --bl: #0284C7;
   --bl-t: rgba(2,132,199,.10);
-  --blue: #0284C7;
   --violet: #7C3AED;
-  /* Overlay tokens */
+  --green-d: #15803D;
+  --red-d: #B91C1C;
+  /* Semantic aliases */
+  --green: var(--gn);
+  --red: var(--rd);
+  --blue: var(--bl);
+  /* ── Feedback states ── */
+  --c-success: var(--gn);
+  --c-success-t: var(--gn-t);
+  --c-danger: var(--rd);
+  --c-danger-t: var(--rd-t);
+  --c-warning: #D97706;
+  --c-warning-t: rgba(217,119,6,.10);
+  --c-info: var(--ac);
+  --c-info-t: var(--ac-t);
+  /* ── Overlay tokens ── */
   --ol1: rgba(0,0,0,.03);
   --ol2: rgba(0,0,0,.06);
   --ol3: rgba(0,0,0,.10);
-  /* Brand tint scale */
+  /* ── Brand tint scale ── */
   --gold-t06: rgba(37,99,235,.06);
   --gold-t12: rgba(37,99,235,.12);
   --gold-t20: rgba(37,99,235,.20);
@@ -57,54 +107,56 @@
   --gold-t30: rgba(37,99,235,.30);
   --gold-t40: rgba(37,99,235,.40);
   --gold-t50: rgba(37,99,235,.50);
-  /* Sheet handle */
+  /* ── Sheet handle ── */
   --handle-bg: rgba(0,0,0,.10);
-  /* Positive / negative */
-  --pos: var(--green);
-  --neg: var(--red);
+  /* ── Semantic states ── */
+  --pos: var(--gn);
+  --neg: var(--rd);
 }
 :root[data-theme="dark"] {
+  /* ── Surfaces ── */
   --bg: #0F1629;
   --surface: #0F1629;
   --surface2: #161D35;
   --surface3: #1D2542;
+  --topbar-bg: rgba(7,9,26,.94);
+  --nav-bg: rgba(7,9,26,.96);
+  /* ── Borders ── */
   --border: rgba(255,255,255,.07);
   --border-strong: rgba(255,255,255,.13);
+  /* ── Shadows ── */
   --shadow: 0 2px 12px rgba(0,0,0,.6), 0 1px 3px rgba(0,0,0,.4);
   --shadow-sm: 0 1px 6px rgba(0,0,0,.5), 0 2px 10px rgba(0,0,0,.35);
   --shadow-card: 0 4px 24px rgba(0,0,0,.7), 0 1px 4px rgba(0,0,0,.5);
   --shadow-elevated: 0 8px 40px rgba(0,0,0,.85), 0 2px 8px rgba(0,0,0,.6);
-  --topbar-bg: rgba(7,9,26,.94);
-  --nav-bg: rgba(7,9,26,.96);
+  /* ── Text ── */
   --tx: #E8EDFF;
   --tx2: rgba(232,237,255,.50);
   --tx3: rgba(232,237,255,.28);
-  --text: #E8EDFF;
-  --text2: rgba(232,237,255,.50);
-  --text3: rgba(232,237,255,.28);
+  /* ── Brand ── */
   --ac: #5B8AF5;
   --ac-t: rgba(91,138,245,.12);
   --ac-b: rgba(91,138,245,.24);
-  --gold: #5B8AF5;
+  --ac2: #7EAAFE;
   --gold-glow: rgba(91,138,245,.35);
-  --gold-raw: #5B8AF5;
-  --orange: #7EAAFE;
+  /* ── Semantic ── */
   --gn: #4ADE80;
   --gn-t: rgba(74,222,128,.12);
-  --green: #4ADE80;
   --green-d: #22C55E;
   --rd: #F87171;
   --rd-t: rgba(248,113,113,.12);
-  --red: #F87171;
   --red-d: #EF4444;
   --bl: #38BDF8;
   --bl-t: rgba(56,189,248,.12);
-  --blue: #38BDF8;
   --violet: #C084FC;
+  /* ── Feedback states ── */
+  --c-warning: #FCD34D;
+  --c-warning-t: rgba(252,211,77,.10);
+  /* ── Overlay ── */
   --ol1: rgba(255,255,255,.03);
   --ol2: rgba(255,255,255,.06);
   --ol3: rgba(255,255,255,.10);
-  /* Brand tint scale */
+  /* ── Brand tint scale ── */
   --gold-t06: rgba(91,138,245,.06);
   --gold-t12: rgba(91,138,245,.12);
   --gold-t20: rgba(91,138,245,.20);
@@ -112,10 +164,8 @@
   --gold-t30: rgba(91,138,245,.30);
   --gold-t40: rgba(91,138,245,.40);
   --gold-t50: rgba(91,138,245,.50);
-  /* Sheet handle */
+  /* ── Sheet handle ── */
   --handle-bg: rgba(255,255,255,.14);
-  --pos: var(--green);
-  --neg: var(--red);
 }
 
 /* ══ TOPBAR NEW DESIGN ══ */
@@ -1596,7 +1646,7 @@ main{background:var(--bg);min-height:100dvh}
 .pend-card-meta{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:5px}
 .pend-badge{padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
 .pend-prio-alta{background:rgba(255,77,106,.12);color:#ff4d6a}
-.pend-prio-media{background:rgba(255,184,0,.12);color:#f0b429}
+.pend-prio-media{background:var(--c-warning-t);color:var(--c-warning)}
 .pend-prio-baixa{background:rgba(0,230,160,.12);color:#00b87a}
 .pend-cat{background:var(--border);color:var(--text-2)}
 .pend-card-sub{font-size:11px;color:var(--text-2);margin-bottom:3px}
@@ -1933,8 +1983,8 @@ textarea.form-input{resize:none;font-family:inherit}
   font-variant-numeric: tabular-nums;
 }
 
-.hc-tl-badge--alta  { background: #FEE2E2; color: var(--rd); }
-.hc-tl-badge--media { background: #FEF3C7; color: #B45309; }
+.hc-tl-badge--alta  { background: var(--rd-t); color: var(--rd); }
+.hc-tl-badge--media { background: var(--c-warning-t); color: var(--c-warning); }
 .hc-tl-badge--baixa { background: rgba(12,18,64,.06); color: var(--tx3); }
 :root[data-theme="dark"] .hc-tl-badge--baixa { background: var(--surface3); color: var(--tx3); }
 
@@ -2068,7 +2118,7 @@ textarea.form-input{resize:none;font-family:inherit}
 }
 
 .hc-pend-bar--alta  { background: var(--rd); }
-.hc-pend-bar--media { background: #D97706; }
+.hc-pend-bar--media { background: var(--c-warning); }
 .hc-pend-bar--baixa { background: var(--tx3); }
 
 .hc-pend-info { flex: 1; min-width: 0; }
