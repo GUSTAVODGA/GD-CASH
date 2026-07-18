@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=60">
+<link rel="stylesheet" href="style.css?v=61">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -611,6 +611,26 @@
   <div id="ajustes-root"></div>
 </section>
 
+<!-- ════ PATRIMÔNIO — VEÍCULOS ════ -->
+<section class="page" id="page-patrimonio">
+  <div class="page-header-row" style="padding:0 20px;margin-top:12px">
+    <div class="page-header-title">Veículos</div>
+    <button class="veh-add-btn" id="veh-add-btn" onclick="openVehForm()">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Novo
+    </button>
+  </div>
+  <div id="veh-list-view" style="padding:0 16px">
+    <div id="veh-list" class="veh-list"></div>
+  </div>
+  <div id="veh-detail-view" style="display:none;padding:0 16px">
+    <div id="veh-detail-cont"></div>
+  </div>
+  <div id="veh-form-view" style="display:none;padding:0 16px">
+    <div id="veh-form-cont"></div>
+  </div>
+</section>
+
 </main>
 
 <nav class="bottom-nav">
@@ -1035,26 +1055,6 @@
   </div>
 </div>
 
-<!-- ════ PATRIMÔNIO — VEÍCULOS ════ -->
-<section class="page" id="page-patrimonio">
-  <div class="page-header-row" style="padding:0 20px;margin-top:12px">
-    <div class="page-header-title">Veículos</div>
-    <button class="veh-add-btn" id="veh-add-btn" onclick="openVehForm()">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Novo
-    </button>
-  </div>
-  <div id="veh-list-view" style="padding:0 16px">
-    <div id="veh-list" class="veh-list"></div>
-  </div>
-  <div id="veh-detail-view" style="display:none;padding:0 16px">
-    <div id="veh-detail-cont"></div>
-  </div>
-  <div id="veh-form-view" style="display:none;padding:0 16px">
-    <div id="veh-form-cont"></div>
-  </div>
-</section>
-
 <!-- Apontamento de veículo -->
 <div class="overlay" id="modal-veh-event">
   <div class="sheet">
@@ -1224,7 +1224,7 @@
   </div>
 </div>
 
-<script src="app.js?v=69"></script>
+<script src="app.js?v=70"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
