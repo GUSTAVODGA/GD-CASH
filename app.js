@@ -2175,6 +2175,7 @@ new MutationObserver((mutations) => {
 // TABS
 // ══════════════════════════════════════════
 function switchTab(tab) {
+  window.scrollTo(0, 0);
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   const page = document.getElementById('page-'+tab);
