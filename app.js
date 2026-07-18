@@ -420,13 +420,9 @@ function refreshAfterDayEdit() {
 // ── Mais / FAB ──
 function openMoreMenu() { openOverlay('modal-more'); }
 function switchMore(tab) {
-  // Fechar overlay sem restaurar scroll (vai para nova aba, não volta à posição anterior)
   const o = document.getElementById('modal-more');
   o.classList.remove('open');
-  document.body.style.position = '';
-  document.body.style.top = '';
-  document.body.style.width = '';
-  window.scrollTo(0, 0);
+  document.documentElement.style.overflow = '';
   switchTab(tab);
 }
 
@@ -2146,17 +2142,12 @@ function deleteCat(i) {
 let _scrollY = 0;
 function openOverlay(id) {
   _scrollY = window.scrollY;
-  document.body.style.position = 'fixed';
-  document.body.style.top = `-${_scrollY}px`;
-  document.body.style.width = '100%';
+  document.documentElement.style.overflow = 'hidden';
   document.getElementById(id).classList.add('open');
 }
 function closeOverlay(id) {
   document.getElementById(id).classList.remove('open');
-  document.body.style.position = '';
-  document.body.style.top = '';
-  document.body.style.width = '';
-  window.scrollTo(0, _scrollY);
+  document.documentElement.style.overflow = '';
 }
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) closeOverlay(o.id); }));
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.overlay.open').forEach(o=>closeOverlay(o.id)); });
@@ -2175,7 +2166,7 @@ new MutationObserver((mutations) => {
 // TABS
 // ══════════════════════════════════════════
 function switchTab(tab) {
-  window.scrollTo(0, 0);
+  requestAnimationFrame(() => { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; });
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   const page = document.getElementById('page-'+tab);
