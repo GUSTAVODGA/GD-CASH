@@ -2004,28 +2004,38 @@ function deleteResHist(id) {
 // RENDER: FIXOS
 // ══════════════════════════════════════════
 function renderFixos() {
-  document.getElementById('fixed-total').textContent=R(D.fixedExpenses.reduce((s,f)=>s+f.amount,0));
+  document.getElementById('fixed-total').textContent=R(D.fixedExpenses.filter(f=>!f.paused).reduce((s,f)=>s+f.amount,0));
   const list=document.getElementById('fixed-list');
   if (!D.fixedExpenses.length) { list.innerHTML='<div class="empty-state">Nenhum gasto fixo cadastrado</div>'; return; }
   const todayDay = new Date().getDate();
   list.innerHTML = D.fixedExpenses.map(f => {
-    const nearDue = f.dueDay && f.dueDay >= todayDay && f.dueDay <= todayDay + 3;
-    const overDue = f.dueDay && f.dueDay < todayDay;
+    const paused = !!f.paused;
+    const nearDue = !paused && f.dueDay && f.dueDay >= todayDay && f.dueDay <= todayDay + 3;
+    const overDue = !paused && f.dueDay && f.dueDay < todayDay;
     const dueCls = nearDue ? ' fixed-due-near' : overDue ? ' fixed-due-over' : '';
     const dueTxt = f.dueDay ? ` · <span class="fixed-due-lbl${dueCls}">Vence dia ${f.dueDay}</span>` : '';
+    const pauseIcon = paused
+      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
+      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
     return `
-      <div class="fixed-item${nearDue ? ' fixed-near-due' : ''}">
+      <div class="fixed-item${nearDue ? ' fixed-near-due' : ''}${paused ? ' fixed-paused' : ''}">
         <div class="fixed-info">
-          <div class="fixed-name">${f.name}</div>
+          <div class="fixed-name">${f.name}${paused ? ' <span class="fixed-paused-badge">pausado</span>' : ''}</div>
           <div class="fixed-meta">${f.category}${dueTxt}</div>
         </div>
         <div class="fixed-right">
           <span class="fixed-amt">${R(f.amount)}</span>
+          <button class="icon-btn icon-btn-pause" onclick="toggleFixedPaused('${f.id}')" title="${paused?'Reativar':'Pausar'}">${pauseIcon}</button>
           <button class="icon-btn" onclick="openFixedModal('${f.id}')" title="Editar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
           <button class="icon-btn icon-btn-del" onclick="deleteFixed('${f.id}')" title="Excluir"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
         </div>
       </div>`;
   }).join('');
+}
+function toggleFixedPaused(id) {
+  const idx = D.fixedExpenses.findIndex(f => f.id === id);
+  if (idx !== -1) D.fixedExpenses[idx].paused = !D.fixedExpenses[idx].paused;
+  save(); renderFixos();
 }
 function openFixedModal(id) {
   const f=id?D.fixedExpenses.find(f=>f.id===id):null;

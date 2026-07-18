@@ -2667,3 +2667,9 @@ select.fi {
 .fixed-due-lbl { color: var(--text3); }
 .fixed-due-lbl.fixed-due-near { color: #d97706; font-weight: 700; }
 .fixed-due-lbl.fixed-due-over { color: var(--red); }
+
+/* ── Fixos paused state ── */
+.fixed-paused { opacity: .5; }
+.fixed-paused .fixed-name { text-decoration: line-through; }
+.fixed-paused-badge { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; vertical-align: middle; text-decoration: none !important; }
+.icon-btn-pause { color: var(--text3); }
