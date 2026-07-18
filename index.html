@@ -24,8 +24,8 @@
 <meta name="twitter:image"      content="https://gustavodga.github.io/GD-CASH/og-image.png">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
-<script>try{var _t=localStorage.getItem('gdcash_theme')||(window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light');document.documentElement.setAttribute('data-theme',_t)}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=58">
+<script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="style.css?v=59">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
@@ -607,65 +607,8 @@
 <section class="page" id="page-ajustes">
   <div class="page-header-row">
     <span class="page-header-title">Ajustes</span>
-    <button class="tab-help-btn" onclick="showTabHelp('ajustes')">?</button>
   </div>
-  <div class="sec-title">Personalização</div>
-  <div class="card settings-list">
-    <button class="settings-row" onclick="openCatModal()"><span>Gerenciar categorias de gastos</span><span class="chev">›</span></button>
-    <button class="settings-row" onclick="openPlatSettings()"><span>Gerenciar fontes de receita</span><span class="chev">›</span></button>
-  </div>
-
-  <div class="sec-title">Orçamento mensal</div>
-  <div class="card settings-list" id="budget-settings-list"></div>
-  <button class="btn btn-secondary" style="margin-bottom:14px" onclick="openBudgetModal()">+ Definir limite por categoria</button>
-
-  <div class="sec-title">Dados</div>
-  <div class="card settings-list">
-    <button class="settings-row" onclick="exportData()"><span>Exportar dados (backup)</span><span class="chev">›</span></button>
-    <button class="settings-row" onclick="document.getElementById('import-file-input').click()"><span>Importar dados (backup)</span><span class="chev">›</span></button>
-    <input type="file" id="import-file-input" accept="application/json" style="display:none" onchange="importData(event)">
-  </div>
-
-  <div class="sec-title" id="install-guide-section">Instalar como app</div>
-  <div class="card install-guide-card" id="install-guide-card">
-    <div class="ig-header">
-      <span class="ig-header-icon">📲</span>
-      <div>
-        <div class="ig-title">Adicionar à tela de início</div>
-        <div class="ig-sub">Acesse o Avenco direto do iPhone, sem abrir o Safari</div>
-      </div>
-    </div>
-    <div class="ig-steps">
-      <div class="ig-step">
-        <div class="ig-step-num">1</div>
-        <div class="ig-step-body">
-          <div class="ig-step-title">Abra no Safari</div>
-          <div class="ig-step-text">O app precisa estar aberto no Safari do iPhone (não no Chrome ou outro navegador)</div>
-        </div>
-      </div>
-      <div class="ig-step">
-        <div class="ig-step-num">2</div>
-        <div class="ig-step-body">
-          <div class="ig-step-title">Toque em Compartilhar <svg style="vertical-align:middle" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></div>
-          <div class="ig-step-text">Ícone no centro da barra inferior do Safari</div>
-        </div>
-      </div>
-      <div class="ig-step">
-        <div class="ig-step-num">3</div>
-        <div class="ig-step-body">
-          <div class="ig-step-title">Toque em "Adicionar à Tela de Início"</div>
-          <div class="ig-step-text">Role a lista de opções para baixo até encontrar</div>
-        </div>
-      </div>
-      <div class="ig-step">
-        <div class="ig-step-num">4</div>
-        <div class="ig-step-body">
-          <div class="ig-step-title">Toque em "Adicionar" no canto superior</div>
-          <div class="ig-step-text">Pronto! O ícone do Avenco aparece na sua tela inicial</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  <div id="ajustes-root"></div>
 </section>
 
 </main>
@@ -1193,6 +1136,81 @@
 </div>
 
 <!-- ════ NOTIF PERMISSION PROMPT ════ -->
+<!-- Seletor de moeda -->
+<div class="overlay" id="modal-currency-sheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Moeda</div>
+    <div class="opt-list">
+      <button class="opt-row" data-cur="R$" onclick="setCurrencyFromSheet('R$')">
+        <span class="opt-sym">R$</span>
+        <div class="opt-body"><div class="opt-label">Real</div><div class="opt-sub">Brasil</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-cur="US$" onclick="setCurrencyFromSheet('US$')">
+        <span class="opt-sym">US$</span>
+        <div class="opt-body"><div class="opt-label">Dólar</div><div class="opt-sub">Estados Unidos</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-cur="CA$" onclick="setCurrencyFromSheet('CA$')">
+        <span class="opt-sym">CA$</span>
+        <div class="opt-body"><div class="opt-label">Dólar canadense</div><div class="opt-sub">Canadá</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-cur="AU$" onclick="setCurrencyFromSheet('AU$')">
+        <span class="opt-sym">AU$</span>
+        <div class="opt-body"><div class="opt-label">Dólar australiano</div><div class="opt-sub">Austrália</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-cur="MX$" onclick="setCurrencyFromSheet('MX$')">
+        <span class="opt-sym">MX$</span>
+        <div class="opt-body"><div class="opt-label">Peso mexicano</div><div class="opt-sub">México</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-cur="€" onclick="setCurrencyFromSheet('€')">
+        <span class="opt-sym">€</span>
+        <div class="opt-body"><div class="opt-label">Euro</div><div class="opt-sub">União Europeia</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-cur="£" onclick="setCurrencyFromSheet('£')">
+        <span class="opt-sym">£</span>
+        <div class="opt-body"><div class="opt-label">Libra esterlina</div><div class="opt-sub">Reino Unido</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-cur="¥" onclick="setCurrencyFromSheet('¥')">
+        <span class="opt-sym">¥</span>
+        <div class="opt-body"><div class="opt-label">Iene</div><div class="opt-sub">Japão</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Seletor de aparência -->
+<div class="overlay" id="modal-theme-sheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Aparência</div>
+    <div class="opt-list">
+      <button class="opt-row" data-theme="auto" onclick="setTheme('auto')">
+        <div class="opt-body">
+          <div class="opt-label">Sistema</div>
+          <div class="opt-sub">Segue a preferência do dispositivo</div>
+        </div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-theme="light" onclick="setTheme('light')">
+        <div class="opt-body"><div class="opt-label">Claro</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+      <button class="opt-row" data-theme="dark" onclick="setTheme('dark')">
+        <div class="opt-body"><div class="opt-label">Escuro</div></div>
+        <svg class="opt-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="overlay" id="modal-notif-perm">
   <div class="sheet">
     <div class="sheet-handle"></div>
@@ -1206,7 +1224,7 @@
   </div>
 </div>
 
-<script src="app.js?v=67"></script>
+<script src="app.js?v=68"></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

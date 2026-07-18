@@ -555,6 +555,7 @@ function exportData() {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
   localStorage.setItem('gdcash_last_backup', todayStr());
+  gdToast('Backup exportado.');
 }
 function importData(event) {
   const file = event.target.files[0];
@@ -2194,7 +2195,7 @@ function switchTab(tab) {
   if(tab==='metas')     renderGoals();
   if(tab==='fixos')      renderFixos();
   if(tab==='conversor')  loadConversorRates();
-  if(tab==='ajustes')    { renderBudgetSettings(); initSettingsExtras(); }
+  if(tab==='ajustes')    renderAjustes();
   if(tab==='lembretes')  renderLembretes();
   if(tab==='pendencias') renderPendencias();
   if(tab==='patrimonio') renderPatrimonio();
@@ -2711,6 +2712,9 @@ function renderCatBudgets() {
 }
 
 function renderBudgetSettings() {
+  if (document.getElementById('page-ajustes')?.classList.contains('active')) {
+    renderAjustes(); return;
+  }
   const el = document.getElementById('budget-settings-list');
   if (!el) return;
   const budgets = D.catBudgets || {};
@@ -3059,20 +3063,46 @@ initLongPress();
 function initTheme() {
   const saved = localStorage.getItem('gdcash_theme');
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-  const dark = saved ? saved === 'dark' : prefersDark;
+  const dark = saved === 'dark' ? true : saved === 'light' ? false : prefersDark;
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
-  updateThemeToggle(dark);
 }
 function toggleTheme() {
   const isDark = document.documentElement.dataset.theme === 'dark';
-  const newTheme = isDark ? 'light' : 'dark';
-  document.documentElement.dataset.theme = newTheme;
-  localStorage.setItem('gdcash_theme', newTheme);
-  updateThemeToggle(!isDark);
+  setTheme(isDark ? 'light' : 'dark');
 }
 function updateThemeToggle(dark) {
   const btn = document.getElementById('theme-toggle-btn');
   if (btn) btn.classList.toggle('on', dark);
+}
+function setTheme(mode) {
+  localStorage.setItem('gdcash_theme', mode);
+  const dark = mode === 'dark' ? true : mode === 'light' ? false
+    : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  closeOverlay('modal-theme-sheet');
+  const chip = document.getElementById('srow-theme-val');
+  if (chip) chip.textContent = ({ light:'Claro', dark:'Escuro', auto:'Sistema' })[mode] || 'Sistema';
+  gdToast('Aparência atualizada.');
+}
+function openThemeSheet() {
+  const saved = localStorage.getItem('gdcash_theme') || 'auto';
+  document.querySelectorAll('#modal-theme-sheet .opt-row').forEach(el => {
+    el.classList.toggle('opt-on', el.dataset.theme === saved);
+  });
+  openOverlay('modal-theme-sheet');
+}
+function openCurrencySheet() {
+  document.querySelectorAll('#modal-currency-sheet .opt-row').forEach(el => {
+    el.classList.toggle('opt-on', el.dataset.cur === currSym);
+  });
+  openOverlay('modal-currency-sheet');
+}
+function setCurrencyFromSheet(sym) {
+  setCurrency(sym);
+  closeOverlay('modal-currency-sheet');
+  const chip = document.getElementById('srow-curr-val');
+  if (chip) chip.textContent = sym;
+  gdToast('Moeda alterada.');
 }
 
 // ══════════════════════════════════════════
@@ -3676,42 +3706,229 @@ function checkBudgetAlerts(cat) {
 // ══════════════════════════════════════════
 // ADD THEME TOGGLE TO SETTINGS PAGE
 // ══════════════════════════════════════════
-function initSettingsExtras() {
-  const settingsPage = document.getElementById('page-ajustes');
-  if (!settingsPage) return;
-  const existing = settingsPage.querySelector('.theme-toggle-section');
-  if (existing) return;
+function initSettingsExtras() { /* replaced by renderAjustes() */ }
 
-  const section = document.createElement('div');
-  section.className = 'theme-toggle-section';
-  section.innerHTML = `
-    <div class="sec-title">Aparência</div>
-    <div class="card settings-list">
-      <div class="theme-toggle-row">
-        <span>Modo escuro</span>
-        <button class="toggle-switch" id="theme-toggle-btn" onclick="toggleTheme()">
-          <div class="toggle-knob"></div>
-        </button>
+function renderAjustes() {
+  const root = document.getElementById('ajustes-root');
+  if (!root) return;
+
+  const catCount    = (D.expCats || []).length;
+  const platCount   = (D.platforms || []).length;
+  const budgetCount = Object.keys(D.catBudgets || {}).length;
+
+  const notifSupported = 'Notification' in window;
+  const notifPerm   = notifSupported ? Notification.permission : 'unsupported';
+  const notifStatus = notifPerm === 'granted'  ? 'Ativa'
+                    : notifPerm === 'denied'   ? 'Bloqueada — ative nas configurações do sistema'
+                    : notifSupported           ? 'Não configurada'
+                    : 'Não suportado';
+
+  const savedTheme = localStorage.getItem('gdcash_theme') || 'auto';
+  const themeLabel = ({ light:'Claro', dark:'Escuro', auto:'Sistema' })[savedTheme] || 'Sistema';
+
+  const lastBackup = localStorage.getItem('gdcash_last_backup');
+  const backupSub  = lastBackup
+    ? 'Último: ' + lastBackup.split('-').reverse().join('/')
+    : 'Nunca exportado';
+
+  const syncLabel = CLOUD_ENABLED ? 'Firebase ativo' : 'Somente local';
+
+  const userName  = currentUser?.displayName || 'Usuário';
+  const userEmail = currentUser?.email || '';
+  const userPhoto = currentUser?.photoURL || '';
+  const isStandalone = window.navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+
+  const ic = {
+    bell:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>`,
+    logout:  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+    sun:     `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`,
+    dollar:  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>`,
+    globe:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`,
+    tag:     `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
+    layers:  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
+    sliders: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="6" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="4" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="8" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="4" x2="15" y2="4"/><line x1="17" y1="16" x2="23" y2="16"/></svg>`,
+    download:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    upload:  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+    cloud:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>`,
+    info:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
+    phone:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>`,
+    shield:  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+    file:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+    user:    `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
+  };
+  const chev = `<svg class="srow-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>`;
+
+  root.innerHTML = `
+    <div class="sgrp-title">Perfil e conta</div>
+    <div class="sgrp">
+      <div class="srow srow-profile">
+        ${userPhoto ? `<img class="srow-avatar" src="${escHtml(userPhoto)}" alt="">` : `<div class="srow-avatar srow-avatar-ph">${ic.user}</div>`}
+        <div class="srow-body">
+          <div class="srow-label">${escHtml(userName)}</div>
+          ${userEmail ? `<div class="srow-value">${escHtml(userEmail)}</div>` : ''}
+        </div>
       </div>
-      <div class="theme-toggle-row">
-        <span>Notificações</span>
-        <button class="btn btn-secondary" style="width:auto;padding:8px 14px;font-size:12px" onclick="openOverlay('modal-notif-perm')">Configurar</button>
+      <div class="sdivider sdivider-full"></div>
+      <button class="srow" onclick="openOverlay('modal-notif-perm')">
+        <span class="srow-icon">${ic.bell}</span>
+        <div class="srow-body">
+          <div class="srow-label">Notificações</div>
+          <div class="srow-value">${notifStatus}</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      <div class="sdivider"></div>
+      <button class="srow" onclick="openAccountMenu()">
+        <span class="srow-icon">${ic.logout}</span>
+        <div class="srow-body"><div class="srow-label">Minha conta</div></div>
+        <div class="srow-right">${chev}</div>
+      </button>
+    </div>
+
+    <div class="sgrp-title">Aparência</div>
+    <div class="sgrp">
+      <button class="srow" onclick="openThemeSheet()">
+        <span class="srow-icon">${ic.sun}</span>
+        <div class="srow-body"><div class="srow-label">Aparência</div></div>
+        <div class="srow-right"><span class="srow-chip" id="srow-theme-val">${themeLabel}</span>${chev}</div>
+      </button>
+      <div class="sdivider"></div>
+      <button class="srow" onclick="openCurrencySheet()">
+        <span class="srow-icon">${ic.dollar}</span>
+        <div class="srow-body"><div class="srow-label">Moeda</div></div>
+        <div class="srow-right"><span class="srow-chip" id="srow-curr-val">${escHtml(currSym)}</span>${chev}</div>
+      </button>
+    </div>
+
+    <div class="sgrp-title">Organização financeira</div>
+    <div class="sgrp">
+      <button class="srow" onclick="openCatModal()">
+        <span class="srow-icon">${ic.tag}</span>
+        <div class="srow-body">
+          <div class="srow-label">Categorias de gastos</div>
+          <div class="srow-value">${catCount} categoria${catCount !== 1 ? 's' : ''} configurada${catCount !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      <div class="sdivider"></div>
+      <button class="srow" onclick="openPlatSettings()">
+        <span class="srow-icon">${ic.layers}</span>
+        <div class="srow-body">
+          <div class="srow-label">Fontes de receita</div>
+          <div class="srow-value">${platCount} fonte${platCount !== 1 ? 's' : ''} configurada${platCount !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      <div class="sdivider"></div>
+      <button class="srow" onclick="openBudgetModal()">
+        <span class="srow-icon">${ic.sliders}</span>
+        <div class="srow-body">
+          <div class="srow-label">Limites mensais</div>
+          <div class="srow-value">${budgetCount ? budgetCount + ' categoria' + (budgetCount !== 1 ? 's' : '') + ' com limite' : 'Nenhum definido'}</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      ${budgetCount ? `<div class="sdivider sdivider-full"></div><div id="budget-settings-list" class="srow-budget-inline"></div>` : `<div id="budget-settings-list" style="display:none"></div>`}
+    </div>
+
+    <div class="sgrp-title">Dados e segurança</div>
+    <div class="sgrp">
+      <button class="srow" onclick="exportData()">
+        <span class="srow-icon">${ic.download}</span>
+        <div class="srow-body">
+          <div class="srow-label">Exportar backup</div>
+          <div class="srow-value">${backupSub}</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      <div class="sdivider"></div>
+      <button class="srow" onclick="document.getElementById('import-file-input').click()">
+        <span class="srow-icon">${ic.upload}</span>
+        <div class="srow-body">
+          <div class="srow-label">Importar backup</div>
+          <div class="srow-value">Substituir dados locais</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      <div class="sdivider"></div>
+      <div class="srow srow-muted">
+        <span class="srow-icon">${ic.cloud}</span>
+        <div class="srow-body">
+          <div class="srow-label">Sincronização</div>
+          <div class="srow-value">${syncLabel}</div>
+        </div>
       </div>
     </div>
-    <div class="sec-title">Moeda</div>
-    <div class="card" style="padding:14px 16px">
-      <div style="font-size:13px;color:var(--text-2);margin-bottom:12px">Símbolo exibido em todos os valores do app</div>
-      <div class="curr-pills">
-        ${CURRENCIES.map(c => `<button class="curr-pill${c === currSym ? ' curr-pill-on' : ''}" data-cur="${c}" onclick="setCurrency('${c}')">${c}</button>`).join('')}
+    <input type="file" id="import-file-input" accept="application/json" style="display:none" onchange="importData(event)">
+
+    <div class="sgrp-title">Sobre</div>
+    <div class="sgrp">
+      ${isStandalone ? `
+      <div class="srow srow-muted">
+        <span class="srow-icon">${ic.phone}</span>
+        <div class="srow-body">
+          <div class="srow-label">Instalar como app</div>
+          <div class="srow-value">App instalado</div>
+        </div>
       </div>
-    </div>`;
+      ` : `
+      <button class="srow" onclick="document.getElementById('install-guide-section').scrollIntoView({behavior:'smooth'})">
+        <span class="srow-icon">${ic.phone}</span>
+        <div class="srow-body">
+          <div class="srow-label">Instalar como app</div>
+          <div class="srow-value">Adicionar à tela de início</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      `}
+      <div class="sdivider"></div>
+      <div class="srow srow-muted">
+        <span class="srow-icon">${ic.info}</span>
+        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v28</div></div>
+      </div>
+      <div class="sdivider"></div>
+      <div class="srow srow-muted">
+        <span class="srow-icon">${ic.shield}</span>
+        <div class="srow-body"><div class="srow-label">Política de privacidade</div><div class="srow-value">Em breve</div></div>
+      </div>
+      <div class="sdivider"></div>
+      <div class="srow srow-muted">
+        <span class="srow-icon">${ic.file}</span>
+        <div class="srow-body"><div class="srow-label">Termos de uso</div><div class="srow-value">Em breve</div></div>
+      </div>
+    </div>
 
-  const firstSec = settingsPage.querySelector('.sec-title');
-  if (firstSec) firstSec.before(section);
-  else settingsPage.prepend(section);
+    ${!isStandalone ? `
+    <div id="install-guide-section">
+      <div class="sgrp-title">Instalar como app</div>
+      <div class="sgrp" id="install-guide-card" style="padding:4px 0">
+        <div class="ig-steps" style="padding:8px 16px 4px">
+          <div class="ig-step"><div class="ig-step-num">1</div><div class="ig-step-body"><div class="ig-step-title">Abra no Safari</div><div class="ig-step-text">O app precisa estar aberto no Safari do iPhone, não no Chrome</div></div></div>
+          <div class="ig-step"><div class="ig-step-num">2</div><div class="ig-step-body"><div class="ig-step-title">Toque em Compartilhar <svg style="vertical-align:middle" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg></div><div class="ig-step-text">Ícone na barra inferior do Safari</div></div></div>
+          <div class="ig-step"><div class="ig-step-num">3</div><div class="ig-step-body"><div class="ig-step-title">Toque em "Adicionar à Tela de Início"</div><div class="ig-step-text">Role a lista de opções para encontrar</div></div></div>
+          <div class="ig-step"><div class="ig-step-num">4</div><div class="ig-step-body"><div class="ig-step-title">Toque em "Adicionar"</div><div class="ig-step-text">O ícone do Avenco aparece na sua tela inicial</div></div></div>
+        </div>
+      </div>
+    </div>
+    ` : ''}
+  `;
 
-  // Set initial toggle state
-  updateThemeToggle(document.documentElement.dataset.theme === 'dark');
+  if (budgetCount) renderBudgetSettingsInline();
+}
+
+function renderBudgetSettingsInline() {
+  const el = document.getElementById('budget-settings-list');
+  if (!el) return;
+  const budgets = D.catBudgets || {};
+  el.innerHTML = Object.entries(budgets).map(([cat, limit]) =>
+    `<div class="settings-row">
+       <span>${escHtml(cat)}</span>
+       <span style="display:flex;align-items:center;gap:10px">
+         <span style="color:var(--ac);font-weight:700">${R(limit)}</span>
+         <button onclick="deleteCatBudget('${escHtml(cat)}')" style="background:none;border:none;color:var(--tx3);font-size:15px;cursor:pointer;padding:0">✕</button>
+       </span>
+     </div>`).join('');
 }
 
 // ══════════════════════════════════════════
