@@ -1621,27 +1621,30 @@ function buildMonthSummary(off) {
 }
 
 // ══════════════════════════════════════════
-// COMPARATIVO MENSAL
+// COMPARATIVO MENSAL — editorial
 // ══════════════════════════════════════════
+function toggleCompDetails(btn) {
+  var d = btn.nextElementSibling;
+  var open = d.style.display === 'block';
+  d.style.display = open ? '' : 'block';
+  btn.textContent = open ? 'Ver detalhes ›' : 'Ocultar detalhes';
+}
+
 function renderComparativo(off) {
   var el = document.getElementById('mes-comp-section');
   if (!el) return;
 
   var cur = getMonthData(off);
-
-  // For current in-progress month compare only the same # of days in prev month
   var isPartialCurrent = off === 0 && cur.period.dayOfMonth < cur.period.daysInMonth;
   var prev = isPartialCurrent ? getMonthData(off - 1, { throughDay: cur.period.dayOfMonth }) : getMonthData(off - 1);
 
-  // Don't show if previous month has absolutely no data
   if (prev.income.total === 0 && prev.expenses.total === 0) { el.innerHTML = ''; return; }
 
   var prevLabel = isPartialCurrent
     ? (fmtMonthYear(off - 1) + ' (1–' + cur.period.dayOfMonth + ')')
     : fmtMonthYear(off - 1);
 
-  // delta helper — returns display text and color
-  // lessIsGood: spending less is positive (expenses)
+  // delta helper — for details table (unchanged logic)
   function mkDelta(curVal, prevVal, lessIsGood) {
     var diff = curVal - prevVal;
     if (diff === 0) return { text: 'Igual', color: 'var(--text3)' };
@@ -1653,58 +1656,75 @@ function renderComparativo(off) {
       txt = arrow + ' ' + R(absDiff);
     } else {
       var pct = Math.round(absDiff / prevVal * 100);
-      txt = pct <= 100
-        ? arrow + ' ' + R(absDiff) + ' (' + pct + '%)'
-        : arrow + ' ' + R(absDiff);
+      txt = pct <= 100 ? arrow + ' ' + R(absDiff) + ' (' + pct + '%)' : arrow + ' ' + R(absDiff);
     }
     return { text: txt, color: isGood ? 'var(--green)' : 'var(--red)' };
   }
 
+  // editorial sentence builder
+  function edLine(diff, prefix, wordPos, wordNeg, goodWhenPos) {
+    if (diff === 0) return '';
+    var cls = (goodWhenPos ? diff > 0 : diff < 0) ? 'pos' : 'neg';
+    return '<div class="comp-line ' + cls + '">' + prefix + ' <b>' + R(Math.abs(diff)) + '</b> ' + (diff > 0 ? wordPos : wordNeg) + '</div>';
+  }
+
+  var incDiff = cur.income.total - prev.income.total;
+  var expDiff = cur.expenses.total - prev.expenses.total;
+  var resDiff = cur.result.net - prev.result.net;
+
+  var incLine = incDiff === 0
+    ? '<div class="comp-line neu">Receita igual ao mesmo período</div>'
+    : edLine(incDiff, 'Entrou', 'a mais', 'a menos', true);
+
+  var expLine = expDiff === 0
+    ? '<div class="comp-line neu">Gastos iguais ao mesmo período</div>'
+    : edLine(expDiff, 'Você gastou', 'a mais', 'a menos', false);
+
+  var resLine = resDiff === 0
+    ? '<div class="comp-line neu">Resultado igual ao mesmo período</div>'
+    : edLine(resDiff, 'Seu resultado ficou', 'melhor', 'pior', true);
+
+  // Reserve — only if there was relevant movement in either month
+  var hasReserve = cur.reserve.net !== 0 || prev.reserve.net !== 0;
+  var rvDiff = cur.reserve.net - prev.reserve.net;
+  var resvLine = (hasReserve && rvDiff !== 0)
+    ? '<div class="comp-line comp-line-sm ' + (rvDiff > 0 ? 'pos' : 'neg') + '">Reserva: <b>' + R(Math.abs(rvDiff)) + '</b> ' + (rvDiff > 0 ? 'a mais' : 'a menos') + '</div>'
+    : '';
+
+  var periodNote = isPartialCurrent
+    ? 'Comparado aos primeiros ' + cur.period.dayOfMonth + ' dias de ' + fmtMonthYear(off - 1)
+    : 'Comparado a ' + prevLabel;
+
+  // Details table — full numbers, shown on demand
   var incD = mkDelta(cur.income.total, prev.income.total, false);
   var expD = mkDelta(cur.expenses.total, prev.expenses.total, true);
   var resD = mkDelta(cur.result.net, prev.result.net, false);
   var rvD  = mkDelta(cur.reserve.net, prev.reserve.net, false);
 
-  var partialNote = isPartialCurrent
-    ? '<div class="comp-note">Mês em andamento — comparando primeiros ' + cur.period.dayOfMonth + ' dias</div>'
-    : '';
-
-  // Reserve row: only show if either month had any reserve movement
-  var hasReserve = cur.reserve.net !== 0 || prev.reserve.net !== 0;
-  var resvSign = cur.reserve.net >= 0 ? (cur.reserve.net > 0 ? '+' : '') : '';
-  var resvRow = hasReserve
-    ? '<div class="comp-row"><span class="comp-lbl">Reserva</span><span class="comp-cur" style="color:' + (cur.reserve.net >= 0 ? 'var(--green)' : 'var(--red)') + '">' + resvSign + R(cur.reserve.net) + '</span><span class="comp-delta" style="color:' + rvD.color + '">' + rvD.text + '</span></div>'
-    : '';
-
-  // Top category changes (only if prev has expense data and pct change >= 12)
-  var catChips = '';
-  if (prev.expenses.total > 0 && cur.expenses.byCategory.length > 0) {
-    var prevCatMap = {};
-    prev.expenses.byCategory.forEach(function(c) { prevCatMap[c.cat] = c.amount; });
-    var chips = cur.expenses.byCategory.slice(0, 4).map(function(c) {
-      var p = prevCatMap[c.cat] || 0;
-      if (!p || p < 20) return null;
-      var pct = Math.round((c.amount - p) / p * 100);
-      if (Math.abs(pct) < 12) return null;
-      var good = pct < 0;
-      var badge = Math.abs(pct) <= 100
-        ? (pct > 0 ? '▲' : '▼') + Math.abs(pct) + '%'
-        : (pct > 0 ? '▲ ' : '▼ ') + R(Math.abs(c.amount - p));
-      return '<span class="comp-cat-chip ' + (good ? 'gn' : 'rd') + '">' + c.cat + ' ' + badge + '</span>';
-    }).filter(Boolean).slice(0, 3);
-    if (chips.length) catChips = '<div class="comp-cats">' + chips.join('') + '</div>';
+  function detRow(lbl, prevVal, curVal, delta) {
+    return '<div class="comp-det-row">' +
+      '<span class="comp-det-lbl">' + lbl + '</span>' +
+      '<span class="comp-det-val">' + R(prevVal) + '</span>' +
+      '<span class="comp-det-val">' + R(curVal) + '</span>' +
+      '<span class="comp-det-delta" style="color:' + delta.color + '">' + delta.text + '</span>' +
+    '</div>';
   }
 
-  var resultSign = cur.result.net >= 0 ? '' : '';
+  var shortPrev = fmtMonthYear(off - 1).split(' ')[0];
+  var detailsHtml =
+    '<div class="comp-det-hdr"><span></span><span>' + shortPrev + '</span><span>Este mês</span><span>Δ</span></div>' +
+    detRow('Receita', prev.income.total, cur.income.total, incD) +
+    detRow('Gastos', prev.expenses.total, cur.expenses.total, expD) +
+    detRow('Resultado', prev.result.net, cur.result.net, resD) +
+    (hasReserve ? detRow('Reserva', prev.reserve.net, cur.reserve.net, rvD) : '');
+
   el.innerHTML =
-    '<div class="sec-title">Comparativo com ' + prevLabel + '</div>' +
+    '<div class="sec-title">Comparativo</div>' +
     '<div class="card comp-card">' +
-      partialNote +
-      '<div class="comp-row"><span class="comp-lbl">Receita</span><span class="comp-cur">' + R(cur.income.total) + '</span><span class="comp-delta" style="color:' + incD.color + '">' + incD.text + '</span></div>' +
-      '<div class="comp-row"><span class="comp-lbl">Gastos</span><span class="comp-cur">' + R(cur.expenses.total) + '</span><span class="comp-delta" style="color:' + expD.color + '">' + expD.text + '</span></div>' +
-      '<div class="comp-row"><span class="comp-lbl">Resultado</span><span class="comp-cur" style="color:' + (cur.result.net >= 0 ? 'var(--green)' : 'var(--red)') + '">' + R(cur.result.net) + '</span><span class="comp-delta" style="color:' + resD.color + '">' + resD.text + '</span></div>' +
-      resvRow +
-      catChips +
+      '<div class="comp-period">' + periodNote + '</div>' +
+      '<div class="comp-lines">' + incLine + expLine + resLine + resvLine + '</div>' +
+      '<button class="comp-toggle" onclick="toggleCompDetails(this)">Ver detalhes ›</button>' +
+      '<div class="comp-details" style="display:none">' + detailsHtml + '</div>' +
     '</div>';
 }
 
