@@ -112,6 +112,15 @@
   /* ── Semantic states ── */
   --pos: var(--gn);
   --neg: var(--rd);
+  /* ── Motion tokens ── */
+  --dur-instant:  80ms;
+  --dur-fast:    140ms;
+  --dur-normal:  220ms;
+  --dur-slow:    340ms;
+  --ease-default: cubic-bezier(.4,0,.2,1);
+  --ease-in:      cubic-bezier(.4,0,1,1);
+  --ease-out:     cubic-bezier(0,0,.2,1);
+  --ease-spring:  cubic-bezier(.34,1.52,.64,1);
 }
 :root[data-theme="dark"] {
   /* ── Surfaces ── */
@@ -166,6 +175,16 @@
   --gold-t50: rgba(91,138,245,.50);
   /* ── Sheet handle ── */
   --handle-bg: rgba(255,255,255,.14);
+}
+
+/* ── Reduced-motion: disable all animation/transition for users who prefer it ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ══ TOPBAR NEW DESIGN ══ */
@@ -284,11 +303,12 @@
 .dacc-sub { font-size:10.5px; color:var(--tx3); margin-top:2px; transition:color .3s; }
 .dacc-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
 .dacc-liq { font-size:13px; font-weight:800; letter-spacing:-.3px; }
-.dacc-chev { transition:transform .25s; }
-.dacc-chev svg { width:16px; height:16px; fill:none; stroke:var(--tx3); stroke-width:2; stroke-linecap:round; transition:stroke .3s; }
+.dacc-chev { transition:transform var(--dur-fast) var(--ease-default); }
+.dacc-chev svg { width:16px; height:16px; fill:none; stroke:var(--tx3); stroke-width:2; stroke-linecap:round; transition:stroke var(--dur-normal) var(--ease-default); }
 .dacc.open .dacc-chev { transform:rotate(90deg); }
-.dacc-body { max-height:0; overflow:hidden; transition:max-height .3s cubic-bezier(.4,0,.2,1); }
-.dacc.open .dacc-body { max-height:600px; }
+.dacc-body { display:grid; grid-template-rows:0fr; overflow:hidden; transition:grid-template-rows var(--dur-normal) var(--ease-default); }
+.dacc.open .dacc-body { grid-template-rows:1fr; }
+.dacc-body > * { min-height:0; }
 .dacc-tx {
   display:flex; align-items:center; gap:10px;
   padding:10px 14px; border-top:1px solid var(--border);
@@ -459,21 +479,21 @@ main{background:var(--bg);min-height:100dvh}
 
 /* ── Page ── */
 .page{display:none;padding:16px;max-width:560px;margin:0 auto}
-.page.active{display:block;min-height:100dvh;animation:page-in .32s cubic-bezier(.22,.68,0,1.2) both}
+.page.active{display:block;min-height:100dvh;animation:page-in var(--dur-normal) var(--ease-spring) both}
 
 /* ── Card stagger (added by JS on tab switch) ── */
 .tab-fresh .card,.tab-fresh .hero-card{
-  opacity:0;animation:card-up .42s cubic-bezier(.22,.68,0,1.2) both;
+  opacity:0;animation:card-up var(--dur-slow) var(--ease-spring) both;
   animation-delay:var(--sd,0s);
 }
 /* ── List item stagger ── */
 .tx-item,.fixed-item,.res-hist-item,.iitem,.goal-card{
-  animation:fade-in .28s ease both;
+  animation:fade-in var(--dur-normal) var(--ease-out) both;
   animation-delay:var(--sd,0s);
 }
 
 /* ── Number pop on update ── */
-.num-pop{animation:num-pop .32s cubic-bezier(.22,.68,0,1.2)}
+.num-pop{animation:num-pop var(--dur-normal) var(--ease-spring)}
 
 /* ── Generic card ── */
 .card{
@@ -633,7 +653,7 @@ main{background:var(--bg);min-height:100dvh}
 .fl{display:block;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px}
 .fi{padding:10px 12px;font-size:14px;border-radius:10px;width:100%}
 .fi-row{display:flex;gap:8px}
-.btn{border:none;border-radius:var(--radius-sm);height:var(--h-btn);padding:0 16px;font-size:14.5px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;font-family:inherit;transition:box-shadow .2s,transform .1s,opacity .15s;position:relative;overflow:hidden}
+.btn{border:none;border-radius:var(--radius-sm);height:var(--h-btn);padding:0 16px;font-size:14.5px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;font-family:inherit;transition:box-shadow var(--dur-normal) var(--ease-default),transform var(--dur-fast) var(--ease-default),opacity var(--dur-fast) var(--ease-default);position:relative;overflow:hidden}
 .btn-primary{
   background:linear-gradient(135deg,var(--gold),var(--orange));color:#fff;
   box-shadow:0 4px 18px var(--gold-glow), 0 2px 6px rgba(0,0,0,.2);
@@ -795,13 +815,13 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 /* ── Overlay / sheet ── */
 .overlay{
   position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:100;display:flex;align-items:flex-end;justify-content:center;
-  opacity:0;pointer-events:none;transition:opacity .25s;
+  opacity:0;pointer-events:none;transition:opacity var(--dur-normal) var(--ease-out);
 }
 .overlay.open{opacity:1;pointer-events:auto}
 .sheet{
   background:var(--surface);
   border-radius:26px 26px 0 0;padding:22px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;
-  transform:translateY(100%);transition:transform .35s cubic-bezier(.32,.72,0,1);
+  transform:translateY(100%);transition:transform var(--dur-slow) cubic-bezier(.32,.72,0,1);
   box-shadow:0 -4px 40px rgba(0,0,0,.5);
 }
 .overlay.open .sheet{transform:translateY(0)}
@@ -1275,13 +1295,13 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .skeleton{
   display:inline-block;border-radius:8px;
   background:var(--surface3);
-  animation:skeleton-pulse 1.6s ease-in-out infinite;
+  animation:skeleton-pulse 1.6s var(--ease-default) infinite;
 }
-.skeleton-text{height:.9em;border-radius:6px;background:var(--surface3);animation:skeleton-pulse 1.6s ease-in-out infinite}
+.skeleton-text{height:.9em;border-radius:6px;background:var(--surface3);animation:skeleton-pulse 1.6s var(--ease-default) infinite}
 .hero-val.loading,.bigcard-val.loading{
   min-width:120px;min-height:1em;border-radius:10px;
   background:var(--surface3);color:transparent;
-  animation:skeleton-pulse 1.6s ease-in-out infinite;
+  animation:skeleton-pulse 1.6s var(--ease-default) infinite;
 }
 
 /* ══════════════════════════════════════════
@@ -2107,7 +2127,7 @@ textarea.form-input{resize:none}
   height: 100%;
   background: var(--ac);
   border-radius: 3px;
-  transition: width .7s cubic-bezier(.4,0,.2,1);
+  transition: width var(--dur-slow) var(--ease-default);
   min-width: 4px;
 }
 
@@ -3033,7 +3053,7 @@ button.srow-muted:active { background: none; }
   display: flex; align-items: center; justify-content: center;
   padding: 20px;
   opacity: 0; pointer-events: none;
-  transition: opacity .2s;
+  transition: opacity var(--dur-normal) var(--ease-out);
 }
 .av-overlay.open { opacity: 1; pointer-events: all; }
 
@@ -3046,7 +3066,7 @@ button.srow-muted:active { background: none; }
   box-shadow: 0 8px 40px rgba(13,20,64,.18), 0 2px 12px rgba(13,20,64,.12);
   transform: scale(.88) translateY(18px);
   opacity: 0;
-  transition: transform .26s cubic-bezier(.34,1.52,.64,1), opacity .2s;
+  transition: transform var(--dur-normal) var(--ease-spring), opacity var(--dur-fast) var(--ease-out);
 }
 .av-overlay.open .av-dialog { transform: scale(1) translateY(0); opacity: 1; }
 
@@ -3100,9 +3120,9 @@ button.srow-muted:active { background: none; }
   box-shadow: 0 6px 28px rgba(13,20,64,.16), 0 2px 8px rgba(13,20,64,.10);
   border: 1px solid var(--border-strong);
   pointer-events: all;
-  animation: av-toast-in .28s cubic-bezier(.34,1.46,.64,1) forwards;
+  animation: av-toast-in var(--dur-normal) var(--ease-spring) forwards;
 }
-.av-toast.hiding { animation: av-toast-out .22s ease forwards; }
+.av-toast.hiding { animation: av-toast-out var(--dur-fast) var(--ease-in) forwards; }
 .av-toast-icon { flex-shrink: 0; width: 17px; height: 17px; margin-top: 1px; }
 .av-toast-msg  { flex: 1; }
 
@@ -3130,7 +3150,7 @@ button.srow-muted:active { background: none; }
   align-items: center; justify-content: center;
   gap: 18px;
   opacity: 0; pointer-events: none;
-  transition: opacity .2s;
+  transition: opacity var(--dur-normal) var(--ease-out);
 }
 .av-loading-overlay.visible { opacity: 1; pointer-events: all; }
 .av-loading-spinner {
@@ -3214,7 +3234,7 @@ button.srow-muted:active { background: none; }
 .av-badge--neutral { background:var(--ol1); color:var(--tx2); border:1px solid var(--border); }
 
 /* ── Compact chips ── */
-.av-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:var(--radius-full); font-size:12px; font-weight:700; line-height:1; background:var(--ol1); border:1px solid var(--border); color:var(--tx2); cursor:pointer; transition:background .15s,border-color .15s; }
+.av-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:var(--radius-full); font-size:12px; font-weight:700; line-height:1; background:var(--ol1); border:1px solid var(--border); color:var(--tx2); cursor:pointer; transition:background var(--dur-fast) var(--ease-default),border-color var(--dur-fast) var(--ease-default),color var(--dur-fast) var(--ease-default); }
 .av-chip.av-chip--active { background:var(--ac-t); border-color:var(--ac-b); color:var(--ac); }
 .av-chip:active { background:var(--ol2); }
 
@@ -3228,3 +3248,89 @@ button.srow-muted:active { background: none; }
 .av-divider          { height:1px; background:var(--border); }
 .av-divider--inset   { margin-left:52px; }
 .av-divider--section { margin:0 24px; }
+
+/* ══════════════════════════════════════════
+   ETAPA 5 — Motion System
+   ══════════════════════════════════════════ */
+
+/* ── Tappable rows ── */
+.av-item--tap { cursor:pointer; transition:background var(--dur-fast) var(--ease-default); border-radius:var(--radius-xs); }
+.av-item--tap:active { background:var(--ol1); }
+@media (hover:hover) { .av-item--tap:hover { background:var(--ol1); } }
+
+/* ── Clickable cards ── */
+.av-card--tap { cursor:pointer; transition:transform var(--dur-fast) var(--ease-default), box-shadow var(--dur-normal) var(--ease-default); }
+.av-card--tap:active { transform:scale(.985); box-shadow:var(--shadow-sm); }
+
+/* ── Progress bars: all use token ── */
+.av-progress-fill { transition:width var(--dur-slow) var(--ease-default); }
+.wg-bar-fill      { transition:width var(--dur-slow) var(--ease-default); }
+.ring-fill        { transition:stroke-dashoffset var(--dur-slow) var(--ease-default); }
+.cat-row-bar      { transition:width var(--dur-slow) var(--ease-default); }
+.goal-bar-fill    { transition:width var(--dur-slow) var(--ease-default); }
+
+/* ── Focus-visible: keyboard navigation ── */
+:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+button:focus-visible, [role="button"]:focus-visible {
+  outline: 2.5px solid var(--ac);
+  outline-offset: 3px;
+}
+
+/* ── Nav item: discrete press scale ── */
+.nav-item { transition:color var(--dur-fast) var(--ease-default), transform var(--dur-fast) var(--ease-default); }
+.nav-item:active { transform:scale(.86); }
+
+/* ── Quick action & big card ── */
+.qi, .bigcard, .cc, .plat-c { transition:background var(--dur-fast) var(--ease-default), transform var(--dur-fast) var(--ease-default), box-shadow var(--dur-normal) var(--ease-default); }
+
+/* ── Overlay back-drop close: saída mais rápida que entrada ── */
+.av-overlay:not(.open) { transition: opacity var(--dur-fast) var(--ease-in); }
+.overlay:not(.open)    { transition: opacity var(--dur-fast) var(--ease-in); }
+
+/* ── Sheet close faster than open ── */
+.overlay:not(.open) .sheet { transition: transform var(--dur-normal) cubic-bezier(.32,.72,0,1); }
+
+/* ── Page transition: sem animação na saída (prevent double-render flash) ── */
+.page:not(.active) { display:none; }
+
+/* ── Skeleton shimmer: usa moving gradient em vez de pulse ── */
+@keyframes av-shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+.av-skeleton {
+  background: linear-gradient(90deg, var(--surface3) 25%, var(--surface2) 50%, var(--surface3) 75%);
+  background-size: 200% 100%;
+  animation: av-shimmer 1.6s var(--ease-default) infinite;
+  border-radius: 8px;
+}
+.av-skeleton--text  { height:.85em; border-radius:5px; }
+.av-skeleton--title { height:1.1em; border-radius:6px; }
+.av-skeleton--round { border-radius:50%; }
+
+/* ── Button loading state: spinner via token ── */
+.btn--loading { pointer-events:none; }
+.btn--loading > * { opacity:0; transition:opacity var(--dur-fast) var(--ease-default); }
+.btn--loading::after { animation: btn-spin .72s linear infinite; }
+
+/* ── Toggle switch: token-based ── */
+.toggle-switch { transition: background var(--dur-normal) var(--ease-default); }
+.toggle-knob   { transition: transform var(--dur-normal) var(--ease-spring); }
+
+/* ── Form input focus ── */
+.form-input:focus, .form-select:focus,
+.fi:focus { transition: border-color var(--dur-fast) var(--ease-default), box-shadow var(--dur-fast) var(--ease-default); }
+
+/* ── Gear button ── */
+.gear-btn { transition: background var(--dur-normal) var(--ease-default), transform var(--dur-fast) var(--ease-default); }
+.gear-btn:active { transform:scale(.9); }
+
+/* ── Vehicle card active ── */
+.veh-card { transition: background var(--dur-fast) var(--ease-default), transform var(--dur-fast) var(--ease-default); }
+
+/* ── Dark-mode card shadow via token ── */
+:root[data-theme="dark"] .av-card { box-shadow: 0 2px 14px rgba(0,0,0,.28); }

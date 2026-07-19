@@ -2387,7 +2387,7 @@ function switchTab(tab) {
   page.querySelectorAll('.card,.hero-card').forEach((el,i)=>{
     el.style.setProperty('--sd', (i*0.055)+'s');
   });
-  setTimeout(()=>page.classList.remove('tab-fresh'), 900);
+  setTimeout(()=>page.classList.remove('tab-fresh'), 700); /* dur-slow(340) + max stagger(~250) + margin */
   // Reset scroll AFTER all DOM mutations so iOS Safari doesn't re-adjust it
   window.scrollTo(0, 0);
   requestAnimationFrame(() => window.scrollTo(0, 0));
