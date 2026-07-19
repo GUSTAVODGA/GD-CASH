@@ -64,8 +64,6 @@ function initFirebase() {
       // Sync with cloud; re-render only if data actually changed
       const _tsBeforeSync = D.updatedAt || 0;
       await loadFromCloud();
-      const _migResult = _migrateVehiclesToPatrimonios();
-      if (_migResult.ran) save();
       if ((D.updatedAt || 0) !== _tsBeforeSync) {
         document.getElementById('curr-chip').textContent = currSym;
         renderInicio();
@@ -262,8 +260,7 @@ async function loadFromCloud() {
       if (!D.weeklyGoal) D.weeklyGoal = 0;
       if (!D.reminders) D.reminders = [];
       if (!D.pendencias) D.pendencias = [];
-      if (!D.vehicles)    D.vehicles    = [];
-      if (!D.patrimonios) D.patrimonios = [];
+      if (!D.vehicles) D.vehicles = [];
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
     } else {
       // Primeiro login — oferece migrar dados locais existentes
@@ -518,7 +515,6 @@ function defaultData() {
     reminders: [],
     pendencias: [],
     vehicles: [],
-    patrimonios: [],
   };
 }
 
@@ -534,7 +530,6 @@ let D = (() => {
       if(!p.reminders)   p.reminders=[];
       if(!p.pendencias)  p.pendencias=[];
       if(!p.vehicles)    p.vehicles=[];
-      if(!p.patrimonios) p.patrimonios=[];
       return p;
     }
   } catch(e){}
@@ -4454,22 +4449,56 @@ var _vehDetailId = null;
 
 function renderPatrimonio() {
   if (_vehDetailId) renderVehDetail(_vehDetailId);
-  else renderPatrimonioHome();
+  else renderVehList();
 }
 
 function _vehShowView(id) {
-  ['pat-home-view','veh-detail-view','veh-form-view'].forEach(v => {
+  ['veh-list-view','veh-detail-view','veh-form-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = (v === id) ? '' : 'none';
   });
-  const fab = document.getElementById('pat-fab');
-  if (fab) fab.style.display = (id === 'pat-home-view') ? 'flex' : 'none';
+  const addBtn = document.getElementById('veh-add-btn');
+  if (addBtn) addBtn.style.display = (id === 'veh-list-view') ? '' : 'none';
 }
 
 function renderVehList() {
-  // Em Patrimônio 2.0, a lista de veículos está integrada na home unificada.
   _vehDetailId = null;
-  renderPatrimonioHome();
+  _vehShowView('veh-list-view');
+  window.scrollTo(0, 0);
+  const list = document.getElementById('veh-list');
+  if (!list) return;
+  const vehicles = D.vehicles || [];
+  const active   = vehicles.filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
+  const inactive = vehicles.filter(v => v.status === 'arquivado' || v.status === 'vendido');
+  if (vehicles.length === 0) {
+    list.innerHTML = `<div class="veh-empty"><div class="veh-empty-ico">🚗</div><p>Nenhum veículo cadastrado.</p><button class="btn btn-primary" onclick="openVehForm()">Adicionar veículo</button></div>`;
+    return;
+  }
+  const carSvg = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>`;
+  const cardHtml = v => {
+    const col = VEH_STATUS_COLORS[v.status] || 'var(--tx3)';
+    const lbl = VEH_STATUS_LABELS[v.status] || v.status;
+    const sub = [v.brand, v.model, v.year].filter(Boolean).join(' · ');
+    return `<div class="veh-card" onclick="renderVehDetail('${v.id}')">
+      ${v.photo
+        ? `<img class="veh-card-photo" src="${v.photo}" alt="${escHtml(v.name)}">`
+        : `<div class="veh-card-photo veh-card-no-photo">${carSvg}</div>`}
+      <div class="veh-card-info">
+        <div class="veh-card-name">${escHtml(v.name)}</div>
+        ${sub ? `<div class="veh-card-sub">${escHtml(sub)}</div>` : ''}
+        ${v.km != null ? `<div class="veh-card-km">${Number(v.km).toLocaleString('pt-BR')} km</div>` : ''}
+      </div>
+      <span class="veh-status-chip" style="background:${col}20;color:${col}">${lbl}</span>
+    </div>`;
+  };
+  let html = active.length === 0
+    ? `<div class="veh-empty" style="padding:24px 0"><p style="margin:0;color:var(--tx3)">Nenhum veículo ativo.</p></div>`
+    : active.map(cardHtml).join('');
+  if (inactive.length > 0) {
+    html += `<div class="veh-section-title veh-archive-heading">Vendidos e arquivados (${inactive.length})</div>`;
+    html += inactive.map(cardHtml).join('');
+  }
+  list.innerHTML = html;
 }
 
 function renderVehDetail(id) {
@@ -4863,385 +4892,4 @@ function saveVehStatus() {
   closeOverlay('modal-veh-status');
   renderVehDetail(vehId);
   gdToast('Status atualizado.');
-}
-
-// ══════════════════════════════════════════
-// PATRIMÔNIO 2.0 — FUNDAÇÃO DE DADOS
-// ══════════════════════════════════════════
-// Fase 1: schema, normalização, CRUD básico e migração segura.
-// A tela existente de veículos (renderPatrimonio / D.vehicles) permanece
-// inalterada e continua funcionando como camada de compatibilidade.
-
-function _defaultPatrimonioFields() {
-  return {
-    id:             '',
-    tipo:           'veiculo',
-    nome:           '',
-    descricao:      '',
-    foto:           null,
-    valorEstimado:  0,
-    dataAquisicao:  '',
-    observacoes:    '',
-    status:         'ativo',
-    etiquetas:      [],
-    financiamentos: [],
-    detalhes:       {},
-    historico:      [],
-    _migradoDe:     null,
-    _idOriginal:    null,
-    createdAt:      0,
-    updatedAt:      0,
-  };
-}
-
-function _normPatrimonioDetalhes(tipo, d) {
-  const src = (d && typeof d === 'object') ? d : {};
-  if (tipo === 'veiculo') {
-    return Object.assign({
-      placa: '', marca: '', modelo: '', ano: '',
-      quilometragem: null, combustivel: '', cor: '',
-      renavam: '', chassi: '',
-      vinculosFixos: [], vinculosCats: [],
-    }, src);
-  }
-  if (tipo === 'imovel') {
-    return Object.assign({
-      subtipo: '', endereco: '', cidade: '',
-      metragem: 0, quartos: 0, banheiros: 0, vagas: 0,
-      condominio: 0, iptu: 0, aluguel: 0,
-      matricula: '', cartorio: '', rendaMensal: 0,
-    }, src);
-  }
-  return Object.assign({}, src);
-}
-
-function normalizePatrimonio(raw) {
-  const p = Object.assign({}, _defaultPatrimonioFields(), raw);
-  if (!Array.isArray(p.financiamentos)) p.financiamentos = [];
-  if (!Array.isArray(p.historico))      p.historico      = [];
-  if (!Array.isArray(p.etiquetas))      p.etiquetas      = [];
-  p.detalhes = _normPatrimonioDetalhes(p.tipo, p.detalhes);
-  return p;
-}
-
-function createPatrimonio(data) {
-  if (!Array.isArray(D.patrimonios)) D.patrimonios = [];
-  const now = Date.now();
-  const p   = normalizePatrimonio(Object.assign({}, data, { id: uid(), createdAt: now, updatedAt: now }));
-  D.patrimonios.push(p);
-  save();
-  return p;
-}
-
-function getPatrimonio(id) {
-  return (D.patrimonios || []).find(p => p.id === id) || null;
-}
-
-function updatePatrimonio(id, changes) {
-  const list = D.patrimonios || [];
-  const idx  = list.findIndex(p => p.id === id);
-  if (idx === -1) return false;
-  list[idx] = normalizePatrimonio(Object.assign({}, list[idx], changes, { updatedAt: Date.now() }));
-  save();
-  return true;
-}
-
-function archivePatrimonio(id, status) {
-  return updatePatrimonio(id, { status: status || 'inativo' });
-}
-
-function listPatrimonios(tipo) {
-  const all = D.patrimonios || [];
-  return tipo ? all.filter(p => p.tipo === tipo) : all.slice();
-}
-
-function sumPatrimonioTotal() {
-  return (D.patrimonios || [])
-    .filter(p => p.status !== 'vendido' && p.status !== 'inativo')
-    .reduce((s, p) => s + (p.valorEstimado || 0), 0);
-}
-
-// Migração segura de D.vehicles → D.patrimonios.
-// Idempotente — pode ser chamada múltiplas vezes sem efeito colateral.
-// Nunca modifica nem exclui D.vehicles.
-// Retorna { ran: bool, migrated: number }.
-function _migrateVehiclesToPatrimonios() {
-  if (D._patrimoniosMigrated) return { ran: false, migrated: 0 };
-
-  if (!Array.isArray(D.vehicles) || D.vehicles.length === 0) {
-    D._patrimoniosMigrated = true;
-    return { ran: false, migrated: 0 };
-  }
-
-  // Snapshot para rollback — falha não-fatal
-  try {
-    localStorage.setItem('gdcash_migration_backup_v1', JSON.stringify({
-      _backupTimestamp: Date.now(),
-      _backupVersion:   'pre-patrimonio-2',
-      vehicles:         JSON.parse(JSON.stringify(D.vehicles)),
-      patrimonios:      JSON.parse(JSON.stringify(D.patrimonios || [])),
-    }));
-  } catch(e) {
-    console.error('[patrimônio] backup pré-migração falhou:', e);
-  }
-
-  if (!Array.isArray(D.patrimonios)) D.patrimonios = [];
-
-  // IDs já migrados (idempotência)
-  const migratedIds = new Set(
-    D.patrimonios
-      .filter(p => p._migradoDe === 'vehicles' && p._idOriginal)
-      .map(p => p._idOriginal)
-  );
-
-  const STATUS_MAP = {
-    em_uso:     'ativo',
-    na_oficina: 'ativo',
-    a_venda:    'ativo',
-    vendido:    'vendido',
-    arquivado:  'inativo',
-  };
-
-  let count = 0;
-  for (const v of D.vehicles) {
-    if (migratedIds.has(v.id)) continue;
-
-    const historico = (v.history || []).map(h => ({
-      id:          h.id     || uid(),
-      data:        h.date   || todayStr(),
-      tipo:        h.type === 'km_update' ? 'km_update' : 'evento',
-      descricao:   h.note   || '',
-      valor:       h.amount || 0,
-      despesaId:   null,
-      pendenciaId: null,
-      _legacyType: h.type   || null,
-      _legacyKm:   h.km     || null,
-    }));
-
-    D.patrimonios.push(normalizePatrimonio({
-      id:            v.id,
-      tipo:          'veiculo',
-      nome:          v.name   || '',
-      foto:          v.photo  || null,
-      valorEstimado: 0,
-      dataAquisicao: '',
-      observacoes:   v.notes  || '',
-      status:        STATUS_MAP[v.status] || 'ativo',
-      etiquetas:     [],
-      financiamentos:[],
-      detalhes: {
-        placa:            v.plate  || '',
-        marca:            v.brand  || '',
-        modelo:           v.model  || '',
-        ano:              v.year   || '',
-        quilometragem:    v.km     != null ? v.km : null,
-        combustivel:      '',
-        cor:              v.color  || '',
-        renavam:          '',
-        chassi:           '',
-        vinculosFixos:    [],
-        vinculosCats:     [],
-        linkedExpenses:   v.linkedExpenses   || [],
-        linkedPendencias: v.linkedPendencias || [],
-      },
-      historico,
-      _migradoDe:  'vehicles',
-      _idOriginal: v.id,
-      createdAt:   Date.now(),
-      updatedAt:   Date.now(),
-    }));
-    count++;
-  }
-
-  D._patrimoniosMigrated = true;
-  if (count > 0) D.updatedAt = Date.now();
-  return { ran: count > 0, migrated: count };
-}
-
-// Rollback da migração — restaura D.patrimonios para o estado pré-migração.
-// Nunca toca em D.vehicles. Seguro chamar mesmo sem backup.
-function rollbackPatrimonioMigration() {
-  try {
-    const raw = localStorage.getItem('gdcash_migration_backup_v1');
-    if (!raw) return { ok: false, reason: 'Backup não encontrado.' };
-    const bk = JSON.parse(raw);
-    D.patrimonios          = Array.isArray(bk.patrimonios) ? bk.patrimonios : [];
-    D._patrimoniosMigrated = false;
-    save();
-    return { ok: true, restored: D.patrimonios.length, ts: bk._backupTimestamp };
-  } catch(e) {
-    return { ok: false, reason: e.message };
-  }
-}
-
-// ══════════════════════════════════════════
-// PATRIMÔNIO 2.0 — TELA PRINCIPAL (Sprint 1)
-// ══════════════════════════════════════════
-
-// Lucide-style SVG icons — função (hoistada) evita TDZ se switchTab('patrimonio')
-// for chamado durante a inicialização antes desta linha ser avaliada.
-function _patIcon(tipo) {
-  if (tipo === 'veiculo') return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>';
-  if (tipo === 'imovel')  return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
-  return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
-}
-function _patChevr() {
-  return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
-}
-function _patStatusLabel(status) {
-  return ({ ativo:'Ativo', vendido:'Vendido', inativo:'Arquivado' })[status] || status;
-}
-
-function _patTypeKey(tipo) {
-  return (tipo === 'veiculo' || tipo === 'imovel') ? tipo : 'outro';
-}
-
-function _patNetTotals() {
-  const pats  = D.patrimonios || [];
-  const gross = pats.filter(p => p.status !== 'vendido' && p.status !== 'inativo')
-                    .reduce((s, p) => s + (p.valorEstimado || 0), 0);
-  const debt  = pats.reduce((s, p) =>
-    s + (p.financiamentos || []).reduce((sf, f) => sf + (f.saldoDevedor || 0), 0), 0);
-  return { gross, debt, net: gross - debt };
-}
-
-function openPatSheet() {
-  const ov  = document.getElementById('pat-sheet');
-  const fab = document.getElementById('pat-fab');
-  if (ov)  ov.classList.add('open');
-  if (fab) fab.classList.add('pat-fab-hidden');
-}
-
-function closePatSheet() {
-  const ov  = document.getElementById('pat-sheet');
-  const fab = document.getElementById('pat-fab');
-  if (ov)  ov.classList.remove('open');
-  if (fab) fab.classList.remove('pat-fab-hidden');
-}
-
-function renderPatrimonioHome() {
-  _vehDetailId = null;
-  _vehShowView('pat-home-view');
-  window.scrollTo(0, 0);
-  const cont = document.getElementById('pat-home-cont');
-  if (!cont) return;
-
-  const pats = D.patrimonios || [];
-  if (pats.length === 0) {
-    cont.innerHTML = _renderPatEmpty();
-    return;
-  }
-
-  const { gross, debt, net } = _patNetTotals();
-  const totals  = { veiculo: 0, imovel: 0, outro: 0 };
-  const counts  = { veiculo: 0, imovel: 0, outro: 0 };
-  const activePats = pats.filter(p => p.status !== 'vendido' && p.status !== 'inativo');
-  activePats.forEach(p => {
-    const k = _patTypeKey(p.tipo);
-    totals[k] += p.valorEstimado || 0;
-    counts[k]++;
-  });
-  const activeCount = activePats.length;
-
-  const catNames = { veiculo:'Veículos', imovel:'Imóveis', outro:'Outros bens' };
-
-  cont.innerHTML = `
-    <div class="card hero-card" style="margin-bottom:18px">
-      <div class="hero-lbl">Patrimônio líquido</div>
-      <div class="hero-val">${R(net)}</div>
-      <div class="hero-chips">
-        <div class="hero-chip">
-          <b>${pats.length}</b>&nbsp;${pats.length === 1 ? 'bem cadastrado' : 'bens cadastrados'}
-        </div>
-        <div class="hero-chip" style="color:var(--tx2)">
-          <b>${activeCount}</b>&nbsp;${activeCount === 1 ? 'ativo no patrimônio líquido' : 'ativos no patrimônio líquido'}
-        </div>
-      </div>
-      ${debt > 0 ? `
-        <div style="height:1px;background:var(--border);margin:14px 0 12px"></div>
-        <div class="hero-chips">
-          <div class="hero-chip">Bens&nbsp;<b>${R(gross)}</b></div>
-          <div class="hero-chip" style="color:var(--tx3)">Financiamentos&nbsp;−${R(debt)}</div>
-        </div>` : ''}
-    </div>
-
-    <div class="sec-label" style="margin:0 0 10px">Categorias</div>
-    <div class="pat-cat-row">
-      ${['veiculo','imovel','outro'].map(t => `
-        <div class="pat-cat-card">
-          <div class="pat-cat-ico pat-ico-${t}">${_patIcon(t)}</div>
-          <div class="pat-cat-body">
-            <div class="pat-cat-name">${catNames[t]}</div>
-            <div class="pat-cat-count">${counts[t]} ${counts[t] === 1 ? 'ativo' : 'ativos'}</div>
-          </div>
-          <div class="pat-cat-val">${R(totals[t])}</div>
-          <div class="pat-cat-chev">${_patChevr()}</div>
-        </div>`).join('')}
-    </div>
-
-    <div class="sec-label" style="margin:0 0 10px">Todos os patrimônios</div>
-    <div class="pat-list-group">
-      ${pats.map(p => _renderPatListItem(p)).join('')}
-    </div>
-  `;
-}
-
-function _renderPatListItem(p) {
-  const typeKey  = _patTypeKey(p.tipo);
-  const statusK  = p.status || 'ativo';
-  const statusLbl = _patStatusLabel(statusK);
-  const chipName  = { veiculo:'Veículo', imovel:'Imóvel', outro:'Outro bem' }[typeKey];
-
-  const photoHtml = p.foto
-    ? `<img src="${escHtml(p.foto)}" alt="${escHtml(p.nome)}" loading="lazy">`
-    : _patIcon(typeKey);
-
-  const isClickable = p.tipo === 'veiculo' && p._idOriginal;
-  const onclickAttr = isClickable ? `onclick="renderVehDetail('${escHtml(p._idOriginal)}')"` : '';
-
-  return `
-    <div class="pat-list-item" ${onclickAttr}>
-      <div class="pat-list-photo${p.foto ? '' : ' pat-ico-' + typeKey}">${photoHtml}</div>
-      <div class="pat-list-body">
-        <div class="pat-list-name">${escHtml(p.nome)}</div>
-        <div class="pat-list-meta">
-          <span class="pat-chip pat-chip-${typeKey}">${chipName}</span>
-          <span class="pat-status s-${statusK}">
-            <span class="pat-status-dot"></span>
-            <span class="pat-status-lbl">${statusLbl}</span>
-          </span>
-        </div>
-      </div>
-      <div class="pat-list-right">
-        <span class="pat-list-val">${R(p.valorEstimado || 0)}</span>
-        ${isClickable ? `<span class="pat-list-chev">${_patChevr().replace(/width="12" height="12"/g, 'width="14" height="14"')}</span>` : ''}
-      </div>
-    </div>`;
-}
-
-function _renderPatEmpty() {
-  return `
-    <div class="pat-empty">
-      <div class="pat-empty-illus">
-        <svg width="144" height="120" viewBox="0 0 144 120" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <rect x="8" y="60" width="52" height="44" rx="4" fill="var(--surface2)" stroke="var(--border-strong)" stroke-width="1.2"/>
-          <polygon points="8,60 34,30 60,60" fill="var(--ac-t)" stroke="var(--ac)" stroke-width="1.2" stroke-linejoin="round"/>
-          <rect x="22" y="78" width="22" height="26" rx="3" fill="var(--ac-t)" stroke="var(--ac-b)" stroke-width="1"/>
-          <rect x="76" y="78" width="58" height="24" rx="5" fill="var(--surface2)" stroke="var(--border-strong)" stroke-width="1.2"/>
-          <rect x="83" y="66" width="40" height="18" rx="4" fill="var(--surface3)" stroke="var(--border-strong)" stroke-width="1"/>
-          <circle cx="89" cy="102" r="7" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.4"/>
-          <circle cx="89" cy="102" r="3" fill="var(--tx3)"/>
-          <circle cx="123" cy="102" r="7" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.4"/>
-          <circle cx="123" cy="102" r="3" fill="var(--tx3)"/>
-          <path d="M6 112 Q34 90 72 94 Q104 98 138 68" stroke="var(--gn)" stroke-width="1.5" stroke-dasharray="3 4" stroke-linecap="round" opacity=".55"/>
-          <path d="M134 63 L138 68 L142 63" stroke="var(--gn)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".7"/>
-        </svg>
-      </div>
-      <div class="pat-empty-title">Você ainda não cadastrou<br>nenhum patrimônio</div>
-      <div class="pat-empty-sub">Cadastre veículos, imóveis ou outros bens para acompanhar sua evolução patrimonial.</div>
-      <button class="btn btn-primary" onclick="openPatSheet()" style="display:flex;align-items:center;gap:8px">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Adicionar patrimônio
-      </button>
-    </div>`;
 }

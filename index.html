@@ -611,73 +611,24 @@
   <div id="ajustes-root"></div>
 </section>
 
-<!-- ════ PATRIMÔNIO 2.0 ════ -->
-<section class="page" id="page-patrimonio" style="padding:0">
-
-  <!-- View 1: Home (Patrimônio 2.0) -->
-  <div id="pat-home-view">
-    <div class="page-header-row" style="padding:12px 16px 0">
-      <div class="page-header-title">Meu Patrimônio</div>
-    </div>
-    <div id="pat-home-cont" style="padding:0 16px"></div>
+<!-- ════ PATRIMÔNIO — VEÍCULOS ════ -->
+<section class="page" id="page-patrimonio">
+  <div class="page-header-row" style="padding:0 20px;margin-top:12px">
+    <div class="page-header-title">Veículos</div>
+    <button class="veh-add-btn" id="veh-add-btn" onclick="openVehForm()">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Novo
+    </button>
   </div>
-
-  <!-- View 2: Vehicle detail (legacy — IDs preservados) -->
+  <div id="veh-list-view" style="padding:0 16px">
+    <div id="veh-list" class="veh-list"></div>
+  </div>
   <div id="veh-detail-view" style="display:none;padding:0 16px">
     <div id="veh-detail-cont"></div>
   </div>
-
-  <!-- View 3: Vehicle form (legacy — IDs preservados) -->
   <div id="veh-form-view" style="display:none;padding:0 16px">
     <div id="veh-form-cont"></div>
   </div>
-
-  <!-- FAB do módulo Patrimônio -->
-  <button id="pat-fab" aria-label="Adicionar patrimônio" onclick="openPatSheet()">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-  </button>
-
-  <!-- Bottom sheet: escolher tipo de patrimônio -->
-  <div class="overlay" id="pat-sheet" onclick="if(event.target===this)closePatSheet()">
-    <div class="sheet">
-      <div class="sheet-handle"></div>
-      <div class="sheet-title" style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:16px">Adicionar patrimônio</div>
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-        <button class="av-sheet-opt" onclick="closePatSheet()">
-          <span class="pat-cat-ico pat-ico-veiculo" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>
-          </span>
-          <span style="flex:1;text-align:left">
-            <span style="display:block;font-size:14px;font-weight:700;color:var(--text)">Veículo</span>
-            <span style="display:block;font-size:11px;color:var(--text3);margin-top:1px">Carro, moto, caminhão…</span>
-          </span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-        <button class="av-sheet-opt" onclick="closePatSheet()">
-          <span class="pat-cat-ico pat-ico-imovel" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-          </span>
-          <span style="flex:1;text-align:left">
-            <span style="display:block;font-size:14px;font-weight:700;color:var(--text)">Imóvel</span>
-            <span style="display:block;font-size:11px;color:var(--text3);margin-top:1px">Apartamento, casa, terreno…</span>
-          </span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-        <button class="av-sheet-opt" onclick="closePatSheet()">
-          <span class="pat-cat-ico pat-ico-outro" style="width:40px;height:40px;border-radius:10px;flex-shrink:0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
-          </span>
-          <span style="flex:1;text-align:left">
-            <span style="display:block;font-size:14px;font-weight:700;color:var(--text)">Outro bem</span>
-            <span style="display:block;font-size:11px;color:var(--text3);margin-top:1px">Equipamento, joia, arte…</span>
-          </span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
-      <button class="btn btn-secondary" style="width:100%" onclick="closePatSheet()">Cancelar</button>
-    </div>
-  </div>
-
 </section>
 
 </main>
