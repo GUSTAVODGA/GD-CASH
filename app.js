@@ -2419,6 +2419,9 @@ function switchTab(tab) {
   // Show FAB only on main tabs
   const fab = document.getElementById('global-fab');
   if (fab) fab.style.display = tab === 'semana' ? '' : 'none';
+  // FAB do Patrimônio só existe na aba patrimonio (renderPatrimonio decide a view)
+  const patFab = document.getElementById('pat-fab');
+  if (patFab && tab !== 'patrimonio') { patFab.style.display = 'none'; closePatSheet(); }
   checkFirstVisit(tab);
   page.classList.add('tab-fresh');
   page.querySelectorAll('.card,.hero-card').forEach((el,i)=>{
@@ -4454,19 +4457,38 @@ var _vehDetailId = null;
 
 function renderPatrimonio() {
   if (_vehDetailId) renderVehDetail(_vehDetailId);
-  else renderVehList();
+  else if (_patLegacyMode) _renderLegacyVehList();
+  else renderPatrimonioHome();
 }
 
 function _vehShowView(id) {
-  ['veh-list-view','veh-detail-view','veh-form-view'].forEach(v => {
+  ['pat-home-view','veh-list-view','veh-detail-view','veh-form-view','pat-form-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = (v === id) ? '' : 'none';
   });
+  const legacyHeader = document.getElementById('veh-legacy-header');
+  if (legacyHeader) legacyHeader.style.display = (id === 'veh-list-view') ? '' : 'none';
   const addBtn = document.getElementById('veh-add-btn');
   if (addBtn) addBtn.style.display = (id === 'veh-list-view') ? '' : 'none';
+  const fab = document.getElementById('pat-fab');
+  if (fab) fab.style.display = (id === 'pat-home-view') ? 'flex' : 'none';
 }
 
+// ── Fluxo legado de Veículos — preservado e acessível durante os testes ──
+// renderVehList() continua sendo o ponto de retorno de todo o CRUD antigo
+// (voltar do detalhe, salvar/cancelar formulário, excluir). Fora do modo
+// legado ele leva à home do Patrimônio 2.0; no modo legado, à lista antiga.
+var _patLegacyMode = false;
+
+function openLegacyVehList() { _patLegacyMode = true; _renderLegacyVehList(); }
+function exitLegacyVehList() { _patLegacyMode = false; renderPatrimonioHome(); }
+
 function renderVehList() {
+  if (!_patLegacyMode) { renderPatrimonioHome(); return; }
+  _renderLegacyVehList();
+}
+
+function _renderLegacyVehList() {
   _vehDetailId = null;
   _vehShowView('veh-list-view');
   window.scrollTo(0, 0);
@@ -4588,6 +4610,8 @@ function renderVehDetail(id) {
 }
 
 function openVehForm(id) {
+  // Remove toasts residuais de ações anteriores (ex.: "Patrimônio adicionado")
+  document.querySelectorAll('.av-toast').forEach(e => e.remove());
   const v = id ? (D.vehicles || []).find(x => x.id === id) : null;
   _vehShowView('veh-form-view');
   const cont = document.getElementById('veh-form-cont');
@@ -4621,6 +4645,10 @@ function openVehForm(id) {
       <select class="form-input" id="vf-status">
         ${Object.entries(VEH_STATUS_LABELS).filter(([k]) => k !== 'arquivado').map(([k,l]) => `<option value="${k}" ${(v?.status||'em_uso')===k?'selected':''}>${l}</option>`).join('')}
       </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Valor atual estimado (${escHtml(currSym)})</label>
+      <input class="form-input" id="vf-valor" type="number" min="0" step="any" value="${(() => { const vp = id ? _patForVehId(id) : null; return vp && vp.valorEstimado ? vp.valorEstimado : ''; })()}" placeholder="45000">
     </div>
     <div class="form-group">
       <label class="form-label">Foto</label>
@@ -4671,10 +4699,34 @@ function saveVehicle() {
   };
   if (idx >= 0) vehicles[idx] = veh; else vehicles.push(veh);
   D.vehicles = vehicles;
+  // Sincroniza o valor atual estimado no registro de patrimônio do veículo
+  const valorRaw = document.getElementById('vf-valor')?.value;
+  _syncVehPatrimonioValor(id, valorRaw === '' || valorRaw == null ? 0 : Number(valorRaw) || 0);
   save();
   _vehDetailId = id;
   renderVehDetail(id);
   gdToast(idx >= 0 ? 'Veículo atualizado.' : 'Veículo adicionado.');
+}
+
+// Busca o registro de patrimônio correspondente a um veículo (por _idOriginal ou id)
+function _patForVehId(vehId) {
+  return (D.patrimonios || []).find(p =>
+    p.tipo === 'veiculo' && (p._idOriginal === vehId || p.id === vehId)) || null;
+}
+
+// Grava valorEstimado no patrimônio do veículo, criando o registro se a
+// migração ainda não tiver rodado para ele. Nunca toca em D.vehicles.
+function _syncVehPatrimonioValor(vehId, valorEstimado) {
+  if (!Array.isArray(D.patrimonios)) D.patrimonios = [];
+  let p = _patForVehId(vehId);
+  if (!p) {
+    _migrateVehiclesToPatrimonios();
+    p = _patForVehId(vehId);
+  }
+  if (p) {
+    p.valorEstimado = valorEstimado;
+    p.updatedAt = Date.now();
+  }
 }
 
 function archiveVehicle(id) {
@@ -5110,4 +5162,361 @@ function rollbackPatrimonioMigration() {
   } catch(e) {
     return { ok: false, reason: e.message };
   }
+}
+
+// ══════════════════════════════════════════
+// PATRIMÔNIO 2.0 — TELA PRINCIPAL (Etapa 2)
+// ══════════════════════════════════════════
+// A tela lê D.vehicles e D.patrimonios DIRETAMENTE, sem depender da
+// migração: veículos vêm sempre de D.vehicles (fonte de verdade) e são
+// enriquecidos com o patrimônio migrado correspondente quando existir
+// (valorEstimado, financiamentos). Imóveis e outros bens vêm de
+// D.patrimonios. Nunca há duplicação: um patrimônio tipo veículo cujo
+// veículo original existe em D.vehicles é representado uma única vez.
+
+// Ícones Lucide-style SVG — funções (hoistadas) evitam TDZ se
+// switchTab('patrimonio') rodar durante a inicialização.
+function _patIcon(tipo) {
+  if (tipo === 'veiculo') return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>';
+  if (tipo === 'imovel')  return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>';
+  return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>';
+}
+function _patChevr() {
+  return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+}
+function _patStatusLabel(status) {
+  return ({ ativo:'Ativo', vendido:'Vendido', inativo:'Arquivado' })[status] || status;
+}
+function _patTypeKey(tipo) {
+  return (tipo === 'veiculo' || tipo === 'imovel') ? tipo : 'outro';
+}
+
+// Visão unificada e SEM duplicação de D.vehicles + D.patrimonios.
+function _patUnifiedItems() {
+  const vehs = Array.isArray(D.vehicles)    ? D.vehicles    : [];
+  const pats = Array.isArray(D.patrimonios) ? D.patrimonios : [];
+  const VEH2PAT_STATUS = { em_uso:'ativo', na_oficina:'ativo', a_venda:'ativo', vendido:'vendido', arquivado:'inativo' };
+
+  // Patrimônio migrado indexado pelo id do veículo original
+  const patByVehId = {};
+  pats.forEach(p => {
+    if (p.tipo === 'veiculo') patByVehId[p._idOriginal || p.id] = p;
+  });
+
+  const items = [];
+
+  // 1) Veículos — fonte de verdade é D.vehicles, sempre visíveis
+  vehs.forEach(v => {
+    const p = patByVehId[v.id] || null;
+    items.push({
+      tipo:           'veiculo',
+      nome:           v.name  || '',
+      foto:           v.photo || null,
+      status:         VEH2PAT_STATUS[v.status] || 'ativo',
+      valorEstimado:  p ? (p.valorEstimado  || 0)  : 0,
+      financiamentos: p ? (p.financiamentos || []) : [],
+      vehId:          v.id,
+    });
+  });
+
+  // 2) Demais patrimônios (imóveis, outros bens e veículos órfãos —
+  //    sem par em D.vehicles)
+  pats.forEach(p => {
+    if (p.tipo === 'veiculo') {
+      const vid = p._idOriginal || p.id;
+      if (vehs.some(v => v.id === vid)) return; // já representado acima
+    }
+    items.push({
+      tipo:           p.tipo || 'outro',
+      nome:           p.nome || '',
+      foto:           p.foto || null,
+      status:         p.status || 'ativo',
+      valorEstimado:  p.valorEstimado  || 0,
+      financiamentos: p.financiamentos || [],
+      vehId:          null,
+      patId:          p.id,
+    });
+  });
+
+  return items;
+}
+
+function _patNetTotals(items) {
+  const list  = items || _patUnifiedItems();
+  const gross = list.filter(i => i.status !== 'vendido' && i.status !== 'inativo')
+                    .reduce((s, i) => s + (i.valorEstimado || 0), 0);
+  const debt  = list.reduce((s, i) =>
+    s + (i.financiamentos || []).reduce((sf, f) => sf + (f.saldoDevedor || 0), 0), 0);
+  return { gross, debt, net: gross - debt };
+}
+
+function openPatSheet() {
+  const ov  = document.getElementById('pat-sheet');
+  const fab = document.getElementById('pat-fab');
+  if (ov)  ov.classList.add('open');
+  if (fab) fab.classList.add('pat-fab-hidden');
+}
+
+function closePatSheet() {
+  const ov  = document.getElementById('pat-sheet');
+  const fab = document.getElementById('pat-fab');
+  if (ov)  ov.classList.remove('open');
+  if (fab) fab.classList.remove('pat-fab-hidden');
+}
+
+function patAddTipo(tipo) {
+  closePatSheet();
+  if (tipo === 'veiculo') { openVehForm(); return; }
+  openPatForm(tipo);
+}
+
+function renderPatrimonioHome() {
+  _vehDetailId = null;
+  _vehShowView('pat-home-view');
+  window.scrollTo(0, 0);
+  const cont = document.getElementById('pat-home-cont');
+  if (!cont) return;
+
+  const items = _patUnifiedItems();
+  if (items.length === 0) {
+    cont.innerHTML = _renderPatEmpty();
+    return;
+  }
+
+  const { gross, debt, net } = _patNetTotals(items);
+  const totals  = { veiculo: 0, imovel: 0, outro: 0 };
+  const counts  = { veiculo: 0, imovel: 0, outro: 0 };
+  const activeItems = items.filter(i => i.status !== 'vendido' && i.status !== 'inativo');
+  activeItems.forEach(i => {
+    const k = _patTypeKey(i.tipo);
+    totals[k] += i.valorEstimado || 0;
+    counts[k]++;
+  });
+  const activeCount = activeItems.length;
+
+  const catNames = { veiculo:'Veículos', imovel:'Imóveis', outro:'Outros bens' };
+
+  cont.innerHTML = `
+    <div class="card hero-card" style="margin-bottom:18px">
+      <div class="hero-lbl">Patrimônio líquido</div>
+      <div class="hero-val">${R(net)}</div>
+      <div class="hero-chips">
+        <div class="hero-chip">
+          <b>${items.length}</b>&nbsp;${items.length === 1 ? 'bem cadastrado' : 'bens cadastrados'}
+        </div>
+        <div class="hero-chip" style="color:var(--tx2)">
+          <b>${activeCount}</b>&nbsp;${activeCount === 1 ? 'ativo no patrimônio líquido' : 'ativos no patrimônio líquido'}
+        </div>
+      </div>
+      ${debt > 0 ? `
+        <div style="height:1px;background:var(--border);margin:14px 0 12px"></div>
+        <div class="hero-chips">
+          <div class="hero-chip">Bens&nbsp;<b>${R(gross)}</b></div>
+          <div class="hero-chip" style="color:var(--tx3)">Financiamentos&nbsp;−${R(debt)}</div>
+        </div>` : ''}
+    </div>
+
+    <div class="sec-label" style="margin:0 0 10px">Categorias</div>
+    <div class="pat-cat-row">
+      ${['veiculo','imovel','outro'].map(t => `
+        <div class="pat-cat-card">
+          <div class="pat-cat-ico pat-ico-${t}">${_patIcon(t)}</div>
+          <div class="pat-cat-body">
+            <div class="pat-cat-name">${catNames[t]}</div>
+            <div class="pat-cat-count">${counts[t]} ${counts[t] === 1 ? 'ativo' : 'ativos'}</div>
+          </div>
+          <div class="pat-cat-val">${R(totals[t])}</div>
+          <div class="pat-cat-chev">${_patChevr()}</div>
+        </div>`).join('')}
+    </div>
+
+    <div class="sec-label" style="margin:0 0 10px">Todos os patrimônios</div>
+    <div class="pat-list-group">
+      ${items.map(i => _renderPatListItem(i)).join('')}
+    </div>
+
+    <button class="pat-legacy-link" onclick="openLegacyVehList()">Ver tela antiga de veículos</button>
+  `;
+}
+
+function _renderPatListItem(item) {
+  const typeKey   = _patTypeKey(item.tipo);
+  const statusK   = item.status || 'ativo';
+  const statusLbl = _patStatusLabel(statusK);
+  const chipName  = { veiculo:'Veículo', imovel:'Imóvel', outro:'Outro bem' }[typeKey];
+
+  const photoHtml = item.foto
+    ? `<img src="${escHtml(item.foto)}" alt="${escHtml(item.nome)}" loading="lazy">`
+    : _patIcon(typeKey);
+
+  const isClickable = !!(item.vehId || item.patId);
+  const onclickAttr = item.vehId
+    ? `onclick="renderVehDetail('${escHtml(item.vehId)}')"`
+    : (item.patId ? `onclick="openPatForm(null,'${escHtml(item.patId)}')"` : '');
+
+  return `
+    <div class="pat-list-item" ${onclickAttr}>
+      <div class="pat-list-photo${item.foto ? '' : ' pat-ico-' + typeKey}">${photoHtml}</div>
+      <div class="pat-list-body">
+        <div class="pat-list-name">${escHtml(item.nome)}</div>
+        <div class="pat-list-meta">
+          <span class="pat-chip pat-chip-${typeKey}">${chipName}</span>
+          <span class="pat-status s-${statusK}">
+            <span class="pat-status-dot"></span>
+            <span class="pat-status-lbl">${statusLbl}</span>
+          </span>
+        </div>
+      </div>
+      <div class="pat-list-right">
+        <span class="pat-list-val">${R(item.valorEstimado || 0)}</span>
+        ${isClickable ? `<span class="pat-list-chev">${_patChevr().replace(/width="12" height="12"/g, 'width="14" height="14"')}</span>` : ''}
+      </div>
+    </div>`;
+}
+
+function _renderPatEmpty() {
+  return `
+    <div class="pat-empty">
+      <div class="pat-empty-illus">
+        <svg width="144" height="120" viewBox="0 0 144 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="8" y="60" width="52" height="44" rx="4" fill="var(--surface2)" stroke="var(--border-strong)" stroke-width="1.2"/>
+          <polygon points="8,60 34,30 60,60" fill="var(--ac-t)" stroke="var(--ac)" stroke-width="1.2" stroke-linejoin="round"/>
+          <rect x="22" y="78" width="22" height="26" rx="3" fill="var(--ac-t)" stroke="var(--ac-b)" stroke-width="1"/>
+          <rect x="76" y="78" width="58" height="24" rx="5" fill="var(--surface2)" stroke="var(--border-strong)" stroke-width="1.2"/>
+          <rect x="83" y="66" width="40" height="18" rx="4" fill="var(--surface3)" stroke="var(--border-strong)" stroke-width="1"/>
+          <circle cx="89" cy="102" r="7" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.4"/>
+          <circle cx="89" cy="102" r="3" fill="var(--tx3)"/>
+          <circle cx="123" cy="102" r="7" fill="var(--surface)" stroke="var(--border-strong)" stroke-width="1.4"/>
+          <circle cx="123" cy="102" r="3" fill="var(--tx3)"/>
+          <path d="M6 112 Q34 90 72 94 Q104 98 138 68" stroke="var(--gn)" stroke-width="1.5" stroke-dasharray="3 4" stroke-linecap="round" opacity=".55"/>
+          <path d="M134 63 L138 68 L142 63" stroke="var(--gn)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity=".7"/>
+        </svg>
+      </div>
+      <div class="pat-empty-title">Você ainda não cadastrou<br>nenhum patrimônio</div>
+      <div class="pat-empty-sub">Cadastre veículos, imóveis ou outros bens para acompanhar sua evolução patrimonial.</div>
+      <button class="btn btn-primary" onclick="openPatSheet()" style="display:flex;align-items:center;gap:8px">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Adicionar patrimônio
+      </button>
+    </div>`;
+}
+
+// ── Cadastro básico de Imóvel / Outro bem (Etapa 2) ──
+// Reutiliza createPatrimonio/updatePatrimonio da fundação e o mesmo
+// pipeline de foto dos veículos (resizeVehPhoto).
+
+var PAT_TIPO_LABELS = { imovel: 'Imóvel', outro: 'Outro bem' };
+
+function openPatForm(tipo, id) {
+  // Remove toasts residuais de ações anteriores
+  document.querySelectorAll('.av-toast').forEach(e => e.remove());
+  const p = id ? getPatrimonio(id) : null;
+  const t = p ? _patTypeKey(p.tipo) : _patTypeKey(tipo);
+  _vehShowView('pat-form-view');
+  window.scrollTo(0, 0);
+  const cont = document.getElementById('pat-form-cont');
+  if (!cont) return;
+  const tipoLbl = PAT_TIPO_LABELS[t] || 'Patrimônio';
+  const statusSel = ['ativo','vendido','inativo'].map(s =>
+    `<option value="${s}" ${(p?.status||'ativo')===s?'selected':''}>${_patStatusLabel(s)}</option>`).join('');
+  cont.innerHTML = `
+    <div class="veh-detail-topbar">
+      <button class="btn-icon-sm" onclick="renderPatrimonioHome()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Meu Patrimônio
+      </button>
+    </div>
+    <div class="page-header-title" style="margin-bottom:16px">${p ? 'Editar' : 'Novo'} ${tipoLbl.toLowerCase()}</div>
+    <div class="form-group">
+      <label class="form-label">Nome / apelido *</label>
+      <input class="form-input" id="pf-nome" value="${escHtml(p?.nome||'')}" placeholder="${t==='imovel' ? 'Ex: Apartamento Centro' : 'Ex: Notebook Dell'}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Valor atual (${escHtml(currSym)})</label>
+      <input class="form-input" id="pf-valor" type="number" min="0" step="any" value="${p && p.valorEstimado ? p.valorEstimado : ''}" placeholder="${t==='imovel' ? '350000' : '3500'}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Status</label>
+      <select class="form-input" id="pf-status">${statusSel}</select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Foto (opcional)</label>
+      <div class="veh-photo-upload">
+        <div id="pf-photo-preview" class="${p?.foto ? '' : 'veh-photo-empty'}" style="${p?.foto ? 'width:64px;height:64px;border-radius:12px;overflow:hidden' : ''}">
+          ${p?.foto ? `<img src="${p.foto}" style="width:100%;height:100%;object-fit:cover">` : 'Sem foto'}
+        </div>
+        <button type="button" class="btn-pill" onclick="document.getElementById('pf-photo-input').click()">Escolher foto</button>
+        <input type="file" id="pf-photo-input" accept="image/*" style="display:none" onchange="onPatPhotoChange(this)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Observação</label>
+      <textarea class="form-input" id="pf-obs" rows="2" placeholder="Notas sobre este bem">${escHtml(p?.observacoes||'')}</textarea>
+    </div>
+    <input type="hidden" id="pf-photo-data" value="${p?.foto||''}">
+    <input type="hidden" id="pf-id" value="${p?.id||''}">
+    <input type="hidden" id="pf-tipo" value="${t}">
+    <div class="veh-form-btns">
+      <button class="btn btn-secondary" onclick="renderPatrimonioHome()">Cancelar</button>
+      <button class="btn btn-primary" onclick="savePatrimonioForm()">Salvar</button>
+    </div>
+    ${p ? `
+    <div style="margin-top:14px">
+      <button class="btn btn-secondary" style="width:100%;color:var(--red)" onclick="deletePatrimonioUI('${p.id}')">Excluir ${tipoLbl.toLowerCase()}</button>
+    </div>` : ''}`;
+}
+
+function onPatPhotoChange(input) {
+  const file = input.files[0];
+  if (!file) return;
+  resizeVehPhoto(file).then(dataUrl => {
+    if (!dataUrl) return;
+    document.getElementById('pf-photo-data').value = dataUrl;
+    const prev = document.getElementById('pf-photo-preview');
+    if (prev) {
+      prev.className = '';
+      prev.style.cssText = 'width:64px;height:64px;border-radius:12px;overflow:hidden';
+      prev.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover">`;
+    }
+  });
+}
+
+function savePatrimonioForm() {
+  const nome = (document.getElementById('pf-nome')?.value || '').trim();
+  if (!nome) { gdToast('Nome obrigatório.'); return; }
+  const valorRaw = document.getElementById('pf-valor')?.value;
+  const fields = {
+    nome,
+    valorEstimado: valorRaw === '' || valorRaw == null ? 0 : Number(valorRaw) || 0,
+    status:        document.getElementById('pf-status')?.value || 'ativo',
+    foto:          document.getElementById('pf-photo-data')?.value || null,
+    observacoes:   (document.getElementById('pf-obs')?.value || '').trim(),
+  };
+  const id = document.getElementById('pf-id')?.value;
+  if (id) {
+    updatePatrimonio(id, fields);
+    gdToast('Patrimônio atualizado.');
+  } else {
+    const tipo = document.getElementById('pf-tipo')?.value || 'outro';
+    createPatrimonio(Object.assign({ tipo }, fields));
+    gdToast('Patrimônio adicionado.');
+  }
+  renderPatrimonioHome();
+}
+
+function deletePatrimonioUI(id) {
+  const p = getPatrimonio(id);
+  if (!p) return;
+  gdConfirm({
+    title: 'Excluir patrimônio',
+    msg: `Excluir permanentemente "${p.nome}"? Esta ação não pode ser desfeita. Você também pode apenas mudar o status para Arquivado.`,
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => {
+      D.patrimonios = (D.patrimonios || []).filter(x => x.id !== id);
+      save();
+      renderPatrimonioHome();
+      gdToast('Patrimônio excluído.', { type: 'success' });
+    },
+  });
 }

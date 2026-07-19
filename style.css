@@ -3334,3 +3334,148 @@ button:focus-visible, [role="button"]:focus-visible {
 
 /* ── Dark-mode card shadow via token ── */
 :root[data-theme="dark"] .av-card { box-shadow: 0 2px 14px rgba(0,0,0,.28); }
+
+/* ══════════════════════════════════════════
+   PATRIMÔNIO 2.0 — tela principal (Etapa 2)
+   ══════════════════════════════════════════ */
+
+/* Category icon backgrounds — paleta oficial Avenco */
+.pat-ico-veiculo { background: var(--ac-t);  color: var(--ac); }
+.pat-ico-imovel  { background: rgba(0,168,107,.10); color: var(--gn); }
+.pat-ico-outro   { background: rgba(124,58,237,.10); color: #7C3AED; }
+:root[data-theme="dark"] .pat-ico-imovel { background: rgba(34,197,94,.12); }
+:root[data-theme="dark"] .pat-ico-outro  { background: rgba(167,139,250,.12); color: #A78BFA; }
+
+/* Category cards row */
+.pat-cat-row { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.pat-cat-card {
+  background: var(--surface); border-radius: var(--radius-sm); padding: 14px 16px;
+  border: 1px solid var(--border); box-shadow: var(--shadow-sm);
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-default), transform var(--dur-fast) var(--ease-default);
+  -webkit-tap-highlight-color: transparent;
+}
+.pat-cat-card:active { transform: scale(.98); }
+.pat-cat-ico {
+  width: 42px; height: 42px; border-radius: 11px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.pat-cat-ico svg { width: 20px; height: 20px; }
+.pat-cat-body { flex: 1; min-width: 0; }
+.pat-cat-name  { font-size: 13px; font-weight: 700; color: var(--tx); margin-bottom: 2px; }
+.pat-cat-count { font-size: 11px; color: var(--tx3); }
+.pat-cat-val   { font-size: 13px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; white-space: nowrap; margin-right: 8px; }
+.pat-cat-chev  {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--surface2);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.pat-cat-chev svg { width: 12px; height: 12px; stroke: var(--tx3); fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Patrimônio list */
+.pat-list-group {
+  background: var(--surface); border-radius: var(--radius-sm);
+  border: 1px solid var(--border); overflow: hidden;
+  box-shadow: var(--shadow-sm); margin-bottom: 16px;
+}
+.pat-list-item {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  cursor: pointer; transition: background var(--dur-fast) var(--ease-default);
+  -webkit-tap-highlight-color: transparent;
+}
+.pat-list-item + .pat-list-item { border-top: 1px solid var(--border); }
+.pat-list-photo {
+  width: 42px; height: 42px; border-radius: 10px; flex-shrink: 0;
+  overflow: hidden; display: flex; align-items: center; justify-content: center;
+  background: var(--surface2);
+}
+.pat-list-photo img { width: 100%; height: 100%; object-fit: cover; }
+.pat-list-photo svg { width: 20px; height: 20px; }
+.pat-list-body { flex: 1; min-width: 0; }
+.pat-list-name { font-size: 14px; font-weight: 700; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+.pat-list-meta { display: flex; align-items: center; gap: 6px; }
+.pat-list-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+.pat-list-val  { font-size: 13px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pat-list-chev svg { width: 14px; height: 14px; stroke: var(--tx3); fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Category chips — paleta oficial Avenco */
+.pat-chip {
+  font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.pat-chip-veiculo { background: var(--ac-t);  color: var(--ac); }
+.pat-chip-imovel  { background: rgba(0,168,107,.10); color: var(--gn); }
+.pat-chip-outro   { background: rgba(124,58,237,.10); color: #7C3AED; }
+:root[data-theme="dark"] .pat-chip-imovel { background: rgba(34,197,94,.12); }
+:root[data-theme="dark"] .pat-chip-outro  { background: rgba(167,139,250,.12); color: #A78BFA; }
+
+/* Status — dot + label */
+.pat-status { display: flex; align-items: center; gap: 4px; }
+.pat-status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.pat-status-lbl { font-size: 10px; font-weight: 600; }
+.s-ativo   .pat-status-dot { background: var(--gn); }
+.s-ativo   .pat-status-lbl { color: var(--gn); }
+.s-vendido .pat-status-dot { background: var(--tx3); }
+.s-vendido .pat-status-lbl { color: var(--tx3); }
+.s-inativo .pat-status-dot { background: var(--tx3); opacity: .5; }
+.s-inativo .pat-status-lbl { color: var(--tx3); }
+
+/* Empty state */
+.pat-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 56px 24px 80px; }
+.pat-empty-illus { margin-bottom: 24px; }
+.pat-empty-title { font-size: 16px; font-weight: 800; color: var(--tx); margin-bottom: 8px; line-height: 1.35; text-wrap: balance; }
+.pat-empty-sub   { font-size: 13px; color: var(--tx2); line-height: 1.65; max-width: 280px; margin-bottom: 28px; }
+
+/* Patrimônio FAB — acima da tab bar, como o FAB global */
+#pat-fab {
+  position: fixed; right: 20px; bottom: calc(82px + env(safe-area-inset-bottom, 0px)); z-index: 90;
+  width: 52px; height: 52px; border-radius: 50%; border: none;
+  background: var(--ac); display: none; align-items: center; justify-content: center;
+  cursor: pointer; box-shadow: 0 4px 20px var(--ac-b), 0 2px 8px rgba(0,0,0,.2);
+  transition: opacity .2s var(--ease-out), transform .2s var(--ease-out), background .25s;
+}
+#pat-fab svg { stroke: #fff; }
+#pat-fab.pat-fab-hidden { opacity: 0; pointer-events: none; transform: scale(.82); }
+
+/* Bottom sheet overlay inside page */
+#pat-sheet { position: fixed; }
+
+/* Link discreto para a tela antiga de veículos (durante os testes) */
+.pat-legacy-link {
+  display: block; width: 100%; margin: 0 0 100px; padding: 10px;
+  background: none; border: none; cursor: pointer; text-align: center;
+  font-size: 12px; font-weight: 600; color: var(--tx3);
+  text-decoration: underline; text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Tablet / desktop — 3-col category grid */
+@media (min-width: 640px) {
+  .pat-cat-row { flex-direction: row; }
+  .pat-cat-card { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .pat-cat-val  { margin-right: 0; }
+  .pat-cat-chev { align-self: flex-end; }
+}
+
+/* Sheet option button — patrimônio type picker */
+.av-sheet-opt {
+  display: flex; align-items: center; gap: 14px; padding: 14px 16px;
+  background: var(--surface2); border-radius: 14px; cursor: pointer;
+  border: 1px solid var(--border); width: 100%; text-align: left;
+  transition: background var(--dur-fast) var(--ease-default), border-color .25s;
+  -webkit-tap-highlight-color: transparent;
+}
+.av-sheet-opt:active { background: var(--surface3); }
+
+/* Contraste reforçado no modo escuro — revisão final Etapa 2.
+   Escopado ao módulo Patrimônio para não afetar outras abas. */
+:root[data-theme="dark"] #pat-home-cont .sec-label { color: rgba(232,237,255,.58); }
+:root[data-theme="dark"] #pat-home-cont .hero-chip { color: rgba(232,237,255,.66) !important; }
+:root[data-theme="dark"] #pat-home-cont .hero-chip b { color: var(--tx); }
+:root[data-theme="dark"] .pat-cat-count { color: rgba(232,237,255,.62); }
+:root[data-theme="dark"] .pat-legacy-link { color: rgba(232,237,255,.58); }
+:root[data-theme="dark"] .s-vendido .pat-status-lbl,
+:root[data-theme="dark"] .s-inativo .pat-status-lbl { color: rgba(232,237,255,.62); }
+:root[data-theme="dark"] .s-vendido .pat-status-dot { background: rgba(232,237,255,.62); }
+:root[data-theme="dark"] .s-inativo .pat-status-dot { background: rgba(232,237,255,.46); opacity: 1; }
+:root[data-theme="dark"] .pat-cat-chev svg,
+:root[data-theme="dark"] .pat-list-chev svg { stroke: rgba(232,237,255,.58); }
