@@ -748,16 +748,16 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .iitem{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .iitem:last-child{border-bottom:none}
 .iitem-status{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.iitem-status.paid{background:#00dc82}
-.iitem-status.pending{background:#ffb800}
+.iitem-status.paid{background:var(--gn)}
+.iitem-status.pending{background:var(--c-warning)}
 .iitem-info{flex:1;display:flex;flex-direction:column;gap:1px;min-width:0}
 .iitem-note{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .iitem-plat{font-size:11px;font-weight:600}
 .iitem-amt{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap}
 .iitem-empty{font-size:12px;color:var(--text3);text-align:center;padding:10px 0}
 .iitem-pending-total{
-  font-size:12px;font-weight:700;color:#ffb800;
-  background:rgba(255,184,0,.08);border-radius:8px;
+  font-size:12px;font-weight:700;color:var(--c-warning);
+  background:var(--c-warning-t);border-radius:8px;
   padding:7px 10px;margin-top:8px;text-align:center;
 }
 
@@ -1214,7 +1214,7 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .bud-limit{color:var(--text3)}
 .bud-bar-wrap{background:var(--surface3);border-radius:8px;height:7px;overflow:hidden}
 .bud-bar-fill{height:100%;border-radius:8px;transition:width .6s cubic-bezier(.35,.07,.24,.95)}
-.bud-over{font-size:11px;color:#ff4d6a;margin-top:5px;font-weight:600}
+.bud-over{font-size:11px;color:var(--rd);margin-top:5px;font-weight:600}
 .bud-del{
   position:absolute;top:12px;right:0;
   background:none;border:none;color:var(--text3);font-size:13px;cursor:pointer;padding:2px 4px;
@@ -3150,3 +3150,81 @@ button.srow-muted:active { background: none; }
 :root[data-theme="dark"] .av-toast    { box-shadow: 0 6px 28px rgba(0,0,0,.5), 0 2px 8px rgba(0,0,0,.35); }
 :root[data-theme="dark"] .av-dialog-icon--warning { color: #FBBF24; }
 :root[data-theme="dark"] .av-toast--warning { border-left-color: #FBBF24; }
+
+/* ══════════════════════════════════════════
+   ETAPA 4 — Canonical List & Card System
+   ══════════════════════════════════════════ */
+
+/* ── Section headers ── */
+.av-sec-hd { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.av-sec-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--tx3); }
+
+/* ── Cards ── */
+.av-card { background:var(--surface); border-radius:var(--radius); padding:18px; box-shadow:var(--shadow); }
+.av-card--highlight { background:var(--gold-t06); border:1px solid var(--gold-t20); border-left:3px solid var(--ac); }
+.av-card--summary { border-radius:var(--radius-lg); padding:24px; box-shadow:var(--shadow-card); }
+.av-card--content { padding:0; overflow:hidden; }
+.av-card--surface2 { background:var(--surface2); box-shadow:none; }
+.av-card--success { background:var(--gn-t); border:1px solid rgba(22,163,74,.2); border-left:3px solid var(--gn); }
+.av-card--warning { background:var(--c-warning-t); border:1px solid rgba(217,119,6,.2); border-left:3px solid var(--c-warning); }
+.av-card--danger  { background:var(--rd-t); border:1px solid rgba(220,38,38,.2); border-left:3px solid var(--rd); }
+.av-card--info    { background:var(--ac-t); border:1px solid var(--ac-b); border-left:3px solid var(--ac); }
+:root[data-theme="dark"] .av-card { box-shadow:0 2px 14px rgba(0,0,0,.28); }
+
+/* ── List group ── */
+.av-list-group { overflow:hidden; }
+.av-list-title { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--tx3); padding:0 0 8px; }
+
+/* ── List items ── */
+.av-item { display:flex; align-items:center; gap:12px; padding:11px 0; border-bottom:1px solid var(--border); }
+.av-item:last-child { border-bottom:none; }
+.av-item-icon { width:38px; height:38px; border-radius:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--ol1); font-size:17px; }
+.av-item-icon--sm   { width:30px; height:30px; border-radius:8px; font-size:14px; }
+.av-item-icon--circle { border-radius:50%; }
+.av-item-icon--dot  { width:9px; height:9px; border-radius:50%; background:var(--tx3); flex-shrink:0; }
+.av-item-body  { flex:1; min-width:0; }
+.av-item-title { font-size:14px; font-weight:600; color:var(--tx); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.av-item-sub   { font-size:12px; color:var(--tx3); margin-top:2px; }
+.av-item-desc  { font-size:13px; color:var(--tx2); margin-top:3px; line-height:1.45; }
+.av-item-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+.av-item-value { font-size:14px; font-weight:700; color:var(--tx); font-variant-numeric:tabular-nums; }
+.av-item-value--pos { color:var(--gn); }
+.av-item-value--neg { color:var(--rd); }
+.av-item-btn { background:none; border:none; color:var(--tx3); font-size:14px; cursor:pointer; padding:4px 5px; transition:color .15s; }
+.av-item-btn:active { color:var(--tx); }
+@media (hover:hover) { .av-item-btn:hover { color:var(--tx2); } }
+
+/* ── Progress bars (unified base) ── */
+.av-progress      { background:var(--surface3); border-radius:8px; overflow:hidden; }
+.av-progress--sm  { height:6px; }
+.av-progress--md  { height:8px; }
+.av-progress--lg  { height:10px; }
+.av-progress-fill { height:100%; border-radius:8px; transition:width .5s cubic-bezier(.22,.68,0,1.2); }
+.av-progress-fill--brand   { background:linear-gradient(90deg,var(--ac),var(--ac2)); box-shadow:0 0 8px var(--gold-t30); }
+.av-progress-fill--success { background:linear-gradient(90deg,var(--green-d),var(--gn)); }
+.av-progress-fill--danger  { background:var(--rd); }
+.av-progress-fill--warning { background:var(--c-warning); }
+
+/* ── Status badges ── */
+.av-badge { display:inline-flex; align-items:center; padding:3px 8px; border-radius:var(--radius-full); font-size:11.5px; font-weight:700; line-height:1.4; white-space:nowrap; }
+.av-badge--success { background:var(--gn-t);        color:var(--gn); }
+.av-badge--warning { background:var(--c-warning-t); color:var(--c-warning); }
+.av-badge--danger  { background:var(--rd-t);        color:var(--rd); }
+.av-badge--info    { background:var(--ac-t);        color:var(--ac); }
+.av-badge--neutral { background:var(--ol1); color:var(--tx2); border:1px solid var(--border); }
+
+/* ── Compact chips ── */
+.av-chip { display:inline-flex; align-items:center; gap:5px; padding:5px 10px; border-radius:var(--radius-full); font-size:12px; font-weight:700; line-height:1; background:var(--ol1); border:1px solid var(--border); color:var(--tx2); cursor:pointer; transition:background .15s,border-color .15s; }
+.av-chip.av-chip--active { background:var(--ac-t); border-color:var(--ac-b); color:var(--ac); }
+.av-chip:active { background:var(--ol2); }
+
+/* ── Empty states ── */
+.av-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:28px 16px; text-align:center; }
+.av-empty-icon  { font-size:32px; line-height:1; }
+.av-empty-title { font-size:14px; font-weight:700; color:var(--tx); }
+.av-empty-sub   { font-size:13px; color:var(--tx3); line-height:1.5; max-width:240px; }
+
+/* ── Dividers ── */
+.av-divider          { height:1px; background:var(--border); }
+.av-divider--inset   { margin-left:52px; }
+.av-divider--section { margin:0 24px; }

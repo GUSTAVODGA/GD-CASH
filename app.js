@@ -1414,7 +1414,7 @@ function renderReserva() {
   hist.innerHTML = D.reservaHistory.length
     ? [...D.reservaHistory].reverse().map(h => {
         const lbl = (h.type === 'dep' ? 'Aporte' : 'Retirada') + (h.note ? ` · ${h.note}` : '');
-        return `<div class="res-hist-item">
+        return `<div class="res-hist-item av-item">
           <div class="res-hist-info">
             <div class="res-hist-lbl">${lbl}</div>
             <div class="res-hist-date">${fmtShort(h.date)}</div>
@@ -2062,8 +2062,8 @@ function renderGoals() {
             <button class="icon-btn icon-btn-del" onclick="deleteGoal('${g.id}')" title="Excluir"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
           </div>
         </div>
-        <div class="goal-bar-wrap">
-          <div class="goal-bar-fill${done?' goal-bar-done':''}" style="width:${pct}%"></div>
+        <div class="goal-bar-wrap av-progress av-progress--md">
+          <div class="goal-bar-fill${done?' goal-bar-done':''} av-progress-fill${done?' av-progress-fill--success':' av-progress-fill--brand'}" style="width:${pct}%"></div>
         </div>
         <div class="goal-footer">
           <span class="goal-pct-txt">${Math.round(pct)}%</span>
@@ -2198,7 +2198,7 @@ function renderFixos() {
       ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
       : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
     return `
-      <div class="fixed-item${nearDue ? ' fixed-near-due' : ''}${paused ? ' fixed-paused' : ''}">
+      <div class="fixed-item av-item${nearDue ? ' fixed-near-due' : ''}${paused ? ' fixed-paused' : ''}">
         <div class="fixed-info">
           <div class="fixed-name">${f.name}${paused ? ' <span class="fixed-paused-badge">pausado</span>' : ''}</div>
           <div class="fixed-meta">${f.category}${dueTxt}</div>
