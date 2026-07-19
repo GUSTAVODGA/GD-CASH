@@ -27,7 +27,7 @@ function setCurrency(sym) {
     btn.classList.toggle('curr-pill-on', btn.dataset.cur === currSym);
   });
   const active = document.querySelector('.page.active')?.id?.replace('page-', '');
-  if (active === 'inicio')       { renderInicio(); renderInicioCards(); }
+  if (active === 'inicio')       { renderInicio(); } /* renderInicioCards already called inside renderInicio */
   else if (active === 'semana')  { renderSemana(); renderDayAccordion(); }
   else if (active === 'mes')     renderMes();
   else if (active === 'reserva') renderReserva();
@@ -288,11 +288,18 @@ async function loadFromCloud() {
 
 async function saveToCloud() {
   if (!currentUser || !db) return;
+  if (_saveCloudInFlight) return;
+  _cloudSyncPending  = false;
+  _saveCloudInFlight = true;
   try {
     D.updatedAt = Date.now();
     await db.collection('users').doc(currentUser.uid).collection('data').doc('main').set(D);
   } catch(e) {
     console.error('Erro ao salvar na nuvem:', e);
+    _cloudSyncPending = true;
+    _saveCloudTimer   = setTimeout(saveToCloud, 5000);
+  } finally {
+    _saveCloudInFlight = false;
   }
 }
 
@@ -695,13 +702,25 @@ window.gdLoading = function(show, text = 'Carregando...') {
   }
 };
 
+let _saveCloudTimer    = null;
+let _cloudSyncPending  = false;
+let _saveCloudInFlight = false;
 function save() {
   try { localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch(e) {
     if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22)) {
       gdToast('⚠️ Armazenamento cheio. Exporte seus dados ou ative a sincronização na nuvem.');
     }
   }
-  if (CLOUD_ENABLED) saveToCloud();
+  if (CLOUD_ENABLED) {
+    _cloudSyncPending = true;
+    clearTimeout(_saveCloudTimer);
+    _saveCloudTimer = setTimeout(saveToCloud, 1500);
+  }
+}
+function _flushCloudSync() {
+  if (!_cloudSyncPending || !currentUser || !db) return;
+  clearTimeout(_saveCloudTimer);
+  saveToCloud();
 }
 
 function exportData() {
@@ -774,12 +793,23 @@ function R(v) {
   return sign+currSym+' '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
 }
 
+const _animCountTokens = new WeakMap();
 function animCount(el, finalVal, duration=550) {
   if (!el) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = R(finalVal);
+    return;
+  }
+  // Cancel any in-progress animation on this element
+  const prev = _animCountTokens.get(el);
+  if (prev) prev.cancelled = true;
+  const token = { cancelled: false };
+  _animCountTokens.set(el, token);
   const start = performance.now();
   const neg = finalVal < 0;
   const abs = Math.abs(finalVal);
   const frame = (now) => {
+    if (token.cancelled) return;
     const p = Math.min((now - start) / duration, 1);
     const ease = 1 - Math.pow(1 - p, 3);
     const cur = abs * ease * (neg ? -1 : 1);
@@ -2345,6 +2375,8 @@ function closeOverlayNav(id) {
 }
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) closeOverlay(o.id); }));
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.overlay.open').forEach(o=>closeOverlay(o.id)); });
+window.addEventListener('pagehide', _flushCloudSync);
+document.addEventListener('visibilitychange', () => { if (document.hidden) _flushCloudSync(); });
 
 // Refresh Semana hero when day-detail panel closes (any close path)
 new MutationObserver((mutations) => {
@@ -2368,7 +2400,7 @@ function switchTab(tab) {
   document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
   // Highlight "Mais" button for secondary tabs
   const moreTabs = ['fixos','conversor','ajustes','lembretes','pendencias','patrimonio'];
-  if(tab==='inicio')    { renderInicio(); renderInicioCards(); }
+  if(tab==='inicio')    { renderInicio(); } /* renderInicioCards already called inside renderInicio */
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
   if(tab==='reserva')   renderReserva();
@@ -3528,6 +3560,7 @@ function buildMonthInsight(inc, exp) {
   return `Atenção: os gastos superaram a receita em ${R(Math.abs(liq))} este mês.`;
 }
 
+let _homeChartHash = '';
 function drawHomeChart() {
   const canvas  = document.getElementById('home-chart');
   const emptyEl = document.getElementById('home-chart-empty');
@@ -3556,6 +3589,12 @@ function drawHomeChart() {
   if (legendEl) legendEl.style.display = '';
 
   if (!canvas.offsetWidth) return;
+
+  // Skip redraw when data and theme are unchanged
+  const theme = document.documentElement.dataset.theme || '';
+  const hash  = months.map(m => m.inc + '|' + m.exp).join(',') + ':' + theme + ':' + canvas.offsetWidth;
+  if (hash === _homeChartHash && canvas.width > 0) return;
+  _homeChartHash = hash;
   const dpr = window.devicePixelRatio || 1;
   const cw = canvas.offsetWidth, ch = canvas.offsetHeight;
   canvas.width = cw * dpr; canvas.height = ch * dpr;
