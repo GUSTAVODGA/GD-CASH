@@ -64,6 +64,8 @@ function initFirebase() {
       // Sync with cloud; re-render only if data actually changed
       const _tsBeforeSync = D.updatedAt || 0;
       await loadFromCloud();
+      const _migResult = _migrateVehiclesToPatrimonios();
+      if (_migResult.ran) save();
       if ((D.updatedAt || 0) !== _tsBeforeSync) {
         document.getElementById('curr-chip').textContent = currSym;
         renderInicio();
@@ -260,7 +262,8 @@ async function loadFromCloud() {
       if (!D.weeklyGoal) D.weeklyGoal = 0;
       if (!D.reminders) D.reminders = [];
       if (!D.pendencias) D.pendencias = [];
-      if (!D.vehicles) D.vehicles = [];
+      if (!D.vehicles)    D.vehicles    = [];
+      if (!D.patrimonios) D.patrimonios = [];
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
     } else {
       // Primeiro login — oferece migrar dados locais existentes
@@ -515,6 +518,7 @@ function defaultData() {
     reminders: [],
     pendencias: [],
     vehicles: [],
+    patrimonios: [],
   };
 }
 
@@ -530,6 +534,7 @@ let D = (() => {
       if(!p.reminders)   p.reminders=[];
       if(!p.pendencias)  p.pendencias=[];
       if(!p.vehicles)    p.vehicles=[];
+      if(!p.patrimonios) p.patrimonios=[];
       return p;
     }
   } catch(e){}
@@ -4892,4 +4897,217 @@ function saveVehStatus() {
   closeOverlay('modal-veh-status');
   renderVehDetail(vehId);
   gdToast('Status atualizado.');
+}
+
+// ══════════════════════════════════════════
+// PATRIMÔNIO 2.0 — FUNDAÇÃO DE DADOS
+// ══════════════════════════════════════════
+// Fase 1: schema, normalização, CRUD básico e migração segura.
+// A tela existente de veículos (renderPatrimonio / D.vehicles) permanece
+// inalterada e continua funcionando como camada de compatibilidade.
+
+function _defaultPatrimonioFields() {
+  return {
+    id:             '',
+    tipo:           'veiculo',
+    nome:           '',
+    descricao:      '',
+    foto:           null,
+    valorEstimado:  0,
+    dataAquisicao:  '',
+    observacoes:    '',
+    status:         'ativo',
+    etiquetas:      [],
+    financiamentos: [],
+    detalhes:       {},
+    historico:      [],
+    _migradoDe:     null,
+    _idOriginal:    null,
+    createdAt:      0,
+    updatedAt:      0,
+  };
+}
+
+function _normPatrimonioDetalhes(tipo, d) {
+  const src = (d && typeof d === 'object') ? d : {};
+  if (tipo === 'veiculo') {
+    return Object.assign({
+      placa: '', marca: '', modelo: '', ano: '',
+      quilometragem: null, combustivel: '', cor: '',
+      renavam: '', chassi: '',
+      vinculosFixos: [], vinculosCats: [],
+    }, src);
+  }
+  if (tipo === 'imovel') {
+    return Object.assign({
+      subtipo: '', endereco: '', cidade: '',
+      metragem: 0, quartos: 0, banheiros: 0, vagas: 0,
+      condominio: 0, iptu: 0, aluguel: 0,
+      matricula: '', cartorio: '', rendaMensal: 0,
+    }, src);
+  }
+  return Object.assign({}, src);
+}
+
+function normalizePatrimonio(raw) {
+  const p = Object.assign({}, _defaultPatrimonioFields(), raw);
+  if (!Array.isArray(p.financiamentos)) p.financiamentos = [];
+  if (!Array.isArray(p.historico))      p.historico      = [];
+  if (!Array.isArray(p.etiquetas))      p.etiquetas      = [];
+  p.detalhes = _normPatrimonioDetalhes(p.tipo, p.detalhes);
+  return p;
+}
+
+function createPatrimonio(data) {
+  if (!Array.isArray(D.patrimonios)) D.patrimonios = [];
+  const now = Date.now();
+  const p   = normalizePatrimonio(Object.assign({}, data, { id: uid(), createdAt: now, updatedAt: now }));
+  D.patrimonios.push(p);
+  save();
+  return p;
+}
+
+function getPatrimonio(id) {
+  return (D.patrimonios || []).find(p => p.id === id) || null;
+}
+
+function updatePatrimonio(id, changes) {
+  const list = D.patrimonios || [];
+  const idx  = list.findIndex(p => p.id === id);
+  if (idx === -1) return false;
+  list[idx] = normalizePatrimonio(Object.assign({}, list[idx], changes, { updatedAt: Date.now() }));
+  save();
+  return true;
+}
+
+function archivePatrimonio(id, status) {
+  return updatePatrimonio(id, { status: status || 'inativo' });
+}
+
+function listPatrimonios(tipo) {
+  const all = D.patrimonios || [];
+  return tipo ? all.filter(p => p.tipo === tipo) : all.slice();
+}
+
+function sumPatrimonioTotal() {
+  return (D.patrimonios || [])
+    .filter(p => p.status !== 'vendido' && p.status !== 'inativo')
+    .reduce((s, p) => s + (p.valorEstimado || 0), 0);
+}
+
+// Migração segura de D.vehicles → D.patrimonios.
+// Idempotente e RE-EXECUTÁVEL — roda em todo login e migra apenas os
+// veículos que ainda não existem em D.patrimonios. Não usa flag como
+// bloqueio: se um sync anterior rodou com D.vehicles vazio (nuvem ainda
+// não carregada, outro dispositivo etc.), a próxima execução recupera.
+// Nunca modifica nem exclui D.vehicles.
+// Retorna { ran: bool, migrated: number }.
+function _migrateVehiclesToPatrimonios() {
+  if (!Array.isArray(D.patrimonios)) D.patrimonios = [];
+  if (!Array.isArray(D.vehicles) || D.vehicles.length === 0) {
+    D._patrimoniosMigrated = true;
+    return { ran: false, migrated: 0 };
+  }
+
+  // Snapshot para rollback — só na primeira vez, para não sobrescrever o
+  // backup pré-migração com um estado já migrado. Falha não-fatal.
+  try {
+    if (!localStorage.getItem('gdcash_migration_backup_v1')) {
+      localStorage.setItem('gdcash_migration_backup_v1', JSON.stringify({
+        _backupTimestamp: Date.now(),
+        _backupVersion:   'pre-patrimonio-2',
+        vehicles:         JSON.parse(JSON.stringify(D.vehicles)),
+        patrimonios:      JSON.parse(JSON.stringify(D.patrimonios)),
+      }));
+    }
+  } catch(e) {
+    console.error('[patrimônio] backup pré-migração falhou:', e);
+  }
+
+  // IDs já migrados (idempotência) — cobre tanto _idOriginal quanto o
+  // próprio id, já que o patrimônio migrado reutiliza o id do veículo.
+  const migratedIds = new Set();
+  D.patrimonios.forEach(p => {
+    if (p._migradoDe === 'vehicles' && p._idOriginal) migratedIds.add(p._idOriginal);
+    if (p.id) migratedIds.add(p.id);
+  });
+
+  const STATUS_MAP = {
+    em_uso:     'ativo',
+    na_oficina: 'ativo',
+    a_venda:    'ativo',
+    vendido:    'vendido',
+    arquivado:  'inativo',
+  };
+
+  let count = 0;
+  for (const v of D.vehicles) {
+    if (migratedIds.has(v.id)) continue;
+
+    const historico = (v.history || []).map(h => ({
+      id:          h.id     || uid(),
+      data:        h.date   || todayStr(),
+      tipo:        h.type === 'km_update' ? 'km_update' : 'evento',
+      descricao:   h.note   || '',
+      valor:       h.amount || 0,
+      despesaId:   null,
+      pendenciaId: null,
+      _legacyType: h.type   || null,
+      _legacyKm:   h.km     || null,
+    }));
+
+    D.patrimonios.push(normalizePatrimonio({
+      id:            v.id,
+      tipo:          'veiculo',
+      nome:          v.name   || '',
+      foto:          v.photo  || null,
+      valorEstimado: 0,
+      dataAquisicao: '',
+      observacoes:   v.notes  || '',
+      status:        STATUS_MAP[v.status] || 'ativo',
+      etiquetas:     [],
+      financiamentos:[],
+      detalhes: {
+        placa:            v.plate  || '',
+        marca:            v.brand  || '',
+        modelo:           v.model  || '',
+        ano:              v.year   || '',
+        quilometragem:    v.km     != null ? v.km : null,
+        combustivel:      '',
+        cor:              v.color  || '',
+        renavam:          '',
+        chassi:           '',
+        vinculosFixos:    [],
+        vinculosCats:     [],
+        linkedExpenses:   v.linkedExpenses   || [],
+        linkedPendencias: v.linkedPendencias || [],
+      },
+      historico,
+      _migradoDe:  'vehicles',
+      _idOriginal: v.id,
+      createdAt:   Date.now(),
+      updatedAt:   Date.now(),
+    }));
+    count++;
+  }
+
+  D._patrimoniosMigrated = true;
+  if (count > 0) D.updatedAt = Date.now();
+  return { ran: count > 0, migrated: count };
+}
+
+// Rollback da migração — restaura D.patrimonios para o estado pré-migração.
+// Nunca toca em D.vehicles. Seguro chamar mesmo sem backup.
+function rollbackPatrimonioMigration() {
+  try {
+    const raw = localStorage.getItem('gdcash_migration_backup_v1');
+    if (!raw) return { ok: false, reason: 'Backup não encontrado.' };
+    const bk = JSON.parse(raw);
+    D.patrimonios          = Array.isArray(bk.patrimonios) ? bk.patrimonios : [];
+    D._patrimoniosMigrated = false;
+    save();
+    return { ok: true, restored: D.patrimonios.length, ts: bk._backupTimestamp };
+  } catch(e) {
+    return { ok: false, reason: e.message };
+  }
 }
