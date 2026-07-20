@@ -3441,7 +3441,7 @@ button:focus-visible, [role="button"]:focus-visible {
 
 /* Link discreto para a tela antiga de veículos (durante os testes) */
 .pat-legacy-link {
-  display: block; width: 100%; margin: 0 0 100px; padding: 10px;
+  display: block; width: 100%; margin: 0 0 calc(100px + env(safe-area-inset-bottom, 0px)); padding: 10px;
   background: none; border: none; cursor: pointer; text-align: center;
   font-size: 12px; font-weight: 600; color: var(--tx3);
   text-decoration: underline; text-underline-offset: 3px;
@@ -3479,3 +3479,71 @@ button:focus-visible, [role="button"]:focus-visible {
 :root[data-theme="dark"] .s-inativo .pat-status-dot { background: rgba(232,237,255,.46); opacity: 1; }
 :root[data-theme="dark"] .pat-cat-chev svg,
 :root[data-theme="dark"] .pat-list-chev svg { stroke: rgba(232,237,255,.58); }
+
+/* ══════════════════════════════════════════
+   PATRIMÔNIO 2.0 — detalhe, financiamentos e histórico (Etapa 3)
+   ══════════════════════════════════════════ */
+
+.pat-det-hero { margin-bottom: 0; }
+.pat-det-hero-row { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.pat-det-photo { width: 52px; height: 52px; border-radius: 12px; }
+.pat-det-hero-info { flex: 1; min-width: 0; }
+.pat-det-name { font-size: 17px; font-weight: 800; color: var(--tx); margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pat-det-val-lbl { font-size: 10.5px; font-weight: 700; color: var(--tx3); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 2px; }
+.pat-det-val { font-size: 28px; font-weight: 900; letter-spacing: -1px; color: var(--tx); font-variant-numeric: tabular-nums; }
+.pat-det-liq { font-size: 12px; color: var(--tx2); margin-top: 6px; }
+.pat-det-liq b { color: var(--tx); font-variant-numeric: tabular-nums; }
+.pat-det-obs { font-size: 12.5px; color: var(--tx2); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); line-height: 1.5; }
+
+.pat-det-sec-head { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 10px; }
+.pat-det-empty { padding: 16px 14px; font-size: 12.5px; color: var(--tx3); text-align: center; }
+
+.pat-det-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 14px; }
+.pat-det-row + .pat-det-row { border-top: 1px solid var(--border); }
+.pat-det-row-lbl { font-size: 12px; color: var(--tx2); flex-shrink: 0; }
+.pat-det-row-val { font-size: 13px; font-weight: 700; color: var(--tx); text-align: right; font-variant-numeric: tabular-nums; }
+
+.pat-fin-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pat-fin-item + .pat-fin-item { border-top: 1px solid var(--border); }
+.pat-fin-body { flex: 1; min-width: 0; }
+.pat-fin-name { font-size: 13.5px; font-weight: 700; color: var(--tx); margin-bottom: 2px; }
+.pat-fin-sub { font-size: 11px; color: var(--tx2); }
+.pat-fin-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.pat-fin-saldo { font-size: 13px; font-weight: 800; color: var(--red, #e5484d); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.pat-mini-del {
+  width: 30px; height: 30px; border-radius: 8px; border: none; background: var(--surface2);
+  color: var(--tx3); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; -webkit-tap-highlight-color: transparent;
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+.pat-mini-del:active { background: var(--surface3); color: var(--red, #e5484d); }
+
+.pat-hist-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; }
+.pat-hist-item + .pat-hist-item { border-top: 1px solid var(--border); }
+.pat-hist-dot-col { padding-top: 5px; flex-shrink: 0; }
+.pat-hist-dot { display: block; width: 8px; height: 8px; border-radius: 50%; background: var(--tx3); }
+.pat-hist-dot-aval { background: var(--ac); }
+.pat-hist-body { flex: 1; min-width: 0; }
+.pat-hist-title { font-size: 13px; font-weight: 700; color: var(--tx); margin-bottom: 2px; }
+.pat-hist-val { font-size: 12.5px; color: var(--tx2); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.pat-hist-old { text-decoration: line-through; color: var(--tx3); }
+.pat-hist-arrow { color: var(--tx3); }
+.pat-hist-new { font-weight: 800; color: var(--tx); }
+.pat-hist-date { font-size: 10.5px; color: var(--tx3); }
+
+/* Contraste no modo escuro — mesmos reforços da revisão da Etapa 2 */
+:root[data-theme="dark"] .pat-det-val-lbl,
+:root[data-theme="dark"] .pat-hist-date { color: rgba(232,237,255,.55); }
+:root[data-theme="dark"] .pat-det-row-lbl,
+:root[data-theme="dark"] .pat-fin-sub,
+:root[data-theme="dark"] .pat-det-liq,
+:root[data-theme="dark"] .pat-hist-val,
+:root[data-theme="dark"] .pat-det-obs { color: rgba(232,237,255,.62); }
+:root[data-theme="dark"] .pat-det-empty { color: rgba(232,237,255,.55); }
+:root[data-theme="dark"] .pat-hist-old,
+:root[data-theme="dark"] .pat-hist-arrow { color: rgba(232,237,255,.52); }
+:root[data-theme="dark"] #pat-detail-cont .sec-label { color: rgba(232,237,255,.58); }
+
+/* Espaço inferior do formulário de patrimônio acima da navegação (safe area) */
+#pat-form-cont { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }

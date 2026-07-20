@@ -4462,7 +4462,7 @@ function renderPatrimonio() {
 }
 
 function _vehShowView(id) {
-  ['pat-home-view','veh-list-view','veh-detail-view','veh-form-view','pat-form-view'].forEach(v => {
+  ['pat-home-view','veh-list-view','veh-detail-view','veh-form-view','pat-form-view','pat-detail-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = (v === id) ? '' : 'none';
   });
@@ -4701,7 +4701,7 @@ function saveVehicle() {
   D.vehicles = vehicles;
   // Sincroniza o valor atual estimado no registro de patrimônio do veículo
   const valorRaw = document.getElementById('vf-valor')?.value;
-  _syncVehPatrimonioValor(id, valorRaw === '' || valorRaw == null ? 0 : Number(valorRaw) || 0);
+  _syncVehPatrimonioValor(id, valorRaw === '' || valorRaw == null ? 0 : Number(valorRaw) || 0, idx >= 0);
   save();
   _vehDetailId = id;
   renderVehDetail(id);
@@ -4716,14 +4716,32 @@ function _patForVehId(vehId) {
 
 // Grava valorEstimado no patrimônio do veículo, criando o registro se a
 // migração ainda não tiver rodado para ele. Nunca toca em D.vehicles.
-function _syncVehPatrimonioValor(vehId, valorEstimado) {
+// isEdit=true (edição de veículo já existente) registra reavaliação no
+// histórico patrimonial quando o valor realmente muda; cadastro inicial
+// nunca gera evento.
+function _syncVehPatrimonioValor(vehId, valorEstimado, isEdit) {
   if (!Array.isArray(D.patrimonios)) D.patrimonios = [];
+  const existedBefore = !!_patForVehId(vehId);
   let p = _patForVehId(vehId);
   if (!p) {
     _migrateVehiclesToPatrimonios();
     p = _patForVehId(vehId);
   }
   if (p) {
+    const old = p.valorEstimado || 0;
+    if (isEdit && existedBefore && old !== valorEstimado) {
+      if (!Array.isArray(p.historico)) p.historico = [];
+      p.historico.push({
+        id:            uid(),
+        data:          todayStr(),
+        tipo:          'avaliacao',
+        descricao:     '',
+        valor:         valorEstimado,
+        valorAnterior: old,
+        despesaId:     null,
+        pendenciaId:   null,
+      });
+    }
     p.valorEstimado = valorEstimado;
     p.updatedAt = Date.now();
   }
@@ -5274,6 +5292,7 @@ function renderPatrimonioHome() {
   _vehDetailId = null;
   _vehShowView('pat-home-view');
   window.scrollTo(0, 0);
+  if (document.body) document.body.scrollTop = 0;
   const cont = document.getElementById('pat-home-cont');
   if (!cont) return;
 
@@ -5352,7 +5371,7 @@ function _renderPatListItem(item) {
   const isClickable = !!(item.vehId || item.patId);
   const onclickAttr = item.vehId
     ? `onclick="renderVehDetail('${escHtml(item.vehId)}')"`
-    : (item.patId ? `onclick="openPatForm(null,'${escHtml(item.patId)}')"` : '');
+    : (item.patId ? `onclick="renderPatDetail('${escHtml(item.patId)}')"` : '');
 
   return `
     <div class="pat-list-item" ${onclickAttr}>
@@ -5414,16 +5433,19 @@ function openPatForm(tipo, id) {
   const t = p ? _patTypeKey(p.tipo) : _patTypeKey(tipo);
   _vehShowView('pat-form-view');
   window.scrollTo(0, 0);
+  if (document.body) document.body.scrollTop = 0;
   const cont = document.getElementById('pat-form-cont');
   if (!cont) return;
   const tipoLbl = PAT_TIPO_LABELS[t] || 'Patrimônio';
+  const d = p?.detalhes || {};
+  const backAction = p ? `renderPatDetail('${p.id}')` : 'renderPatrimonioHome()';
   const statusSel = ['ativo','vendido','inativo'].map(s =>
     `<option value="${s}" ${(p?.status||'ativo')===s?'selected':''}>${_patStatusLabel(s)}</option>`).join('');
   cont.innerHTML = `
     <div class="veh-detail-topbar">
-      <button class="btn-icon-sm" onclick="renderPatrimonioHome()">
+      <button class="btn-icon-sm" onclick="${backAction}">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Meu Patrimônio
+        ${p ? 'Detalhes' : 'Meu Patrimônio'}
       </button>
     </div>
     <div class="page-header-title" style="margin-bottom:16px">${p ? 'Editar' : 'Novo'} ${tipoLbl.toLowerCase()}</div>
@@ -5453,11 +5475,44 @@ function openPatForm(tipo, id) {
       <label class="form-label">Observação</label>
       <textarea class="form-input" id="pf-obs" rows="2" placeholder="Notas sobre este bem">${escHtml(p?.observacoes||'')}</textarea>
     </div>
+    ${t === 'imovel' ? `
+    <div class="sec-label" style="margin:18px 0 10px">Detalhes do imóvel</div>
+    <div class="form-group">
+      <label class="form-label">Tipo do imóvel</label>
+      <select class="form-input" id="pf-subtipo">
+        ${['','apartamento','casa','terreno','comercial','outro'].map(s =>
+          `<option value="${s}" ${(d.subtipo||'')===s?'selected':''}>${s ? s.charAt(0).toUpperCase()+s.slice(1) : '—'}</option>`).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Endereço</label>
+      <input class="form-input" id="pf-endereco" value="${escHtml(d.endereco||'')}" placeholder="Rua, número, bairro">
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label">Cidade</label><input class="form-input" id="pf-cidade" value="${escHtml(d.cidade||'')}" placeholder="São Paulo"></div>
+      <div class="form-group"><label class="form-label">Metragem (m²)</label><input class="form-input" id="pf-metragem" type="number" min="0" step="any" value="${d.metragem || ''}" placeholder="72"></div>
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label">Quartos</label><input class="form-input" id="pf-quartos" type="number" min="0" step="1" value="${d.quartos || ''}" placeholder="2"></div>
+      <div class="form-group"><label class="form-label">Banheiros</label><input class="form-input" id="pf-banheiros" type="number" min="0" step="1" value="${d.banheiros || ''}" placeholder="1"></div>
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label">Vagas</label><input class="form-input" id="pf-vagas" type="number" min="0" step="1" value="${d.vagas || ''}" placeholder="1"></div>
+      <div class="form-group"><label class="form-label">Condomínio/mês (${escHtml(currSym)})</label><input class="form-input" id="pf-condominio" type="number" min="0" step="any" value="${d.condominio || ''}" placeholder="650"></div>
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label">IPTU/ano (${escHtml(currSym)})</label><input class="form-input" id="pf-iptu" type="number" min="0" step="any" value="${d.iptu || ''}" placeholder="1800"></div>
+      <div class="form-group"><label class="form-label">Aluguel/renda mês (${escHtml(currSym)})</label><input class="form-input" id="pf-aluguel" type="number" min="0" step="any" value="${d.aluguel || ''}" placeholder="2500"></div>
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label">Matrícula</label><input class="form-input" id="pf-matricula" value="${escHtml(d.matricula||'')}" placeholder="Nº da matrícula"></div>
+      <div class="form-group"><label class="form-label">Cartório</label><input class="form-input" id="pf-cartorio" value="${escHtml(d.cartorio||'')}" placeholder="Cartório de registro"></div>
+    </div>` : ''}
     <input type="hidden" id="pf-photo-data" value="${p?.foto||''}">
     <input type="hidden" id="pf-id" value="${p?.id||''}">
     <input type="hidden" id="pf-tipo" value="${t}">
     <div class="veh-form-btns">
-      <button class="btn btn-secondary" onclick="renderPatrimonioHome()">Cancelar</button>
+      <button class="btn btn-secondary" onclick="${backAction}">Cancelar</button>
       <button class="btn btn-primary" onclick="savePatrimonioForm()">Salvar</button>
     </div>
     ${p ? `
@@ -5485,6 +5540,10 @@ function savePatrimonioForm() {
   const nome = (document.getElementById('pf-nome')?.value || '').trim();
   if (!nome) { gdToast('Nome obrigatório.'); return; }
   const valorRaw = document.getElementById('pf-valor')?.value;
+  const _num = elId => {
+    const raw = document.getElementById(elId)?.value;
+    return raw === '' || raw == null ? 0 : Number(raw) || 0;
+  };
   const fields = {
     nome,
     valorEstimado: valorRaw === '' || valorRaw == null ? 0 : Number(valorRaw) || 0,
@@ -5492,16 +5551,50 @@ function savePatrimonioForm() {
     foto:          document.getElementById('pf-photo-data')?.value || null,
     observacoes:   (document.getElementById('pf-obs')?.value || '').trim(),
   };
-  const id = document.getElementById('pf-id')?.value;
+  const id   = document.getElementById('pf-id')?.value;
+  const tipo = document.getElementById('pf-tipo')?.value || 'outro';
+  // Detalhes do imóvel — merge com os detalhes existentes, sem clobber
+  if (tipo === 'imovel' && document.getElementById('pf-subtipo')) {
+    const prev = id ? (getPatrimonio(id)?.detalhes || {}) : {};
+    fields.detalhes = Object.assign({}, prev, {
+      subtipo:    document.getElementById('pf-subtipo')?.value || '',
+      endereco:   (document.getElementById('pf-endereco')?.value || '').trim(),
+      cidade:     (document.getElementById('pf-cidade')?.value || '').trim(),
+      metragem:   _num('pf-metragem'),
+      quartos:    _num('pf-quartos'),
+      banheiros:  _num('pf-banheiros'),
+      vagas:      _num('pf-vagas'),
+      condominio: _num('pf-condominio'),
+      iptu:       _num('pf-iptu'),
+      aluguel:    _num('pf-aluguel'),
+      matricula:  (document.getElementById('pf-matricula')?.value || '').trim(),
+      cartorio:   (document.getElementById('pf-cartorio')?.value || '').trim(),
+    });
+  }
   if (id) {
+    // Reavaliação automática: só quando o valor realmente mudou numa edição
+    const prev = getPatrimonio(id);
+    if (prev && (prev.valorEstimado || 0) !== fields.valorEstimado) {
+      fields.historico = (prev.historico || []).concat([{
+        id:            uid(),
+        data:          todayStr(),
+        tipo:          'avaliacao',
+        descricao:     '',
+        valor:         fields.valorEstimado,
+        valorAnterior: prev.valorEstimado || 0,
+        despesaId:     null,
+        pendenciaId:   null,
+      }]);
+    }
     updatePatrimonio(id, fields);
     gdToast('Patrimônio atualizado.');
+    renderPatDetail(id);
   } else {
-    const tipo = document.getElementById('pf-tipo')?.value || 'outro';
+    // Cadastro inicial: nenhum evento de reavaliação é criado
     createPatrimonio(Object.assign({ tipo }, fields));
     gdToast('Patrimônio adicionado.');
+    renderPatrimonioHome();
   }
-  renderPatrimonioHome();
 }
 
 function deletePatrimonioUI(id) {
@@ -5517,6 +5610,282 @@ function deletePatrimonioUI(id) {
       save();
       renderPatrimonioHome();
       gdToast('Patrimônio excluído.', { type: 'success' });
+    },
+  });
+}
+
+// ══════════════════════════════════════════
+// PATRIMÔNIO 2.0 — DETALHE, FINANCIAMENTOS E HISTÓRICO (Etapa 3)
+// ══════════════════════════════════════════
+// Detalhe de imóvel/outro bem com seções Detalhes, Financiamentos e
+// Histórico patrimonial. Financiamentos de veículos ficam para a Etapa 4
+// (fluxo legado de veículos permanece intocado).
+
+var _patFinTarget = null; // { patId, finId }
+var _patEvtTarget = null; // patId
+
+var PAT_SUBTIPO_LABELS = { apartamento:'Apartamento', casa:'Casa', terreno:'Terreno', comercial:'Comercial', outro:'Outro' };
+
+function _patFmtDate(iso) {
+  if (!iso) return '';
+  const parts = String(iso).split('-');
+  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : iso;
+}
+
+function _patTrashSvg() {
+  return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+}
+
+function renderPatDetail(id) {
+  const p = getPatrimonio(id);
+  if (!p) { renderPatrimonioHome(); return; }
+  _vehDetailId = null;
+  _vehShowView('pat-detail-view');
+  window.scrollTo(0, 0);
+  if (document.body) document.body.scrollTop = 0;
+  const cont = document.getElementById('pat-detail-cont');
+  if (!cont) return;
+
+  const typeKey  = _patTypeKey(p.tipo);
+  const statusK  = p.status || 'ativo';
+  const chipName = { veiculo:'Veículo', imovel:'Imóvel', outro:'Outro bem' }[typeKey];
+  const d        = p.detalhes || {};
+  const fins     = p.financiamentos || [];
+  const saldoTot = fins.reduce((s, f) => s + (f.saldoDevedor || 0), 0);
+
+  // ── Detalhes do imóvel (somente campos preenchidos) ──
+  const detRows = [];
+  if (typeKey === 'imovel') {
+    if (d.subtipo)    detRows.push(['Tipo', PAT_SUBTIPO_LABELS[d.subtipo] || d.subtipo]);
+    if (d.endereco)   detRows.push(['Endereço', d.endereco]);
+    if (d.cidade)     detRows.push(['Cidade', d.cidade]);
+    if (d.metragem)   detRows.push(['Metragem', `${d.metragem} m²`]);
+    if (d.quartos)    detRows.push(['Quartos', String(d.quartos)]);
+    if (d.banheiros)  detRows.push(['Banheiros', String(d.banheiros)]);
+    if (d.vagas)      detRows.push(['Vagas', String(d.vagas)]);
+    if (d.condominio) detRows.push(['Condomínio', `${R(d.condominio)}/mês`]);
+    if (d.iptu)       detRows.push(['IPTU', `${R(d.iptu)}/ano`]);
+    if (d.aluguel)    detRows.push(['Aluguel/renda', `${R(d.aluguel)}/mês`]);
+    if (d.matricula)  detRows.push(['Matrícula', d.matricula]);
+    if (d.cartorio)   detRows.push(['Cartório', d.cartorio]);
+  }
+
+  // ── Financiamentos ──
+  const finHtml = fins.length === 0
+    ? `<div class="pat-det-empty">Nenhum financiamento cadastrado.</div>`
+    : fins.map(f => {
+        const parc = (f.parcelasTotal || 0) > 0 ? `${f.parcelasPagas || 0}/${f.parcelasTotal} parcelas` : '';
+        const parcela = f.parcelaMensal ? `${R(f.parcelaMensal)}/mês` : '';
+        const sub = [f.descricao, parc, parcela].filter(Boolean).join(' · ');
+        return `
+        <div class="pat-fin-item" onclick="openPatFinForm('${p.id}','${f.id}')">
+          <div class="pat-fin-body">
+            <div class="pat-fin-name">${escHtml(f.instituicao || '')}</div>
+            ${sub ? `<div class="pat-fin-sub">${escHtml(sub)}</div>` : ''}
+          </div>
+          <div class="pat-fin-right">
+            <span class="pat-fin-saldo">−${R(f.saldoDevedor || 0)}</span>
+            <button class="pat-mini-del" onclick="event.stopPropagation();deletePatFin('${p.id}','${f.id}')" aria-label="Excluir financiamento">${_patTrashSvg()}</button>
+          </div>
+        </div>`;
+      }).join('');
+
+  // ── Histórico (mais recente primeiro; estável para datas iguais) ──
+  const hist = (p.historico || []).slice()
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => String(b.e.data || '').localeCompare(String(a.e.data || '')) || b.i - a.i)
+    .map(x => x.e);
+  const histHtml = hist.length === 0
+    ? `<div class="pat-det-empty">Nenhum evento registrado.</div>`
+    : hist.map(e => {
+        let title, body = '';
+        if (e.tipo === 'avaliacao') {
+          title = 'Reavaliação';
+          body  = `<span class="pat-hist-old">${R(e.valorAnterior || 0)}</span> <span class="pat-hist-arrow">→</span> <span class="pat-hist-new">${R(e.valor || 0)}</span>`;
+        } else if (e.tipo === 'km_update' || e._legacyType === 'km_update') {
+          title = 'Atualização de km';
+          body  = e._legacyKm != null ? `${Number(e._legacyKm).toLocaleString('pt-BR')} km` : escHtml(e.descricao || '');
+        } else {
+          title = escHtml(e.descricao || 'Evento');
+          body  = e.valor ? R(e.valor) : '';
+        }
+        const isManual = e.tipo === 'evento' && !e._legacyType;
+        return `
+        <div class="pat-hist-item">
+          <div class="pat-hist-dot-col"><span class="pat-hist-dot ${e.tipo === 'avaliacao' ? 'pat-hist-dot-aval' : ''}"></span></div>
+          <div class="pat-hist-body">
+            <div class="pat-hist-title">${title}</div>
+            ${body ? `<div class="pat-hist-val">${body}</div>` : ''}
+            <div class="pat-hist-date">${_patFmtDate(e.data)}</div>
+          </div>
+          ${isManual ? `<button class="pat-mini-del" onclick="deletePatEvt('${p.id}','${e.id}')" aria-label="Excluir evento">${_patTrashSvg()}</button>` : ''}
+        </div>`;
+      }).join('');
+
+  cont.innerHTML = `
+    <div class="veh-detail-topbar">
+      <button class="btn-icon-sm" onclick="renderPatrimonioHome()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Meu Patrimônio
+      </button>
+      <button class="btn-pill" onclick="openPatForm(null,'${p.id}')">Editar</button>
+    </div>
+
+    <div class="card pat-det-hero">
+      <div class="pat-det-hero-row">
+        <div class="pat-list-photo pat-det-photo${p.foto ? '' : ' pat-ico-' + typeKey}">
+          ${p.foto ? `<img src="${escHtml(p.foto)}" alt="${escHtml(p.nome)}">` : _patIcon(typeKey)}
+        </div>
+        <div class="pat-det-hero-info">
+          <div class="pat-det-name">${escHtml(p.nome)}</div>
+          <div class="pat-list-meta">
+            <span class="pat-chip pat-chip-${typeKey}">${chipName}</span>
+            <span class="pat-status s-${statusK}"><span class="pat-status-dot"></span><span class="pat-status-lbl">${_patStatusLabel(statusK)}</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="pat-det-val-lbl">Valor atual estimado</div>
+      <div class="pat-det-val">${R(p.valorEstimado || 0)}</div>
+      ${saldoTot > 0 ? `<div class="pat-det-liq">Financiamentos −${R(saldoTot)} · Líquido <b>${R((p.valorEstimado || 0) - saldoTot)}</b></div>` : ''}
+      ${p.observacoes ? `<div class="pat-det-obs">${escHtml(p.observacoes)}</div>` : ''}
+    </div>
+
+    ${detRows.length > 0 ? `
+    <div class="sec-label" style="margin:18px 0 10px">Detalhes</div>
+    <div class="pat-list-group" style="margin-bottom:0">
+      ${detRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
+    </div>` : ''}
+
+    <div class="pat-det-sec-head">
+      <div class="sec-label" style="margin:0">Financiamentos</div>
+      <button class="btn-pill" onclick="openPatFinForm('${p.id}')">+ Adicionar</button>
+    </div>
+    <div class="pat-list-group" style="margin-bottom:0">${finHtml}</div>
+
+    <div class="pat-det-sec-head">
+      <div class="sec-label" style="margin:0">Histórico</div>
+      <button class="btn-pill" onclick="openPatEvtForm('${p.id}')">+ Evento</button>
+    </div>
+    <div class="pat-list-group" style="margin-bottom:calc(96px + env(safe-area-inset-bottom, 0px))">${histHtml}</div>
+  `;
+}
+
+// ── CRUD de financiamentos ──
+function openPatFinForm(patId, finId) {
+  _patFinTarget = { patId: patId, finId: finId || null };
+  const p = getPatrimonio(patId);
+  if (!p) return;
+  const f = finId ? (p.financiamentos || []).find(x => x.id === finId) : null;
+  document.getElementById('pfin-title').textContent = f ? 'Editar financiamento' : 'Novo financiamento';
+  document.getElementById('pfin-total-lbl').textContent   = `Valor total (${currSym})`;
+  document.getElementById('pfin-saldo-lbl').textContent   = `Saldo devedor (${currSym}) *`;
+  document.getElementById('pfin-parcela-lbl').textContent = `Parcela mensal (${currSym})`;
+  document.getElementById('pfin-inst').value    = f?.instituicao || '';
+  document.getElementById('pfin-desc').value    = f?.descricao || '';
+  document.getElementById('pfin-total').value   = f?.valorTotal || '';
+  document.getElementById('pfin-saldo').value   = f?.saldoDevedor ?? '';
+  document.getElementById('pfin-parcela').value = f?.parcelaMensal || '';
+  document.getElementById('pfin-inicio').value  = f?.dataInicio || '';
+  document.getElementById('pfin-ptotal').value  = f?.parcelasTotal || '';
+  document.getElementById('pfin-ppagas').value  = f?.parcelasPagas || '';
+  document.getElementById('pfin-id').value      = f?.id || '';
+  openOverlay('pat-fin-sheet');
+}
+
+function savePatFin() {
+  const t = _patFinTarget;
+  if (!t) return;
+  const p = getPatrimonio(t.patId);
+  if (!p) return;
+  const inst = (document.getElementById('pfin-inst')?.value || '').trim();
+  if (!inst) { gdToast('Informe a instituição.'); return; }
+  const saldoRaw = document.getElementById('pfin-saldo')?.value;
+  if (saldoRaw === '' || saldoRaw == null) { gdToast('Informe o saldo devedor.'); return; }
+  const num = elId => {
+    const raw = document.getElementById(elId)?.value;
+    return raw === '' || raw == null ? 0 : Number(raw) || 0;
+  };
+  const fin = {
+    id:            t.finId || uid(),
+    instituicao:   inst,
+    descricao:     (document.getElementById('pfin-desc')?.value || '').trim(),
+    valorTotal:    num('pfin-total'),
+    saldoDevedor:  Number(saldoRaw) || 0,
+    parcelaMensal: num('pfin-parcela'),
+    parcelasTotal: num('pfin-ptotal'),
+    parcelasPagas: num('pfin-ppagas'),
+    dataInicio:    document.getElementById('pfin-inicio')?.value || '',
+  };
+  const list = (p.financiamentos || []).slice();
+  const idx  = list.findIndex(x => x.id === fin.id);
+  if (idx >= 0) list[idx] = fin; else list.push(fin);
+  updatePatrimonio(t.patId, { financiamentos: list });
+  closeOverlay('pat-fin-sheet');
+  renderPatDetail(t.patId);
+  gdToast(idx >= 0 ? 'Financiamento atualizado.' : 'Financiamento adicionado.');
+}
+
+function deletePatFin(patId, finId) {
+  const p = getPatrimonio(patId);
+  if (!p) return;
+  const f = (p.financiamentos || []).find(x => x.id === finId);
+  gdConfirm({
+    title: 'Excluir financiamento',
+    msg: `Excluir o financiamento${f?.instituicao ? ` de "${f.instituicao}"` : ''}? Esta ação não pode ser desfeita.`,
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => {
+      updatePatrimonio(patId, { financiamentos: (p.financiamentos || []).filter(x => x.id !== finId) });
+      renderPatDetail(patId);
+      gdToast('Financiamento excluído.', { type: 'success' });
+    },
+  });
+}
+
+// ── Eventos manuais do histórico ──
+function openPatEvtForm(patId) {
+  _patEvtTarget = patId;
+  document.getElementById('pevt-data').value  = todayStr();
+  document.getElementById('pevt-desc').value  = '';
+  document.getElementById('pevt-valor').value = '';
+  document.getElementById('pevt-valor-lbl').textContent = `Valor (${currSym}, opcional)`;
+  openOverlay('pat-evt-sheet');
+}
+
+function savePatEvt() {
+  const patId = _patEvtTarget;
+  const p = getPatrimonio(patId);
+  if (!p) return;
+  const desc = (document.getElementById('pevt-desc')?.value || '').trim();
+  if (!desc) { gdToast('Descrição obrigatória.'); return; }
+  const valorRaw = document.getElementById('pevt-valor')?.value;
+  const evt = {
+    id:          uid(),
+    data:        document.getElementById('pevt-data')?.value || todayStr(),
+    tipo:        'evento',
+    descricao:   desc,
+    valor:       valorRaw === '' || valorRaw == null ? 0 : Number(valorRaw) || 0,
+    despesaId:   null,
+    pendenciaId: null,
+  };
+  updatePatrimonio(patId, { historico: (p.historico || []).concat([evt]) });
+  closeOverlay('pat-evt-sheet');
+  renderPatDetail(patId);
+  gdToast('Evento registrado.');
+}
+
+function deletePatEvt(patId, evtId) {
+  const p = getPatrimonio(patId);
+  if (!p) return;
+  gdConfirm({
+    title: 'Excluir evento',
+    msg: 'Excluir este evento do histórico? Esta ação não pode ser desfeita.',
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => {
+      updatePatrimonio(patId, { historico: (p.historico || []).filter(e => e.id !== evtId) });
+      renderPatDetail(patId);
+      gdToast('Evento excluído.', { type: 'success' });
     },
   });
 }

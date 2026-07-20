@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=62">
+<link rel="stylesheet" href="style.css?v=63">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -648,6 +648,11 @@
     <div id="pat-form-cont"></div>
   </div>
 
+  <!-- View: detalhe de patrimônio (Imóvel / Outro bem) -->
+  <div id="pat-detail-view" style="display:none;padding:0 16px">
+    <div id="pat-detail-cont"></div>
+  </div>
+
 </section>
 
 <!-- FAB do módulo Patrimônio — fora de <main>: as páginas recebem transform
@@ -694,6 +699,63 @@
         </button>
       </div>
       <button class="btn btn-secondary" style="width:100%" onclick="closePatSheet()">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Bottom sheet: financiamento de patrimônio (Etapa 3) -->
+  <div class="overlay" id="pat-fin-sheet" onclick="if(event.target===this)closeOverlay('pat-fin-sheet')">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="pfin-title">Financiamento</div>
+      <div class="form-group">
+        <label class="form-label">Instituição / credor *</label>
+        <input class="form-input" id="pfin-inst" placeholder="Ex: Caixa, Banco do Brasil">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrição</label>
+        <input class="form-input" id="pfin-desc" placeholder="Ex: Financiamento habitacional">
+      </div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label" id="pfin-total-lbl">Valor total</label><input class="form-input" id="pfin-total" type="number" min="0" step="any" placeholder="300000"></div>
+        <div class="form-group"><label class="form-label" id="pfin-saldo-lbl">Saldo devedor *</label><input class="form-input" id="pfin-saldo" type="number" min="0" step="any" placeholder="180000"></div>
+      </div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label" id="pfin-parcela-lbl">Parcela mensal</label><input class="form-input" id="pfin-parcela" type="number" min="0" step="any" placeholder="2100"></div>
+        <div class="form-group"><label class="form-label">Início</label><input class="form-input" id="pfin-inicio" type="date"></div>
+      </div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label">Parcelas totais</label><input class="form-input" id="pfin-ptotal" type="number" min="0" step="1" placeholder="360"></div>
+        <div class="form-group"><label class="form-label">Parcelas pagas</label><input class="form-input" id="pfin-ppagas" type="number" min="0" step="1" placeholder="48"></div>
+      </div>
+      <input type="hidden" id="pfin-id">
+      <div class="veh-form-btns" style="margin-top:4px">
+        <button class="btn btn-secondary" onclick="closeOverlay('pat-fin-sheet')">Cancelar</button>
+        <button class="btn btn-primary" onclick="savePatFin()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom sheet: evento manual do histórico patrimonial (Etapa 3) -->
+  <div class="overlay" id="pat-evt-sheet" onclick="if(event.target===this)closeOverlay('pat-evt-sheet')">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Novo evento</div>
+      <div class="form-group">
+        <label class="form-label">Data</label>
+        <input class="form-input" id="pevt-data" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrição *</label>
+        <input class="form-input" id="pevt-desc" placeholder="Ex: Reforma da cozinha">
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="pevt-valor-lbl">Valor (opcional)</label>
+        <input class="form-input" id="pevt-valor" type="number" min="0" step="any" placeholder="15000">
+      </div>
+      <div class="veh-form-btns" style="margin-top:4px">
+        <button class="btn btn-secondary" onclick="closeOverlay('pat-evt-sheet')">Cancelar</button>
+        <button class="btn btn-primary" onclick="savePatEvt()">Salvar</button>
+      </div>
     </div>
   </div>
 
@@ -1326,7 +1388,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=73" defer></script>
+<script src="app.js?v=74" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
