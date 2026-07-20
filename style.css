@@ -3547,3 +3547,10 @@ button:focus-visible, [role="button"]:focus-visible {
 
 /* Espaço inferior do formulário de patrimônio acima da navegação (safe area) */
 #pat-form-cont { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+/* Categoria ativa (filtro interno) — navegação Patrimônio */
+.pat-cat-card.pat-cat-active {
+  border-color: var(--ac);
+  box-shadow: 0 0 0 1px var(--ac), var(--shadow-sm);
+  background: var(--ac-t);
+}

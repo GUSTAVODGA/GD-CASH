@@ -5288,6 +5288,14 @@ function patAddTipo(tipo) {
   openPatForm(tipo);
 }
 
+// Filtro interno por categoria (Veículos / Imóveis / Outros bens).
+// Tocar no card ativa o filtro; tocar de novo (ou em "Limpar") remove.
+var _patCatFilter = null;
+function patToggleCatFilter(tipo) {
+  _patCatFilter = (_patCatFilter === tipo) ? null : tipo;
+  renderPatrimonioHome();
+}
+
 function renderPatrimonioHome() {
   _vehDetailId = null;
   _vehShowView('pat-home-view');
@@ -5338,7 +5346,7 @@ function renderPatrimonioHome() {
     <div class="sec-label" style="margin:0 0 10px">Categorias</div>
     <div class="pat-cat-row">
       ${['veiculo','imovel','outro'].map(t => `
-        <div class="pat-cat-card">
+        <div class="pat-cat-card${_patCatFilter === t ? ' pat-cat-active' : ''}" onclick="patToggleCatFilter('${t}')">
           <div class="pat-cat-ico pat-ico-${t}">${_patIcon(t)}</div>
           <div class="pat-cat-body">
             <div class="pat-cat-name">${catNames[t]}</div>
@@ -5349,12 +5357,18 @@ function renderPatrimonioHome() {
         </div>`).join('')}
     </div>
 
-    <div class="sec-label" style="margin:0 0 10px">Todos os patrimônios</div>
+    <div class="pat-det-sec-head" style="margin:0 0 10px">
+      <div class="sec-label" style="margin:0">${_patCatFilter ? catNames[_patCatFilter] : 'Todos os patrimônios'}</div>
+      ${_patCatFilter ? `<button class="btn-pill" onclick="patToggleCatFilter('${_patCatFilter}')">Limpar filtro</button>` : ''}
+    </div>
     <div class="pat-list-group">
-      ${items.map(i => _renderPatListItem(i)).join('')}
+      ${(_patCatFilter ? items.filter(i => _patTypeKey(i.tipo) === _patCatFilter) : items).map(i => _renderPatListItem(i)).join('')
+        || `<div class="pat-det-empty">Nenhum item nesta categoria.</div>`}
     </div>
 
-    <button class="pat-legacy-link" onclick="openLegacyVehList()">Ver tela antiga de veículos</button>
+    ${_patCatFilter === 'veiculo'
+      ? `<button class="pat-legacy-link" onclick="openLegacyVehList()">Ver tela antiga de veículos</button>`
+      : `<div style="height:calc(100px + env(safe-area-inset-bottom, 0px))"></div>`}
   `;
 }
 
