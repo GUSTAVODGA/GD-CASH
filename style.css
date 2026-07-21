@@ -3397,12 +3397,15 @@ button:focus-visible, [role="button"]:focus-visible {
 .pat-cat-body { flex: 1; min-width: 0; }
 .pat-cat-name  { font-size: 13px; font-weight: 700; color: var(--tx); margin-bottom: 2px; }
 .pat-cat-count { font-size: 11px; color: var(--tx3); }
-.pat-cat-val   { font-size: 13px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; white-space: nowrap; margin-right: 8px; }
-.pat-cat-chev  {
-  width: 26px; height: 26px; border-radius: 50%; background: var(--surface2);
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+.pat-cat-val   { font-size: 13px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Indicador de seleção do filtro (substitui o antigo chevron de navegação) */
+.pat-cat-check {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--border-strong);
+  transition: background var(--dur-fast) var(--ease-default), border-color var(--dur-fast) var(--ease-default);
 }
-.pat-cat-chev svg { width: 12px; height: 12px; stroke: var(--tx3); fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.pat-cat-check.on { background: var(--ac); border-color: var(--ac); color: #fff; }
 
 /* Patrimônio list */
 .pat-list-group {
@@ -3474,7 +3477,7 @@ button:focus-visible, [role="button"]:focus-visible {
 
 /* Link discreto para a tela antiga de veículos (durante os testes) */
 .pat-legacy-link {
-  display: block; width: 100%; margin: 0 0 calc(100px + env(safe-area-inset-bottom, 0px)); padding: 10px;
+  display: block; width: 100%; margin: 0 0 4px; padding: 10px;
   background: none; border: none; cursor: pointer; text-align: center;
   font-size: 12px; font-weight: 600; color: var(--tx3);
   text-decoration: underline; text-underline-offset: 3px;
@@ -3485,8 +3488,7 @@ button:focus-visible, [role="button"]:focus-visible {
 @media (min-width: 640px) {
   .pat-cat-row { flex-direction: row; }
   .pat-cat-card { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .pat-cat-val  { margin-right: 0; }
-  .pat-cat-chev { align-self: flex-end; }
+  .pat-cat-check { align-self: flex-end; }
 }
 
 /* Sheet option button — patrimônio type picker */
@@ -3581,11 +3583,33 @@ button:focus-visible, [role="button"]:focus-visible {
 /* Espaço inferior do formulário de patrimônio acima da navegação (safe area) */
 #pat-form-cont { padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
 
-/* Categoria ativa (filtro interno) — navegação Patrimônio */
+/* Categoria ativa (filtro interno) — destaque de seleção */
 .pat-cat-card.pat-cat-active {
   border-color: var(--ac);
   box-shadow: 0 0 0 1px var(--ac), var(--shadow-sm);
   background: var(--ac-t);
+}
+.pat-cat-card.pat-cat-active .pat-cat-name { color: var(--ac); }
+.pat-cat-card:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+/* Espaçador do rodapé da lista: garante o último card totalmente visível
+   ao rolar até o fim, acima da bottom-nav e sem ser coberto pelo FAB. */
+.pat-home-bottom-spacer { height: calc(150px + env(safe-area-inset-bottom, 0px)); }
+
+/* Reserva a coluna do FAB no cabeçalho do filtro para que o botão
+   "Limpar filtro" nunca fique sob o FAB (que é fixo à direita). */
+.pat-home-filter-head { padding-right: 66px; }
+
+/* Sheet "Adicionar patrimônio": respiro inferior com safe area para o
+   botão Cancelar nunca ficar atrás da barra/indicador de home. */
+#pat-sheet .sheet { padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px)); }
+
+/* Estado vazio: centralizado no espaço disponível (telas baixas e altas) */
+.pat-empty {
+  min-height: calc(100dvh - 260px);
+  justify-content: center;
+  padding-top: 32px;
+  padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px));
 }
 
 /* Contexto da pendência na Home: bem vinculado · categoria */

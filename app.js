@@ -5397,11 +5397,25 @@ function _patNetTotals(items) {
   return { gross, debt, net: gross - debt };
 }
 
+// Controla a visibilidade do FAB de forma central. show=false esconde
+// por completo (form/detalhe/estado vazio); a home com itens mostra.
+function _setPatFab(show) {
+  const fab = document.getElementById('pat-fab');
+  if (!fab) return;
+  fab.style.display = show ? 'flex' : 'none';
+  if (!show) fab.classList.remove('pat-fab-hidden');
+}
+
+// Ícone de seleção (check) para o card de categoria ativo.
+function _patCheckSvg() {
+  return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="20 6 9 17 4 12"/></svg>';
+}
+
 function openPatSheet() {
   const ov  = document.getElementById('pat-sheet');
   const fab = document.getElementById('pat-fab');
   if (ov)  ov.classList.add('open');
-  if (fab) fab.classList.add('pat-fab-hidden');
+  if (fab) fab.classList.add('pat-fab-hidden'); // esconde o FAB enquanto o sheet estiver aberto
 }
 
 function closePatSheet() {
@@ -5436,6 +5450,7 @@ function renderPatrimonioHome() {
   const items = _patUnifiedItems();
   if (items.length === 0) {
     cont.innerHTML = _renderPatEmpty();
+    _setPatFab(false); // estado vazio: sem FAB (já há o botão central)
     return;
   }
 
@@ -5473,20 +5488,24 @@ function renderPatrimonioHome() {
     </div>
 
     <div class="sec-label" style="margin:0 0 10px">Categorias</div>
-    <div class="pat-cat-row">
-      ${['veiculo','imovel','outro'].map(t => `
-        <div class="pat-cat-card${_patCatFilter === t ? ' pat-cat-active' : ''}" onclick="patToggleCatFilter('${t}')">
+    <div class="pat-cat-row" role="group" aria-label="Filtrar por categoria">
+      ${['veiculo','imovel','outro'].map(t => {
+        const on = _patCatFilter === t;
+        return `
+        <div class="pat-cat-card${on ? ' pat-cat-active' : ''}" role="button" tabindex="0"
+             aria-pressed="${on}" aria-label="Filtrar ${catNames[t]}${on ? ' (selecionado)' : ''}"
+             onclick="patToggleCatFilter('${t}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();patToggleCatFilter('${t}')}">
           <div class="pat-cat-ico pat-ico-${t}">${_patIcon(t)}</div>
           <div class="pat-cat-body">
             <div class="pat-cat-name">${catNames[t]}</div>
             <div class="pat-cat-count">${counts[t]} ${counts[t] === 1 ? 'ativo' : 'ativos'}</div>
           </div>
           <div class="pat-cat-val">${R(totals[t])}</div>
-          <div class="pat-cat-chev">${_patChevr()}</div>
-        </div>`).join('')}
+          <div class="pat-cat-check${on ? ' on' : ''}">${on ? _patCheckSvg() : ''}</div>
+        </div>`; }).join('')}
     </div>
 
-    <div class="pat-det-sec-head" style="margin:0 0 10px">
+    <div class="pat-det-sec-head pat-home-filter-head" style="margin:0 0 10px">
       <div class="sec-label" style="margin:0">${_patCatFilter ? catNames[_patCatFilter] : 'Todos os patrimônios'}</div>
       ${_patCatFilter ? `<button class="btn-pill" onclick="patToggleCatFilter('${_patCatFilter}')">Limpar filtro</button>` : ''}
     </div>
@@ -5497,8 +5516,10 @@ function renderPatrimonioHome() {
 
     ${_patCatFilter === 'veiculo'
       ? `<button class="pat-legacy-link" onclick="openLegacyVehList()">Ver tela antiga de veículos</button>`
-      : `<div style="height:calc(100px + env(safe-area-inset-bottom, 0px))"></div>`}
+      : ''}
+    <div class="pat-home-bottom-spacer"></div>
   `;
+  _setPatFab(true);
 }
 
 function _renderPatListItem(item) {
