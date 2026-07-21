@@ -3558,3 +3558,14 @@ button:focus-visible, [role="button"]:focus-visible {
   box-shadow: 0 0 0 1px var(--ac), var(--shadow-sm);
   background: var(--ac-t);
 }
+
+/* Contexto da pendência na Home: bem vinculado · categoria */
+.hc-pend-ctx {
+  font-size: 11.5px;
+  color: var(--tx2);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:root[data-theme="dark"] .hc-pend-ctx { color: rgba(232,237,255,.62); }

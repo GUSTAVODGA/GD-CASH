@@ -2223,7 +2223,14 @@ function renderFixos() {
   const list=document.getElementById('fixed-list');
   if (!D.fixedExpenses.length) { list.innerHTML='<div class="empty-state">Nenhum gasto fixo cadastrado</div>'; return; }
   const todayDay = new Date().getDate();
-  list.innerHTML = D.fixedExpenses.map(f => {
+  // Ordenação apenas visual: dia de vencimento crescente; empate por nome;
+  // sem dia válido (1–31) vai para o fim. Dados persistidos intocados.
+  const fixosOrdenados = [...D.fixedExpenses].sort((a, b) => {
+    const ad = (Number.isFinite(a.dueDay) && a.dueDay >= 1 && a.dueDay <= 31) ? a.dueDay : 99;
+    const bd = (Number.isFinite(b.dueDay) && b.dueDay >= 1 && b.dueDay <= 31) ? b.dueDay : 99;
+    return ad - bd || (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' });
+  });
+  list.innerHTML = fixosOrdenados.map(f => {
     const paused = !!f.paused;
     const nearDue = !paused && f.dueDay && f.dueDay >= todayDay && f.dueDay <= todayDay + 3;
     const overDue = !paused && f.dueDay && f.dueDay < todayDay;
@@ -3516,10 +3523,15 @@ function renderHomeNew() {
         const dt    = p.deadline ? parseDate(p.deadline).toLocaleDateString('pt-BR', {day:'2-digit',month:'short'}) : '';
         const barCls = p.priority === 'alta' ? 'hc-pend-bar--alta' : p.priority === 'media' ? 'hc-pend-bar--media' : 'hc-pend-bar--baixa';
         const dateCls = isOv ? ' hc-pend-overdue' : isTod ? ' hc-pend-today' : '';
+        // Contexto: nome do bem vinculado (patrimonioId > vehicleId legado) + categoria
+        const assetName = _pendAssetName(p);
+        const catLbl = (PEND_CAT_LABELS[p.category] || p.category || '').replace(/^[^\p{L}]*\s*/u, '');
+        const ctx = [assetName, catLbl].filter(Boolean).join(' · ');
         return `<div class="hc-pend-item" onclick="switchTab('pendencias')">
           <div class="hc-pend-bar ${barCls}"></div>
           <div class="hc-pend-info">
             <div class="hc-pend-name">${p.title}</div>
+            ${ctx ? `<div class="hc-pend-ctx">${escHtml(ctx)}</div>` : ''}
             ${dt ? `<div class="hc-pend-date${dateCls}">${isOv?'Venceu ':''}${dt}</div>` : ''}
           </div>
           ${p.estimatedValue ? `<div class="hc-pend-amount">${R(p.estimatedValue)}</div>` : ''}
@@ -4171,6 +4183,21 @@ function renderBudgetSettingsInline() {
 // PENDÊNCIAS
 // ══════════════════════════════════════════
 var pendFilter = 'abertas';
+
+// Nome do bem vinculado a uma pendência, apenas para exibição.
+// patrimonioId tem precedência; vehicleId legado busca em D.vehicles.
+// Nunca cria, migra ou duplica registros.
+function _pendAssetName(p) {
+  if (p.patrimonioId) {
+    const pat = (D.patrimonios || []).find(x => x.id === p.patrimonioId);
+    if (pat && pat.nome) return pat.nome;
+  }
+  if (p.vehicleId) {
+    const v = (D.vehicles || []).find(x => x.id === p.vehicleId);
+    if (v && v.name) return v.name;
+  }
+  return null;
+}
 
 function renderPendInicio() {
   const el = document.getElementById('pend-inicio-card');
