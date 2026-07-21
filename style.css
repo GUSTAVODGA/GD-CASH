@@ -1782,6 +1782,7 @@ textarea.form-input{resize:none}
 }
 
 .hc-hero-left { flex: 1; min-width: 0; }
+.hc-hero-right { min-width: 0; }
 
 .hc-greeting {
   font-size: 13px;
@@ -1811,16 +1812,19 @@ textarea.form-input{resize:none}
 }
 
 .hc-balance {
-  font-size: 50px;
+  /* Valor financeiro principal: nunca cortar. Fonte proporcional à
+     largura disponível (calc) — dimensionada para o pior caso
+     "−US$ 1.234.567,89" caber inteiro mesmo em 320px — e sem ellipsis.
+     nowrap mantém o número numa linha; o calc garante que sempre cabe. */
+  font-size: clamp(24px, calc((100vw - 52px) / 10.2), 46px);
   font-weight: 900;
-  line-height: 1;
-  letter-spacing: -3px;
+  line-height: 1.05;
+  letter-spacing: -1.5px;
   font-variant-numeric: tabular-nums;
   color: var(--ac);
   transition: color .3s;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .hc-balance.neg { color: var(--rd); }
@@ -1846,19 +1850,33 @@ textarea.form-input{resize:none}
 }
 
 .hc-stat-val {
-  font-size: 18px;
+  font-size: clamp(14px, 4.4vw, 18px);
   font-weight: 700;
-  letter-spacing: -.5px;
+  letter-spacing: -.3px;
   font-variant-numeric: tabular-nums;
   color: var(--tx);
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 120px;
 }
 
 .hc-stat-inc { color: var(--gn); }
 .hc-stat-exp { color: var(--rd); }
+
+/* Mobile (≤480px, cobre 320/375/390/430): hero empilhado — o valor
+   principal ocupa toda a largura do card e Receitas/Gastos vão para uma
+   linha abaixo, garantindo que nenhuma coluna dispute espaço com o valor. */
+@media (max-width: 480px) {
+  .hc-hero { flex-direction: column; gap: 6px; }
+  .hc-hero-right {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 28px;
+    padding-top: 12px;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .hc-stat { text-align: left; }
+}
 
 /* ── Rules & Sections ── */
 .hc-rule {
@@ -2514,13 +2532,20 @@ textarea.form-input{resize:none}
 .mes-hero-body { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 22px 20px 18px; }
 .mes-hero-left { flex: 1; min-width: 0; }
 .mes-hero-lbl { font-size: 9px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .13em; margin-bottom: 5px; }
-.mes-hero-val { font-size: 40px; font-weight: 900; line-height: 1; letter-spacing: -2px; font-variant-numeric: tabular-nums; color: var(--green); transition: color .3s; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mes-hero-val { font-size: clamp(24px, calc((100vw - 56px) / 10.4), 40px); font-weight: 900; line-height: 1.05; letter-spacing: -1.5px; font-variant-numeric: tabular-nums; color: var(--green); transition: color .3s; white-space: nowrap; max-width: 100%; }
 #hero-mes.neg .mes-hero-val { color: var(--red); }
 #hero-mes.pos .mes-hero-val { color: var(--green); }
-.mes-hero-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; padding-top: 2px; flex-shrink: 0; }
+.mes-hero-right { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; padding-top: 2px; flex-shrink: 0; min-width: 0; }
 .mes-stat { text-align: right; }
 .mes-stat-lbl { font-size: 9px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 2px; }
-.mes-stat-val { font-size: 15px; font-weight: 700; letter-spacing: -.3px; font-variant-numeric: tabular-nums; color: var(--text); max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mes-stat-val { font-size: clamp(13px, 3.8vw, 15px); font-weight: 700; letter-spacing: -.3px; font-variant-numeric: tabular-nums; color: var(--text); white-space: nowrap; }
+/* Mobile (≤480px): empilha o hero do Mês — valor principal em largura
+   total; Receitas/Gastos/Reserva numa linha abaixo. */
+@media (max-width: 480px) {
+  .mes-hero-body { flex-direction: column; gap: 4px; }
+  .mes-hero-right { flex-direction: row; align-items: flex-start; justify-content: flex-start; gap: 22px; padding-top: 12px; width: 100%; flex-wrap: wrap; }
+  .mes-stat { text-align: left; }
+}
 .mes-stat-inc { color: var(--green); }
 .mes-stat-exp { color: var(--red); }
 .mes-stat-resv { color: var(--ac); }
