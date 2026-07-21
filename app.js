@@ -4184,25 +4184,80 @@ function renderBudgetSettingsInline() {
 // ══════════════════════════════════════════
 var pendFilter = 'abertas';
 
-// Nome do bem vinculado a uma pendência, apenas para exibição.
-// patrimonioId tem precedência; vehicleId legado busca em D.vehicles.
-// Nunca cria, migra ou duplica registros.
-function _pendAssetName(p) {
+// Resolvedor ÚNICO do vínculo da pendência com veículo/patrimônio.
+// Ordem: patrimonioId válido → vehicleId direto válido → vínculo reverso
+// em D.vehicles → vínculo reverso em D.patrimonios. Registros arquivados
+// ou inexistentes nunca são retornados. Leitura pura — nada é criado.
+// Retorna { kind:'vehicle'|'patrimonio', id, name } ou null.
+function _pendAssetRef(p) {
+  const liveVeh = id => {
+    const v = (D.vehicles || []).find(x => x.id === id);
+    return (v && v.status !== 'arquivado') ? v : null;
+  };
+  const livePat = id => {
+    const x = (D.patrimonios || []).find(y => y.id === id);
+    return (x && x.status !== 'inativo') ? x : null;
+  };
   if (p.patrimonioId) {
-    const pat = (D.patrimonios || []).find(x => x.id === p.patrimonioId);
-    if (pat && pat.nome) return pat.nome;
+    const pat = livePat(p.patrimonioId);
+    if (pat) {
+      if (pat.tipo === 'veiculo') {
+        const v = liveVeh(pat._idOriginal || pat.id);
+        if (v) return { kind: 'vehicle', id: v.id, name: v.name };
+      } else {
+        return { kind: 'patrimonio', id: pat.id, name: pat.nome };
+      }
+    }
   }
   if (p.vehicleId) {
-    const v = (D.vehicles || []).find(x => x.id === p.vehicleId);
-    if (v && v.name) return v.name;
+    const v = liveVeh(p.vehicleId);
+    if (v) return { kind: 'vehicle', id: v.id, name: v.name };
   }
-  // Vínculo reverso: pendência ligada pela tela do veículo/patrimônio
-  // (linkedPendencias), que não grava vehicleId na pendência
-  const vLink = (D.vehicles || []).find(v => (v.linkedPendencias || []).includes(p.id));
-  if (vLink && vLink.name) return vLink.name;
-  const patLink = (D.patrimonios || []).find(x => ((x.detalhes || {}).linkedPendencias || []).includes(p.id));
-  if (patLink && patLink.nome) return patLink.nome;
+  const vLink = (D.vehicles || []).find(v =>
+    v.status !== 'arquivado' && (v.linkedPendencias || []).includes(p.id));
+  if (vLink) return { kind: 'vehicle', id: vLink.id, name: vLink.name };
+  const patLink = (D.patrimonios || []).find(x =>
+    x.status !== 'inativo' && ((x.detalhes || {}).linkedPendencias || []).includes(p.id));
+  if (patLink) {
+    if (patLink.tipo === 'veiculo') {
+      const v = liveVeh(patLink._idOriginal || patLink.id);
+      if (v) return { kind: 'vehicle', id: v.id, name: v.name };
+    } else {
+      return { kind: 'patrimonio', id: patLink.id, name: patLink.nome };
+    }
+  }
   return null;
+}
+
+function _pendAssetName(p) {
+  const ref = _pendAssetRef(p);
+  return ref ? ref.name : null;
+}
+
+// Sincroniza o vínculo pendência↔veículo nos dois lados: grava/limpa as
+// referências reversas antigas em D.vehicles e nos patrimônios tipo
+// veículo, mantendo apenas o vínculo selecionado. Não toca em vínculos
+// de imóveis/outros bens.
+function _syncPendVehicleLink(pendId, vehicleId) {
+  (D.vehicles || []).forEach(v => {
+    if (v.id !== vehicleId && (v.linkedPendencias || []).includes(pendId)) {
+      v.linkedPendencias = v.linkedPendencias.filter(x => x !== pendId);
+    }
+  });
+  (D.patrimonios || []).forEach(x => {
+    if (x.tipo !== 'veiculo') return;
+    const lp = (x.detalhes || {}).linkedPendencias || [];
+    if (lp.includes(pendId) && (x._idOriginal || x.id) !== vehicleId) {
+      x.detalhes.linkedPendencias = lp.filter(pp => pp !== pendId);
+    }
+  });
+  if (vehicleId) {
+    const v = (D.vehicles || []).find(x => x.id === vehicleId);
+    if (v) {
+      if (!v.linkedPendencias) v.linkedPendencias = [];
+      if (!v.linkedPendencias.includes(pendId)) v.linkedPendencias.push(pendId);
+    }
+  }
 }
 
 function renderPendInicio() {
@@ -4326,12 +4381,13 @@ function openPendenciaModal(id) {
   modal.querySelector('#pend-value').value = p ? (p.estimatedValue || '') : '';
   modal.querySelector('#pend-note').value = p ? (p.note || '') : '';
   _onPendCatChange();
-  if (p?.vehicleId) {
+  const _ref = p ? _pendAssetRef(p) : null;
+  if (_ref && _ref.kind === 'vehicle') {
     const vehRow = document.getElementById('pend-veh-row');
     if (vehRow) vehRow.style.display = '';
     _populatePendVehSel();
     const vehSel = document.getElementById('pend-veh-sel');
-    if (vehSel) vehSel.value = p.vehicleId;
+    if (vehSel) vehSel.value = _ref.id;
   } else {
     const vehSel = document.getElementById('pend-veh-sel');
     if (vehSel) vehSel.value = '';
@@ -4357,27 +4413,22 @@ function savePendencia() {
     const idx = D.pendencias.findIndex(p => p.id === id);
     if (idx >= 0) {
       const old = D.pendencias[idx];
-      const oldVehId = old.vehicleId || null;
-      if (oldVehId && oldVehId !== vehicleId) {
-        const oldVeh = (D.vehicles||[]).find(v => v.id === oldVehId);
-        if (oldVeh) oldVeh.linkedPendencias = (oldVeh.linkedPendencias||[]).filter(pid => pid !== id);
-      }
       const updated = { ...old, title, category: cat, priority: prio, deadline, estimatedValue, note };
       if (vehicleId) updated.vehicleId = vehicleId; else delete updated.vehicleId;
-      D.pendencias[idx] = updated;
-      if (vehicleId && vehicleId !== oldVehId) {
-        const newVeh = (D.vehicles||[]).find(v => v.id === vehicleId);
-        if (newVeh) { if (!newVeh.linkedPendencias) newVeh.linkedPendencias=[]; if (!newVeh.linkedPendencias.includes(id)) newVeh.linkedPendencias.push(id); }
+      // Normalização na edição: patrimonioId de tipo veículo vira
+      // vehicleId direto (vínculos de imóvel/outro bem são preservados)
+      if (updated.patrimonioId) {
+        const patRef = (D.patrimonios || []).find(x => x.id === updated.patrimonioId);
+        if (patRef && patRef.tipo === 'veiculo') delete updated.patrimonioId;
       }
+      D.pendencias[idx] = updated;
+      _syncPendVehicleLink(id, vehicleId);
     }
   } else {
     const pObj = { id: uid(), title, category: cat, priority: prio, deadline, estimatedValue, note, status: 'aberta', createdAt: todayStr() };
     if (vehicleId) pObj.vehicleId = vehicleId;
     D.pendencias.push(pObj);
-    if (vehicleId) {
-      const veh = (D.vehicles||[]).find(v => v.id === vehicleId);
-      if (veh) { if (!veh.linkedPendencias) veh.linkedPendencias=[]; if (!veh.linkedPendencias.includes(pObj.id)) veh.linkedPendencias.push(pObj.id); }
-    }
+    _syncPendVehicleLink(pObj.id, vehicleId);
   }
   save();
   closeOverlay('modal-pendencia');
@@ -4574,7 +4625,21 @@ function renderVehDetail(id) {
   const carSvg = `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>`;
 
   const linkedExps  = (v.linkedExpenses  || []).map(eid => (D.expenses  || []).find(e => e.id === eid)).filter(Boolean);
-  const linkedPends = (v.linkedPendencias|| []).map(pid => (D.pendencias|| []).find(p => p.id === pid)).filter(Boolean);
+  const linkedPends = (() => {
+    const seen = new Set();
+    const out = [];
+    (v.linkedPendencias || []).forEach(pid => {
+      const p = (D.pendencias || []).find(x => x.id === pid);
+      if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p); }
+    });
+    // União: pendências cujo resolvedor aponta para este veículo
+    (D.pendencias || []).forEach(p => {
+      if (seen.has(p.id)) return;
+      const ref = _pendAssetRef(p);
+      if (ref && ref.kind === 'vehicle' && ref.id === v.id) { seen.add(p.id); out.push(p); }
+    });
+    return out;
+  })();
   const history = (v.history || []).slice().reverse();
   const canHardDelete = history.length === 0 && (v.linkedExpenses||[]).length === 0 && (v.linkedPendencias||[]).length === 0;
 
