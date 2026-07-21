@@ -3755,7 +3755,7 @@ function renderDayAccordion() {
           <div class="dacc-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
         </div>
       </div>
-      <div class="dacc-body">${hasData ? platItems + expItems : emptyMsg}${editFooter}</div>
+      <div class="dacc-body"><div class="dacc-body-in">${hasData ? platItems + expItems : emptyMsg}${editFooter}</div></div>
     </div>`;
   }).join('');
 }

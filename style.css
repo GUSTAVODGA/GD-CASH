@@ -309,6 +309,10 @@
 .dacc-body { display:grid; grid-template-rows:0fr; overflow:hidden; transition:grid-template-rows var(--dur-normal) var(--ease-default); }
 .dacc.open .dacc-body { grid-template-rows:1fr; }
 .dacc-body > * { min-height:0; }
+/* Wrapper único: o colapso 0fr só esmaga a primeira linha do grid; com
+   vários filhos diretos, os demais caíam em linhas implícitas visíveis
+   (dias fechados apareciam abertos). */
+.dacc-body-in { min-height:0; overflow:hidden; }
 .dacc-tx {
   display:flex; align-items:center; gap:10px;
   padding:10px 14px; border-top:1px solid var(--border);
