@@ -4196,6 +4196,12 @@ function _pendAssetName(p) {
     const v = (D.vehicles || []).find(x => x.id === p.vehicleId);
     if (v && v.name) return v.name;
   }
+  // Vínculo reverso: pendência ligada pela tela do veículo/patrimônio
+  // (linkedPendencias), que não grava vehicleId na pendência
+  const vLink = (D.vehicles || []).find(v => (v.linkedPendencias || []).includes(p.id));
+  if (vLink && vLink.name) return vLink.name;
+  const patLink = (D.patrimonios || []).find(x => ((x.detalhes || {}).linkedPendencias || []).includes(p.id));
+  if (patLink && patLink.nome) return patLink.nome;
   return null;
 }
 
