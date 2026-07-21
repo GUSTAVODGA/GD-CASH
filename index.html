@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=67">
+<link rel="stylesheet" href="style.css?v=68">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -735,6 +735,25 @@
     </div>
   </div>
 
+  <!-- Bottom sheet: ações da pendência (Editar / Excluir) -->
+  <div class="overlay" id="pend-menu-sheet" onclick="if(event.target===this)closeOverlay('pend-menu-sheet')">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="pmenu-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Pendência</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        <button class="av-sheet-opt" onclick="pendMenuEdit()" aria-label="Editar pendência">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--text)">Editar</span>
+        </button>
+        <button class="av-sheet-opt" onclick="pendMenuDelete()" aria-label="Excluir pendência">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--rd)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--rd)">Excluir</span>
+        </button>
+      </div>
+      <button class="btn btn-secondary" style="width:100%" onclick="closeOverlay('pend-menu-sheet')">Cancelar</button>
+    </div>
+  </div>
+
   <!-- Bottom sheet: evento manual do histórico patrimonial (Etapa 3) -->
   <div class="overlay" id="pat-evt-sheet" onclick="if(event.target===this)closeOverlay('pat-evt-sheet')">
     <div class="sheet">
@@ -902,12 +921,12 @@
     <div class="form-group">
       <label class="form-label">Categoria</label>
       <select class="form-select" id="pend-cat-sel" onchange="_onPendCatChange()">
-        <option value="carro">🚗 Carro</option>
-        <option value="casa">🏠 Casa</option>
-        <option value="documento">📄 Documento</option>
-        <option value="financeiro">💰 Financeiro</option>
-        <option value="pessoal" selected>👤 Pessoal</option>
-        <option value="outra">📌 Outra</option>
+        <option value="carro">Carro</option>
+        <option value="casa">Casa</option>
+        <option value="documento">Documento</option>
+        <option value="financeiro">Financeiro</option>
+        <option value="pessoal" selected>Pessoal</option>
+        <option value="outra">Outra</option>
       </select>
     </div>
     <div class="form-group" id="pend-veh-row" style="display:none">
@@ -919,9 +938,9 @@
     <div class="form-group">
       <label class="form-label">Prioridade</label>
       <select class="form-select" id="pend-prio-sel">
-        <option value="alta">🔴 Alta</option>
-        <option value="media" selected>🟡 Média</option>
-        <option value="baixa">🟢 Baixa</option>
+        <option value="alta">Alta</option>
+        <option value="media" selected>Média</option>
+        <option value="baixa">Baixa</option>
       </select>
     </div>
     <div class="form-group">
@@ -1374,7 +1393,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=79" defer></script>
+<script src="app.js?v=80" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

@@ -3573,3 +3573,42 @@ button:focus-visible, [role="button"]:focus-visible {
   text-overflow: ellipsis;
 }
 :root[data-theme="dark"] .hc-pend-ctx { color: rgba(232,237,255,.62); }
+
+/* ══════════════════════════════════════════
+   PENDÊNCIAS — cards compactos (reformulação visual)
+   ══════════════════════════════════════════ */
+.pend-card.pend2 { display:flex; align-items:flex-start; gap:10px; padding:11px 12px 11px 14px; }
+.pend2-body { flex:1; min-width:0; }
+.pend2-title { font-size:14.5px; font-weight:700; color:var(--text-1); line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pend2-ctx { font-size:12px; color:var(--text-2); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pend2-meta { font-size:11.5px; color:var(--text-2); margin-top:5px; }
+.pend2-prazo-over { color:var(--rd); font-weight:700; }
+.pend2-prazo-near { color:var(--c-warning, #b45309); font-weight:700; }
+.pend2-val { font-size:13.5px; font-weight:800; color:var(--text-1); font-variant-numeric:tabular-nums; margin-top:4px; }
+.pend2-actions { display:flex; flex-direction:row; gap:6px; flex-shrink:0; align-items:center; }
+.pend2-act {
+  width:32px; height:32px; border-radius:9px; border:1px solid var(--border);
+  background:var(--surface2); color:var(--text-2); display:flex; align-items:center;
+  justify-content:center; cursor:pointer; padding:0; -webkit-tap-highlight-color:transparent;
+}
+.pend2-act:active { background:var(--surface3, var(--surface2)); }
+.pend2-act-done { color:var(--gn); border-color:rgba(0,168,107,.35); background:rgba(0,168,107,.08); }
+.pend2-act-reopen { color:var(--ac); }
+/* Concluídas: discretas, ainda legíveis */
+.pend-card.pend2-done { opacity:.72; }
+.pend-card.pend2-done .pend2-title { font-weight:600; }
+/* Contraste no tema escuro */
+:root[data-theme="dark"] .pend2-ctx,
+:root[data-theme="dark"] .pend2-meta { color: rgba(232,237,255,.66); }
+:root[data-theme="dark"] .pend2-prazo-near { color:#fbbf24; }
+:root[data-theme="dark"] .pend2-act { color: rgba(232,237,255,.7); }
+:root[data-theme="dark"] .pend-card.pend2-done { opacity:.6; }
+/* Botão e último card acima da bottom-nav (com safe area) */
+.pend-add-btn { width:100%; margin:4px 0 calc(96px + env(safe-area-inset-bottom, 0px)); }
+
+/* Ícone SVG no card de ajuda (uso opcional por aba) */
+.thc-icon-svg { display:flex; align-items:center; justify-content:center; color:var(--ac); }
+/* Área clicável ~44px e foco visível nos botões de ícone das pendências */
+.pend2-act { position:relative; }
+.pend2-act::after { content:''; position:absolute; inset:-6px; }
+.pend2-act:focus-visible { outline:2px solid var(--ac); outline-offset:2px; }

@@ -200,6 +200,7 @@ const TAB_HELP = {
   },
   pendencias: {
     icon: '📋',
+    iconSvg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>',
     title: 'Pendências',
     text: 'Registre tudo que precisa resolver — compra, documento, manutenção, conta. Defina prioridade e prazo. Ao concluir, você pode registrar como gasto real se quiser.',
   },
@@ -217,7 +218,7 @@ function showTabHelp(tab) {
   const card = document.createElement('div');
   card.className = 'tab-help-card';
   card.innerHTML = `
-    <span class="thc-icon">${help.icon}</span>
+    <span class="thc-icon${help.iconSvg ? ' thc-icon-svg' : ''}">${help.iconSvg || help.icon}</span>
     <div class="thc-body">
       <div class="thc-title">${help.title}</div>
       <div class="thc-text">${help.text}</div>
@@ -3237,6 +3238,8 @@ function flyNumber(amount, fromEl) {
 // MODULE CONSTANTS — must be before firebase init (avoids TDZ when init throws)
 // ══════════════════════════════════════════
 var PEND_CAT_LABELS  = { carro:'🚗 Carro', casa:'🏠 Casa', documento:'📄 Documento', financeiro:'💰 Financeiro', pessoal:'👤 Pessoal', outra:'📌 Outra' };
+var PEND_CAT_NAMES   = { carro:'Carro', casa:'Casa', documento:'Documento', financeiro:'Financeiro', pessoal:'Pessoal', outra:'Outra' };
+var PEND_PRIO_NAMES  = { alta:'Alta prioridade', media:'Média prioridade', baixa:'Baixa prioridade' };
 var PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baixa' };
 var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
 var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
@@ -4322,34 +4325,62 @@ function renderPendList() {
     return (b.createdAt || '').localeCompare(a.createdAt || '');
   });
 
+  const _checkSvg  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="20 6 9 17 4 12"/></svg>';
+  const _redoSvg   = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+  const _kebabSvg  = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>';
   cont.innerHTML = items.map(p => {
-    const vencida = p.status === 'aberta' && p.deadline && p.deadline < hoje;
-    const proxima = p.status === 'aberta' && p.deadline && p.deadline >= hoje && p.deadline <= pendAddDays(hoje, 3);
-    const catLabel = PEND_CAT_LABELS[p.category] || p.category;
-    const prioLabel = PEND_PRIO_LABELS[p.priority] || p.priority;
-    const deadlineStr = p.deadline ? `Prazo: ${pendFmtDate(p.deadline)}` : '';
-    const valStr = p.estimatedValue ? `Estimado: ${R(p.estimatedValue)}` : '';
-    return `<div class="pend-card${vencida ? ' pend-vencida' : proxima ? ' pend-proxima' : ''}">
-      <div class="pend-card-top">
-        <div class="pend-card-info">
-          <div class="pend-card-title">${pendEsc(p.title)}</div>
-          <div class="pend-card-meta">
-            <span class="pend-badge pend-prio-${p.priority}">${prioLabel}</span>
-            <span class="pend-badge pend-cat">${catLabel}</span>
-          </div>
-          ${deadlineStr || valStr ? `<div class="pend-card-sub">${[deadlineStr, valStr].filter(Boolean).join(' · ')}</div>` : ''}
-          ${p.note ? `<div class="pend-card-note">${pendEsc(p.note)}</div>` : ''}
-        </div>
-        <div class="pend-card-actions">
-          ${p.status === 'aberta'
-            ? `<button class="pend-btn pend-btn-done" onclick="completePendencia('${p.id}')" title="Concluir">✓</button>`
-            : `<button class="pend-btn pend-btn-reopen" onclick="reopenPendencia('${p.id}')" title="Reabrir">↩</button>`}
-          <button class="pend-btn pend-btn-edit" onclick="openPendenciaModal('${p.id}')" title="Editar">✎</button>
-          <button class="pend-btn pend-btn-del" onclick="deletePendencia('${p.id}')" title="Excluir">🗑</button>
-        </div>
+    const vencida  = p.status === 'aberta' && p.deadline && p.deadline < hoje;
+    const hojeDl   = p.status === 'aberta' && p.deadline === hoje;
+    const proxima  = p.status === 'aberta' && p.deadline && p.deadline > hoje && p.deadline <= pendAddDays(hoje, 3);
+    const done     = p.status === 'concluida';
+    const assetName = _pendAssetName(p);
+    const catLbl   = PEND_CAT_NAMES[p.category] || p.category || '';
+    const ctx      = [assetName, catLbl].filter(Boolean).join(' · ');
+    const prioLbl  = PEND_PRIO_NAMES[p.priority] || '';
+    let prazoLbl = '', prazoCls = '';
+    if (p.deadline) {
+      const d = parseDate(p.deadline).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }).replace('.', '');
+      if (done)         { prazoLbl = `Prazo ${d}`; }
+      else if (vencida) { prazoLbl = `Venceu ${d}`;   prazoCls = ' pend2-prazo-over'; }
+      else if (hojeDl)  { prazoLbl = 'Vence hoje';    prazoCls = ' pend2-prazo-near'; }
+      else if (proxima) { prazoLbl = `Vence em ${d}`; prazoCls = ' pend2-prazo-near'; }
+      else              { prazoLbl = `Vence em ${d}`; }
+    }
+    const meta = [prioLbl, prazoLbl].filter(Boolean);
+    return `<div class="pend-card pend2${done ? ' pend2-done' : ''}${vencida ? ' pend-vencida' : (proxima || hojeDl) ? ' pend-proxima' : ''}">
+      <div class="pend2-body">
+        <div class="pend2-title">${pendEsc(p.title)}</div>
+        ${ctx ? `<div class="pend2-ctx">${pendEsc(ctx)}</div>` : ''}
+        ${meta.length ? `<div class="pend2-meta">${pendEsc(meta[0])}${meta[1] ? ` · <span class="pend2-prazo${prazoCls}">${pendEsc(meta[1])}</span>` : ''}</div>` : ''}
+        ${p.estimatedValue ? `<div class="pend2-val">${R(p.estimatedValue)}</div>` : ''}
+        ${p.note ? `<div class="pend-card-note">${pendEsc(p.note)}</div>` : ''}
+      </div>
+      <div class="pend2-actions">
+        ${done
+          ? `<button class="pend2-act pend2-act-reopen" onclick="reopenPendencia('${p.id}')" title="Reabrir pendência" aria-label="Reabrir pendência">${_redoSvg}</button>`
+          : `<button class="pend2-act pend2-act-done" onclick="completePendencia('${p.id}')" title="Concluir pendência" aria-label="Concluir pendência">${_checkSvg}</button>`}
+        <button class="pend2-act" onclick="openPendMenu('${p.id}')" title="Mais ações" aria-label="Mais ações">${_kebabSvg}</button>
       </div>
     </div>`;
   }).join('');
+}
+
+// ── Menu de ações da pendência (Editar / Excluir) ──
+var _pendMenuTarget = null;
+function openPendMenu(id) {
+  _pendMenuTarget = id;
+  const p = (D.pendencias || []).find(x => x.id === id);
+  const t = document.getElementById('pmenu-title');
+  if (t) t.textContent = p ? p.title : 'Pendência';
+  openOverlay('pend-menu-sheet');
+}
+function pendMenuEdit() {
+  closeOverlay('pend-menu-sheet');
+  if (_pendMenuTarget) openPendenciaModal(_pendMenuTarget);
+}
+function pendMenuDelete() {
+  closeOverlay('pend-menu-sheet');
+  if (_pendMenuTarget) deletePendencia(_pendMenuTarget); // mantém gdConfirm
 }
 
 function pendEsc(s) {
