@@ -3531,12 +3531,27 @@ button:focus-visible, [role="button"]:focus-visible {
 .pat-det-obs { font-size: 12.5px; color: var(--tx2); margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); line-height: 1.5; }
 
 .pat-det-sec-head { display: flex; align-items: center; justify-content: space-between; margin: 18px 0 10px; }
-.pat-det-empty { padding: 16px 14px; font-size: 12.5px; color: var(--tx3); text-align: center; }
+/* Estado vazio compacto — evita que a tela fique excessivamente longa */
+.pat-det-empty { padding: 11px 14px; font-size: 12.5px; color: var(--tx3); text-align: center; }
+
+/* Ação secundária "Vincular" — acessível, sem competir com Editar (pill sólido) */
+.pat-link-add {
+  display: inline-flex; align-items: center; min-height: 32px; padding: 4px 8px;
+  background: none; border: none; cursor: pointer; white-space: nowrap;
+  color: var(--ac); font-size: 12.5px; font-weight: 600;
+  border-radius: 8px; -webkit-tap-highlight-color: transparent;
+  transition: background var(--dur-fast) var(--ease-default);
+}
+.pat-link-add:active { background: var(--ac-t); }
+.pat-link-add:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
 
 .pat-det-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 14px; }
 .pat-det-row + .pat-det-row { border-top: 1px solid var(--border); }
 .pat-det-row-lbl { font-size: 12px; color: var(--tx2); flex-shrink: 0; }
 .pat-det-row-val { font-size: 13px; font-weight: 700; color: var(--tx); text-align: right; font-variant-numeric: tabular-nums; }
+/* Observações: rótulo em cima, texto completo abaixo (sem truncar, alinhado à esquerda) */
+.pat-det-row-notes { flex-direction: column; align-items: stretch; gap: 4px; }
+.pat-det-row-notes .pat-det-row-val-notes { text-align: left; font-weight: 500; line-height: 1.5; white-space: normal; overflow-wrap: anywhere; }
 
 .pat-fin-item { display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .pat-fin-item + .pat-fin-item { border-top: 1px solid var(--border); }
@@ -3665,6 +3680,9 @@ button:focus-visible, [role="button"]:focus-visible {
 /* Detalhe integrado de veículo — elementos próprios */
 .pat-det-val-empty { font-size: 15px; font-weight: 600; color: var(--tx3); font-style: italic; }
 :root[data-theme="dark"] .pat-det-val-empty { color: rgba(232,237,255,.55); }
+/* Veículo sem avaliação na lista — não parece um valor zero cadastrado */
+.pat-list-val-empty { font-size: 12px; font-weight: 600; font-style: italic; color: var(--tx3); white-space: nowrap; }
+:root[data-theme="dark"] .pat-list-val-empty { color: rgba(232,237,255,.55); }
 .pat-det-sub-line { font-size: 12.5px; color: var(--tx2); margin-top: 2px; }
 :root[data-theme="dark"] .pat-det-sub-line { color: rgba(232,237,255,.66); }
 .pat-kebab-btn {

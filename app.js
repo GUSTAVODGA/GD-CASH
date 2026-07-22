@@ -5555,7 +5555,7 @@ function renderPatrimonioHome(preserveScroll) {
             <div class="pat-cat-count">${counts[t]} ${counts[t] === 1 ? 'ativo' : 'ativos'}</div>
           </div>
           <div class="pat-cat-val">${R(totals[t])}</div>
-          <div class="pat-cat-check${on ? ' on' : ''}">${on ? _patCheckSvg() : ''}</div>
+          ${on ? `<div class="pat-cat-check on">${_patCheckSvg()}</div>` : ''}
         </div>`; }).join('')}
     </div>
 
@@ -5568,9 +5568,6 @@ function renderPatrimonioHome(preserveScroll) {
         || `<div class="pat-det-empty">Nenhum item nesta categoria.</div>`}
     </div>
 
-    ${_patCatFilter === 'veiculo'
-      ? `<button class="pat-legacy-link" onclick="openLegacyVehList()">Ver tela antiga de veículos</button>`
-      : ''}
     <div class="pat-home-bottom-spacer"></div>
   `;
   _setPatFab(true);
@@ -5591,6 +5588,13 @@ function _renderPatListItem(item) {
     ? `onclick="openVehPatDetail('${escHtml(item.vehId)}')"`
     : (item.patId ? `onclick="renderPatDetail('${escHtml(item.patId)}')"` : '');
 
+  // Veículo sem avaliação positiva → "Valor não informado" (não exibir R$ 0,00
+  // como se zero fosse avaliação cadastrada). Demais bens mantêm a regra atual.
+  const valorInformado = typeKey !== 'veiculo' || (typeof item.valorEstimado === 'number' && item.valorEstimado > 0);
+  const valHtml = valorInformado
+    ? `<span class="pat-list-val">${R(item.valorEstimado || 0)}</span>`
+    : `<span class="pat-list-val pat-list-val-empty">Valor não informado</span>`;
+
   return `
     <div class="pat-list-item" ${onclickAttr}>
       <div class="pat-list-photo${item.foto ? '' : ' pat-ico-' + typeKey}">${photoHtml}</div>
@@ -5605,7 +5609,7 @@ function _renderPatListItem(item) {
         </div>
       </div>
       <div class="pat-list-right">
-        <span class="pat-list-val">${R(item.valorEstimado || 0)}</span>
+        ${valHtml}
         ${isClickable ? `<span class="pat-list-chev">${_patChevr().replace(/width="12" height="12"/g, 'width="14" height="14"')}</span>` : ''}
       </div>
     </div>`;
@@ -6213,16 +6217,11 @@ function renderVehPatDetail(id) {
   // Valor informado: número positivo. 0/ausente/null → "Valor não informado".
   const valorInformado = pat && typeof pat.valorEstimado === 'number' && pat.valorEstimado > 0;
 
-  // ── Detalhes do veículo (só campos preenchidos) ──
-  const detRows = [];
-  if (v.brand)  detRows.push(['Marca', v.brand]);
-  if (v.model)  detRows.push(['Modelo', v.model]);
-  if (v.year)   detRows.push(['Ano', String(v.year)]);
-  if (v.color)  detRows.push(['Cor', v.color]);
-  if (v.plate)  detRows.push(['Placa', v.plate]);
-  if (v.km != null && v.km !== '') detRows.push(['Quilometragem', `${Number(v.km).toLocaleString('pt-BR')} km`]);
-  detRows.push(['Status', statusLbl]);
-  if (v.notes)  detRows.push(['Observações', v.notes]);
+  // ── Informações do veículo: só o que NÃO aparece no cabeçalho ──
+  // (nome, marca, modelo, ano, status, placa, km e valor já estão no hero)
+  const infoRows = [];
+  if (v.color) infoRows.push(['Cor', v.color]);
+  const hasInfo = infoRows.length > 0 || !!v.notes;
 
   // ── Pendências abertas vinculadas (resumo) ──
   const pends = _vehLinkedPends(v).filter(p => p.status === 'aberta');
@@ -6319,30 +6318,29 @@ function renderVehPatDetail(id) {
       ${valorInformado
         ? `<div class="pat-det-val">${R(pat.valorEstimado)}</div>`
         : `<div class="pat-det-val-empty">Valor não informado</div>`}
-      ${v.notes ? `<div class="pat-det-obs">${escHtml(v.notes)}</div>` : ''}
     </div>
 
-    ${detRows.length > 0 ? `
-    <div class="sec-label" style="margin:18px 0 10px">Detalhes do veículo</div>
+    ${hasInfo ? `
+    <div class="sec-label" style="margin:18px 0 10px">Informações do veículo</div>
     <div class="pat-list-group" style="margin-bottom:0">
-      ${detRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
+      ${infoRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
+      ${v.notes ? `<div class="pat-det-row pat-det-row-notes"><span class="pat-det-row-lbl">Observações</span><span class="pat-det-row-val pat-det-row-val-notes">${escHtml(v.notes)}</span></div>` : ''}
     </div>` : ''}
 
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Pendências</div>
-      <button class="btn-pill" onclick="openVehLinkPend('${v.id}')">Vincular pendência</button>
+      <button class="pat-link-add" onclick="openVehLinkPend('${v.id}')">+ Vincular</button>
     </div>
     <div class="pat-list-group" style="margin-bottom:0">${pendHtml}</div>
 
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Despesas</div>
-      <button class="btn-pill" onclick="openVehLinkExp('${v.id}')">Vincular despesa</button>
+      <button class="pat-link-add" onclick="openVehLinkExp('${v.id}')">+ Vincular</button>
     </div>
     <div class="pat-list-group" style="margin-bottom:0">${expHtml}</div>
 
     ${histHtml}
 
-    <button class="pat-legacy-link" onclick="openLegacyVehFromIntegrated('${v.id}')">Ver tela antiga do veículo</button>
     <div class="pat-home-bottom-spacer"></div>
   `;
 }
