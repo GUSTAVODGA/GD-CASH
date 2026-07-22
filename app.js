@@ -856,15 +856,28 @@ function saveDayIncomeWithFeedback(date,pid,v,el) {
   setTimeout(()=>el.classList.remove('inp-saved'),1400);
   renderDayDetail();
 }
+// Normaliza qualquer data (string 'YYYY-MM-DD', string com horário, ou Date)
+// para a chave de DIA LOCAL 'YYYY-MM-DD', sem deslocamento UTC.
+function localDateKey(v) {
+  if (v == null) return '';
+  if (v instanceof Date) return isNaN(v) ? '' : dateStr(v);
+  const s = String(v);
+  // string com timezone explícita (Z ou ±hh:mm) → interpretar e converter p/ local
+  if (/[T ].*(Z|[+-]\d{2}:?\d{2})$/.test(s)) { const d = new Date(s); return isNaN(d) ? '' : dateStr(d); }
+  // 'YYYY-MM-DD' com ou sem horário SEM timezone → usar o prefixo local (evita shift UTC)
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  const d = new Date(s); return isNaN(d) ? '' : dateStr(d);
+}
 // Receita paga de uma plataforma num dia (itens têm prioridade sobre input manual)
 function getDayPlatIncome(date, pid) {
-  const items = (D.incomeItems||[]).filter(it=>it.date===date&&it.platformId===pid);
+  const items = (D.incomeItems||[]).filter(it=>localDateKey(it.date)===date&&it.platformId===pid);
   if(items.length>0) return items.filter(it=>it.status==='paid').reduce((s,it)=>s+it.amount,0);
   return getDayIncome(date)[pid]||0;
 }
 // Total de todos os itens (pagos+pendentes) de uma plataforma num dia — para exibição
 function getDayPlatDisplay(date, pid) {
-  const items = (D.incomeItems||[]).filter(it=>it.date===date&&it.platformId===pid);
+  const items = (D.incomeItems||[]).filter(it=>localDateKey(it.date)===date&&it.platformId===pid);
   if(items.length>0) return items.reduce((s,it)=>s+it.amount,0);
   return getDayIncome(date)[pid]||0;
 }
@@ -883,10 +896,35 @@ function monthDates(off=0) {
   const y=d.getFullYear(),m=d.getMonth(),days=new Date(y,m+1,0).getDate();
   return Array.from({length:days},(_,i)=>`${y}-${String(m+1).padStart(2,'0')}-${String(i+1).padStart(2,'0')}`);
 }
-function sumMonthIncome(off=0) {
-  return monthDates(off).reduce((s,d)=>s+D.platforms.reduce((ss,p)=>ss+getDayPlatIncome(d,p.id),0),0);
+// Conjunto de chaves de dia (LOCAL) do mês civil selecionado.
+// Início inclusivo no dia 1; fim exclusivo no dia 1 do mês seguinte.
+function monthDayKeys(off=0) { return new Set(monthDates(off)); }
+// ── AGREGAÇÃO MENSAL ÚNICA — fonte de verdade da Home e da aba Mês ──
+// Recorta ao mês civil por data LOCAL normalizada (sem shift UTC, tolerando
+// registros com horário). Retorna receitas, gastos, líquido e os lançamentos
+// efetivamente incluídos. Não altera nenhum dado persistido.
+function monthAggregate(off=0) {
+  const days = monthDates(off);
+  const keys = new Set(days);
+  // Receitas: por dia civil, itens pagos têm prioridade sobre o input manual
+  let receitas = 0;
+  const lancReceitas = [];
+  days.forEach(d => {
+    D.platforms.forEach(p => {
+      const items = (D.incomeItems||[]).filter(it=>localDateKey(it.date)===d && it.platformId===p.id);
+      if (items.length) {
+        items.filter(it=>it.status==='paid').forEach(it=>{ receitas+=it.amount; lancReceitas.push(it); });
+      } else {
+        receitas += getDayIncome(d)[p.id]||0;
+      }
+    });
+  });
+  const lancGastos = (D.expenses||[]).filter(e=>keys.has(localDateKey(e.date)));
+  const gastos = lancGastos.reduce((s,e)=>s+e.amount,0);
+  return { receitas, gastos, liquido: receitas-gastos, lancamentos: { receitas: lancReceitas, gastos: lancGastos } };
 }
-function sumMonthExpenses(off=0) { const dates=monthDates(off); return D.expenses.filter(e=>dates.includes(e.date)).reduce((s,e)=>s+e.amount,0); }
+function sumMonthIncome(off=0) { return monthAggregate(off).receitas; }
+function sumMonthExpenses(off=0) { return monthAggregate(off).gastos; }
 function sumMonthPlat(pid,off=0) {
   return monthDates(off).reduce((s,d)=>s+getDayPlatIncome(d,pid),0);
 }
@@ -1330,15 +1368,15 @@ function renderMes() {
   const sumTxt=document.getElementById('month-summary-text');
   if(summary){sumEl.style.display='';sumTxt.innerHTML=summary;}
   else sumEl.style.display='none';
-  const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp, resv=sumMonthReserva(monthOffset);
+  const agg=monthAggregate(monthOffset);
+  const inc=agg.receitas, exp=agg.gastos, liq=agg.liquido, resv=sumMonthReserva(monthOffset);
   animCount(document.getElementById('mes-inc'), inc);
   animCount(document.getElementById('mes-exp'), exp);
   animCount(document.getElementById('mes-liq'), liq, 650);
   animCount(document.getElementById('mes-resv'), resv);
   document.getElementById('hero-mes').className='hero-card '+(liq>=0?'pos':'neg');
 
-  const dates=monthDates(monthOffset);
-  const mExps=D.expenses.filter(e=>dates.includes(e.date));
+  const mExps=agg.lancamentos.gastos;
   const catMap={};
   mExps.forEach(e=>{ catMap[e.category]=(catMap[e.category]||0)+e.amount; });
   const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,color:PALETTE[i%PALETTE.length]}));
@@ -1349,12 +1387,13 @@ function renderMes() {
   renderDonut('plat-donut','plat-legend',platItems);
 
   const weeks=getMonthWeeks(monthOffset);
+  const monthKeys=monthDayKeys(monthOffset); // recorte ao mês civil (data local)
   const weekSums=weeks.map(w=>{
     const ds=[];const cur=new Date(w.start);
-    while(cur<=w.end){ds.push(dateStr(cur));cur.setDate(cur.getDate()+1);}
+    while(cur<=w.end){const k=dateStr(cur); if(monthKeys.has(k)) ds.push(k); cur.setDate(cur.getDate()+1);}
     const wI=ds.reduce((s,d)=>s+D.platforms.reduce((ss,p)=>ss+getDayPlatIncome(d,p.id),0),0);
-    const wE=D.expenses.filter(e=>ds.includes(e.date)).reduce((s,e)=>s+e.amount,0);
-    return {wI,wL:wI-wE};
+    const wE=D.expenses.filter(e=>ds.includes(localDateKey(e.date))).reduce((s,e)=>s+e.amount,0);
+    return {wI,wE,wL:wI-wE};
   });
   const maxWI=Math.max(1,...weekSums.map(w=>w.wI));
   const totalI=weekSums.reduce((s,w)=>s+w.wI,0);
@@ -1370,7 +1409,7 @@ function renderMes() {
           </span>
           <span class="s2s-val-pair">
             <span class="s2s-val-lbl">Líq.</span>
-            <span class="${w.wL>=0?'v-green':'v-red'}">${w.wI>0?R(w.wL):'—'}</span>
+            <span class="${w.wL>=0?'v-green':'v-red'}">${(w.wI>0||w.wE>0)?R(w.wL):'—'}</span>
           </span>
         </span>
       </div>
@@ -3413,7 +3452,8 @@ function renderHomeNew() {
     monthEl.textContent = d.toLocaleDateString('pt-BR', {month: 'long', year: 'numeric'});
   }
 
-  const inc = sumMonthIncome(monthOffset), exp = sumMonthExpenses(monthOffset), liq = inc - exp;
+  const agg = monthAggregate(monthOffset);
+  const inc = agg.receitas, exp = agg.gastos, liq = agg.liquido;
 
   const balEl = document.getElementById('home-balance');
   if (balEl) {
