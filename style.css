@@ -3661,3 +3661,18 @@ button:focus-visible, [role="button"]:focus-visible {
 .pend2-act { position:relative; }
 .pend2-act::after { content:''; position:absolute; inset:-6px; }
 .pend2-act:focus-visible { outline:2px solid var(--ac); outline-offset:2px; }
+
+/* Detalhe integrado de veículo — elementos próprios */
+.pat-det-val-empty { font-size: 15px; font-weight: 600; color: var(--tx3); font-style: italic; }
+:root[data-theme="dark"] .pat-det-val-empty { color: rgba(232,237,255,.55); }
+.pat-det-sub-line { font-size: 12.5px; color: var(--tx2); margin-top: 2px; }
+:root[data-theme="dark"] .pat-det-sub-line { color: rgba(232,237,255,.66); }
+.pat-kebab-btn {
+  width: 34px; height: 34px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--surface2); color: var(--tx2); display: flex; align-items: center;
+  justify-content: center; cursor: pointer; padding: 0; flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.pat-kebab-btn:active { background: var(--surface3, var(--surface2)); }
+.pat-kebab-btn:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+:root[data-theme="dark"] .pat-kebab-btn { color: rgba(232,237,255,.7); }

@@ -4571,13 +4571,15 @@ var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'
 var _vehDetailId = null;
 
 function renderPatrimonio() {
-  if (_vehDetailId) renderVehDetail(_vehDetailId);
+  // Detalhe legacy persiste ao voltar para a aba (comportamento antigo).
+  // Detalhe integrado de veículo volta à home (como o detalhe de imóvel).
+  if (_vehDetailId && _vehDetailMode === 'legacy') renderVehDetail(_vehDetailId);
   else if (_patLegacyMode) _renderLegacyVehList();
   else renderPatrimonioHome();
 }
 
 function _vehShowView(id) {
-  ['pat-home-view','veh-list-view','veh-detail-view','veh-form-view','pat-form-view','pat-detail-view'].forEach(v => {
+  ['pat-home-view','veh-list-view','veh-detail-view','veh-form-view','pat-form-view','pat-detail-view','pat-veh-detail-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = (v === id) ? '' : 'none';
   });
@@ -4605,6 +4607,7 @@ function renderVehList() {
 
 function _renderLegacyVehList() {
   _vehDetailId = null;
+  _vehDetailMode = 'legacy';
   _vehShowView('veh-list-view');
   window.scrollTo(0, 0);
   const list = document.getElementById('veh-list');
@@ -4647,9 +4650,13 @@ function renderVehDetail(id) {
   const v = (D.vehicles || []).find(x => x.id === id);
   if (!v) { renderVehList(); return; }
   _vehDetailId = id;
+  _vehDetailMode = 'legacy';
   _vehShowView('veh-detail-view');
   const cont = document.getElementById('veh-detail-cont');
   if (!cont) return;
+  // Voltar: se o detalhe legacy foi aberto pelo detalhe integrado, retorna a ele.
+  const backFromLegacy = (_vehReturnCtx === id) ? `backFromLegacyVehDetail('${id}')` : 'renderVehList()';
+  const backFromLegacyLbl = (_vehReturnCtx === id) ? 'Detalhe' : 'Lista';
   const col = VEH_STATUS_COLORS[v.status] || 'var(--tx3)';
   const lbl = VEH_STATUS_LABELS[v.status] || v.status;
   const sub = [v.brand, v.model, v.year, v.color].filter(Boolean).join(' · ');
@@ -4676,9 +4683,9 @@ function renderVehDetail(id) {
 
   cont.innerHTML = `
     <div class="veh-detail-topbar">
-      <button class="btn-icon-sm" onclick="renderVehList()">
+      <button class="btn-icon-sm" onclick="${backFromLegacy}">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Lista
+        ${backFromLegacyLbl}
       </button>
     </div>
     <div class="veh-detail-header">
@@ -4745,7 +4752,7 @@ function openVehForm(id) {
   _vehShowView('veh-form-view');
   const cont = document.getElementById('veh-form-cont');
   if (!cont) return;
-  const cancelAction = id ? `renderVehDetail('${id}')` : 'renderVehList()';
+  const cancelAction = id ? `_refreshVehDetail('${id}')` : 'renderVehList()';
   cont.innerHTML = `
     <div class="veh-detail-topbar">
       <button class="btn-icon-sm" onclick="${cancelAction}">
@@ -4777,7 +4784,8 @@ function openVehForm(id) {
     </div>
     <div class="form-group">
       <label class="form-label">Valor atual estimado (${escHtml(currSym)})</label>
-      <input class="form-input" id="vf-valor" type="number" min="0" step="any" value="${(() => { const vp = id ? _patForVehId(id) : null; return vp && vp.valorEstimado ? vp.valorEstimado : ''; })()}" placeholder="45000">
+      <input class="form-input" id="vf-valor" type="number" min="0" step="any" value="${(() => { const vp = id ? _patForVehId(id) : null; return (vp && vp.valorEstimado > 0) ? vp.valorEstimado : ''; })()}" placeholder="45000">
+      <span class="field-hint">Deixe em branco se não quiser informar.</span>
     </div>
     <div class="form-group">
       <label class="form-label">Foto</label>
@@ -4828,12 +4836,14 @@ function saveVehicle() {
   };
   if (idx >= 0) vehicles[idx] = veh; else vehicles.push(veh);
   D.vehicles = vehicles;
-  // Sincroniza o valor atual estimado no registro de patrimônio do veículo
+  // Sincroniza o valor atual estimado no registro de patrimônio do veículo.
+  // Campo vazio → null (valor não informado); 0 explícito é preservado como 0.
   const valorRaw = document.getElementById('vf-valor')?.value;
-  _syncVehPatrimonioValor(id, valorRaw === '' || valorRaw == null ? 0 : Number(valorRaw) || 0, idx >= 0);
+  const valorNum = (valorRaw === '' || valorRaw == null) ? null : (Number(valorRaw) || 0);
+  _syncVehPatrimonioValor(id, valorNum, idx >= 0);
   save();
   _vehDetailId = id;
-  renderVehDetail(id);
+  _refreshVehDetail(id);
   gdToast(idx >= 0 ? 'Veículo atualizado.' : 'Veículo adicionado.');
 }
 
@@ -4857,8 +4867,10 @@ function _syncVehPatrimonioValor(vehId, valorEstimado, isEdit) {
     p = _patForVehId(vehId);
   }
   if (p) {
-    const old = p.valorEstimado || 0;
-    if (isEdit && existedBefore && old !== valorEstimado) {
+    const old = p.valorEstimado;
+    // Reavaliação: registra só quando o novo valor é um número informado
+    // e diferente do anterior (evita eventos ao apenas limpar o campo).
+    if (isEdit && existedBefore && valorEstimado != null && (old || 0) !== valorEstimado) {
       if (!Array.isArray(p.historico)) p.historico = [];
       p.historico.push({
         id:            uid(),
@@ -4866,12 +4878,12 @@ function _syncVehPatrimonioValor(vehId, valorEstimado, isEdit) {
         tipo:          'avaliacao',
         descricao:     '',
         valor:         valorEstimado,
-        valorAnterior: old,
+        valorAnterior: old || 0,
         despesaId:     null,
         pendenciaId:   null,
       });
     }
-    p.valorEstimado = valorEstimado;
+    p.valorEstimado = valorEstimado; // null = não informado
     p.updatedAt = Date.now();
   }
 }
@@ -4992,7 +5004,7 @@ function saveVehEvent() {
   v.history.push(entry);
   save();
   closeOverlay('modal-veh-event');
-  renderVehDetail(vehId);
+  _refreshVehDetail(vehId);
   gdToast('Apontamento salvo.');
 }
 
@@ -5001,7 +5013,7 @@ function deleteVehHistItem(vehId, histId) {
   if (!v) return;
   v.history = (v.history || []).filter(h => h.id !== histId);
   save();
-  renderVehDetail(vehId);
+  _refreshVehDetail(vehId);
 }
 
 // ── Vincular despesa ──
@@ -5029,7 +5041,7 @@ function saveVehLinkExp() {
   if (!v.linkedExpenses) v.linkedExpenses = [];
   if (!v.linkedExpenses.includes(expId)) { v.linkedExpenses.push(expId); save(); gdToast('Despesa vinculada.'); }
   closeOverlay('modal-veh-link-exp');
-  renderVehDetail(vehId);
+  _refreshVehDetail(vehId);
 }
 
 function unlinkVehExp(vehId, expId) {
@@ -5037,7 +5049,7 @@ function unlinkVehExp(vehId, expId) {
   if (!v) return;
   v.linkedExpenses = (v.linkedExpenses || []).filter(id => id !== expId);
   save();
-  renderVehDetail(vehId);
+  _refreshVehDetail(vehId);
 }
 
 // ── Vincular pendência ──
@@ -5065,7 +5077,7 @@ function saveVehLinkPend() {
   if (!v.linkedPendencias) v.linkedPendencias = [];
   if (!v.linkedPendencias.includes(pId)) { v.linkedPendencias.push(pId); save(); gdToast('Pendência vinculada.'); }
   closeOverlay('modal-veh-link-pend');
-  renderVehDetail(vehId);
+  _refreshVehDetail(vehId);
 }
 
 function unlinkVehPend(vehId, pId) {
@@ -5073,7 +5085,7 @@ function unlinkVehPend(vehId, pId) {
   if (!v) return;
   v.linkedPendencias = (v.linkedPendencias || []).filter(id => id !== pId);
   save();
-  renderVehDetail(vehId);
+  _refreshVehDetail(vehId);
 }
 
 // ── Status ──
@@ -5094,7 +5106,7 @@ function saveVehStatus() {
   v.status = document.getElementById('vs-status')?.value || 'em_uso';
   save();
   closeOverlay('modal-veh-status');
-  renderVehDetail(vehId);
+  _refreshVehDetail(vehId);
   gdToast('Status atualizado.');
 }
 
@@ -5427,7 +5439,7 @@ function closePatSheet() {
 
 function patAddTipo(tipo) {
   closePatSheet();
-  if (tipo === 'veiculo') { openVehForm(); return; }
+  if (tipo === 'veiculo') { _vehDetailMode = 'integrated'; openVehForm(); return; }
   openPatForm(tipo);
 }
 
@@ -5439,11 +5451,13 @@ function patToggleCatFilter(tipo) {
   renderPatrimonioHome();
 }
 
-function renderPatrimonioHome() {
+function renderPatrimonioHome(preserveScroll) {
   _vehDetailId = null;
   _vehShowView('pat-home-view');
-  window.scrollTo(0, 0);
-  if (document.body) document.body.scrollTop = 0;
+  if (!preserveScroll) {
+    window.scrollTo(0, 0);
+    if (document.body) document.body.scrollTop = 0;
+  }
   const cont = document.getElementById('pat-home-cont');
   if (!cont) return;
 
@@ -5534,7 +5548,7 @@ function _renderPatListItem(item) {
 
   const isClickable = !!(item.vehId || item.patId);
   const onclickAttr = item.vehId
-    ? `onclick="renderVehDetail('${escHtml(item.vehId)}')"`
+    ? `onclick="openVehPatDetail('${escHtml(item.vehId)}')"`
     : (item.patId ? `onclick="renderPatDetail('${escHtml(item.patId)}')"` : '');
 
   return `
@@ -6050,6 +6064,294 @@ function deletePatEvt(patId, evtId) {
       updatePatrimonio(patId, { historico: (p.historico || []).filter(e => e.id !== evtId) });
       renderPatDetail(patId);
       gdToast('Evento excluído.', { type: 'success' });
+    },
+  });
+}
+
+// ══════════════════════════════════════════
+// DETALHE INTEGRADO DE VEÍCULO (Meu Patrimônio)
+// ══════════════════════════════════════════
+// Novo destino ao tocar num veículo na lista unificada. Une D.vehicles
+// (fonte de verdade dos dados próprios) ao enriquecimento em D.patrimonios
+// (valor atual, histórico de reavaliação). Não migra, não duplica, não
+// modifica ids. A tela legacy continua acessível por links secundários.
+
+var _vehDetailMode = 'legacy';   // 'integrated' | 'legacy'
+var _vehReturnCtx  = null;        // vehId quando o detalhe legacy foi aberto pelo integrado
+var _patHomeScroll = 0;           // posição de scroll da home ao abrir o detalhe
+
+// Re-render consciente do modo: mantém o usuário no detalhe corrente após
+// uma ação. No modo legacy é idêntico ao comportamento anterior.
+function _refreshVehDetail(id) {
+  if (_vehDetailMode === 'integrated') renderVehPatDetail(id);
+  else renderVehDetail(id);
+}
+
+// Abre o detalhe integrado guardando o scroll da home para o Voltar.
+function openVehPatDetail(vehId) {
+  _patHomeScroll = window.scrollY || document.body.scrollTop || document.documentElement.scrollTop || 0;
+  renderVehPatDetail(vehId);
+}
+
+// Voltar do detalhe → home preservando filtro e posição de scroll.
+function _backToPatHomePreserveScroll() {
+  renderPatrimonioHome(true);
+  const y = _patHomeScroll;
+  requestAnimationFrame(() => {
+    window.scrollTo(0, y);
+    if (document.body) document.body.scrollTop = y;
+    if (document.documentElement) document.documentElement.scrollTop = y;
+  });
+}
+
+// Link secundário do detalhe integrado → detalhe legacy do mesmo veículo.
+function openLegacyVehFromIntegrated(vehId) {
+  _vehReturnCtx = vehId; // ao voltar do legacy, retorna ao detalhe integrado
+  renderVehDetail(vehId);
+}
+function backFromLegacyVehDetail(vehId) {
+  _vehReturnCtx = null;
+  renderVehPatDetail(vehId);
+}
+
+// SVG de carro (fallback quando não há foto), coerente com o Avenco.
+function _vehIconSvg(size) {
+  const s = size || 20;
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>`;
+}
+
+// Foto inválida / que falhou ao carregar → cai para o ícone de veículo
+// (nunca deixa bloco cinza vazio). Não toca nos dados do veículo.
+function _vehImgError(img) {
+  const box = img && img.parentElement;
+  if (!box) return;
+  box.classList.add('pat-ico-veiculo');
+  box.innerHTML = _vehIconSvg(26);
+}
+
+// Aceita apenas fontes de imagem seguras para <img src> (data URI de
+// imagem ou http/https). Caso contrário, trata como ausente → ícone.
+function _vehSafePhoto(photo) {
+  if (typeof photo !== 'string' || !photo) return null;
+  const p = photo.trim();
+  if (/^data:image\//i.test(p) || /^https?:\/\//i.test(p)) return p;
+  return null;
+}
+
+// Pendências vinculadas ao veículo (resolvedor unificado, sem duplicar
+// diretas e reversas). Mesma lógica do detalhe legacy.
+function _vehLinkedPends(v) {
+  const seen = new Set();
+  const out = [];
+  (v.linkedPendencias || []).forEach(pid => {
+    const p = (D.pendencias || []).find(x => x.id === pid);
+    if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p); }
+  });
+  (D.pendencias || []).forEach(p => {
+    if (seen.has(p.id)) return;
+    const ref = _pendAssetRef(p);
+    if (ref && ref.kind === 'vehicle' && ref.id === v.id) { seen.add(p.id); out.push(p); }
+  });
+  return out;
+}
+
+function renderVehPatDetail(id) {
+  const v = (D.vehicles || []).find(x => x.id === id);
+  if (!v) { renderPatrimonioHome(); return; }
+  _vehDetailId = id;
+  _vehDetailMode = 'integrated';
+  _vehShowView('pat-veh-detail-view');
+  window.scrollTo(0, 0);
+  if (document.body) document.body.scrollTop = 0;
+  const cont = document.getElementById('pat-veh-detail-cont');
+  if (!cont) return;
+
+  const pat     = _patForVehId(id); // enriquecimento (pode ser null)
+  const statusK = ({ em_uso:'ativo', na_oficina:'ativo', a_venda:'ativo', vendido:'vendido', arquivado:'inativo' })[v.status] || 'ativo';
+  const statusLbl = VEH_STATUS_LABELS[v.status] || v.status;
+  const sub     = [v.brand, v.model, v.year].filter(Boolean).join(' · ');
+  // Valor informado: número positivo. 0/ausente/null → "Valor não informado".
+  const valorInformado = pat && typeof pat.valorEstimado === 'number' && pat.valorEstimado > 0;
+
+  // ── Detalhes do veículo (só campos preenchidos) ──
+  const detRows = [];
+  if (v.brand)  detRows.push(['Marca', v.brand]);
+  if (v.model)  detRows.push(['Modelo', v.model]);
+  if (v.year)   detRows.push(['Ano', String(v.year)]);
+  if (v.color)  detRows.push(['Cor', v.color]);
+  if (v.plate)  detRows.push(['Placa', v.plate]);
+  if (v.km != null && v.km !== '') detRows.push(['Quilometragem', `${Number(v.km).toLocaleString('pt-BR')} km`]);
+  detRows.push(['Status', statusLbl]);
+  if (v.notes)  detRows.push(['Observações', v.notes]);
+
+  // ── Pendências abertas vinculadas (resumo) ──
+  const pends = _vehLinkedPends(v).filter(p => p.status === 'aberta');
+  const pendHtml = pends.length === 0
+    ? `<div class="pat-det-empty">Nenhuma pendência aberta.</div>`
+    : pends.map(p => `
+        <div class="pat-fin-item" style="cursor:default">
+          <div class="pat-fin-body">
+            <div class="pat-fin-name">${escHtml(p.title)}</div>
+            <div class="pat-fin-sub">${(PEND_PRIO_NAMES[p.priority] || '')}${p.estimatedValue ? ' · ' + R(p.estimatedValue) : ''}</div>
+          </div>
+          <button class="pat-mini-del" onclick="unlinkVehPend('${v.id}','${p.id}')" aria-label="Desvincular pendência">${_patTrashSvg()}</button>
+        </div>`).join('');
+
+  // ── Despesas vinculadas ──
+  const exps = (v.linkedExpenses || []).map(eid => (D.expenses || []).find(e => e.id === eid)).filter(Boolean);
+  const expHtml = exps.length === 0
+    ? `<div class="pat-det-empty">Nenhuma despesa vinculada.</div>`
+    : exps.map(e => `
+        <div class="pat-fin-item" style="cursor:default">
+          <div class="pat-fin-body">
+            <div class="pat-fin-name">${escHtml(e.description || e.category)}</div>
+            <div class="pat-fin-sub">${fmtShort(e.date)} · ${escHtml(e.category)}</div>
+          </div>
+          <div class="pat-fin-right">
+            <span class="pat-fin-saldo" style="color:var(--rd)">−${R(e.amount)}</span>
+            <button class="pat-mini-del" onclick="unlinkVehExp('${v.id}','${e.id}')" aria-label="Desvincular despesa">${_patTrashSvg()}</button>
+          </div>
+        </div>`).join('');
+
+  // ── Histórico: eventos legacy (v.history) + reavaliações (patrimônio) ──
+  const histItems = [];
+  (v.history || []).forEach(h => histItems.push({
+    kind: h.type === 'km_update' ? 'km' : 'evento',
+    data: h.date, title: h.type === 'km_update' ? 'Atualização de km' : (h.note || 'Evento'),
+    body: h.type === 'km_update' ? (h.km != null ? `${Number(h.km).toLocaleString('pt-BR')} km` : '') : (h.amount ? R(h.amount) : ''),
+  }));
+  if (pat) {
+    (pat.historico || []).forEach(e => {
+      if (e.tipo === 'avaliacao') histItems.push({
+        kind: 'aval', data: e.data, title: 'Reavaliação',
+        body: `<span class="pat-hist-old">${R(e.valorAnterior || 0)}</span> <span class="pat-hist-arrow">→</span> <span class="pat-hist-new">${R(e.valor || 0)}</span>`,
+      });
+    });
+  }
+  histItems.sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
+  const histHtml = histItems.length === 0 ? '' : `
+    <div class="sec-label" style="margin:18px 0 10px">Histórico</div>
+    <div class="pat-list-group" style="margin-bottom:0">
+      ${histItems.map(e => `
+        <div class="pat-hist-item">
+          <div class="pat-hist-dot-col"><span class="pat-hist-dot ${e.kind === 'aval' ? 'pat-hist-dot-aval' : ''}"></span></div>
+          <div class="pat-hist-body">
+            <div class="pat-hist-title">${e.title.startsWith('<') ? e.title : escHtml(e.title)}</div>
+            ${e.body ? `<div class="pat-hist-val">${e.body}</div>` : ''}
+            <div class="pat-hist-date">${_patFmtDate(e.data)}</div>
+          </div>
+        </div>`).join('')}
+    </div>`;
+
+  const safePhoto = _vehSafePhoto(v.photo);
+  const photoHtml = safePhoto
+    ? `<img src="${escHtml(safePhoto)}" alt="${escHtml(v.name)}" onerror="_vehImgError(this)">`
+    : _vehIconSvg(26);
+
+  cont.innerHTML = `
+    <div class="veh-detail-topbar">
+      <button class="btn-icon-sm" onclick="_backToPatHomePreserveScroll()">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Meu Patrimônio
+      </button>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-pill" onclick="openVehForm('${v.id}')">Editar</button>
+        <button class="pat-kebab-btn" onclick="openVehMenu('${v.id}')" aria-label="Mais ações">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="card pat-det-hero">
+      <div class="pat-det-hero-row">
+        <div class="pat-list-photo pat-det-photo${safePhoto ? '' : ' pat-ico-veiculo'}">${photoHtml}</div>
+        <div class="pat-det-hero-info">
+          <div class="pat-det-name">${escHtml(v.name)}</div>
+          ${sub ? `<div class="pat-det-sub-line">${escHtml(sub)}</div>` : ''}
+          <div class="pat-list-meta">
+            <span class="pat-chip pat-chip-veiculo">Veículo</span>
+            <span class="pat-status s-${statusK}"><span class="pat-status-dot"></span><span class="pat-status-lbl">${escHtml(statusLbl)}</span></span>
+          </div>
+          ${(v.plate || (v.km != null && v.km !== '')) ? `<div class="pat-det-sub-line" style="margin-top:4px">${[v.plate ? escHtml(v.plate) : '', (v.km != null && v.km !== '') ? Number(v.km).toLocaleString('pt-BR') + ' km' : ''].filter(Boolean).join(' · ')}</div>` : ''}
+        </div>
+      </div>
+      <div class="pat-det-val-lbl">Valor atual estimado</div>
+      ${valorInformado
+        ? `<div class="pat-det-val">${R(pat.valorEstimado)}</div>`
+        : `<div class="pat-det-val-empty">Valor não informado</div>`}
+      ${v.notes ? `<div class="pat-det-obs">${escHtml(v.notes)}</div>` : ''}
+    </div>
+
+    ${detRows.length > 0 ? `
+    <div class="sec-label" style="margin:18px 0 10px">Detalhes do veículo</div>
+    <div class="pat-list-group" style="margin-bottom:0">
+      ${detRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
+    </div>` : ''}
+
+    <div class="pat-det-sec-head">
+      <div class="sec-label" style="margin:0">Pendências</div>
+      <button class="btn-pill" onclick="openVehLinkPend('${v.id}')">Vincular pendência</button>
+    </div>
+    <div class="pat-list-group" style="margin-bottom:0">${pendHtml}</div>
+
+    <div class="pat-det-sec-head">
+      <div class="sec-label" style="margin:0">Despesas</div>
+      <button class="btn-pill" onclick="openVehLinkExp('${v.id}')">Vincular despesa</button>
+    </div>
+    <div class="pat-list-group" style="margin-bottom:0">${expHtml}</div>
+
+    ${histHtml}
+
+    <button class="pat-legacy-link" onclick="openLegacyVehFromIntegrated('${v.id}')">Ver tela antiga do veículo</button>
+    <div class="pat-home-bottom-spacer"></div>
+  `;
+}
+
+// ── Menu de ações secundárias do veículo (kebab) ──
+var _vehMenuTarget = null;
+function openVehMenu(id) {
+  _vehMenuTarget = id;
+  const v = (D.vehicles || []).find(x => x.id === id);
+  const t = document.getElementById('vmenu-title');
+  if (t) t.textContent = v ? v.name : 'Veículo';
+  openOverlay('veh-menu-sheet');
+}
+function vehMenuStatus() {
+  closeOverlay('veh-menu-sheet');
+  if (_vehMenuTarget) openVehStatus(_vehMenuTarget);
+}
+function vehMenuArchive() {
+  closeOverlay('veh-menu-sheet');
+  const id = _vehMenuTarget;
+  const v = (D.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  if (v.status === 'arquivado') { gdToast('Veículo já está arquivado.'); return; }
+  v.status = 'arquivado';
+  save();
+  renderVehPatDetail(id);
+  gdToast('Veículo arquivado. Histórico e vínculos preservados.');
+}
+function vehMenuDelete() {
+  closeOverlay('veh-menu-sheet');
+  const id = _vehMenuTarget;
+  const v = (D.vehicles || []).find(x => x.id === id);
+  if (!v) return;
+  const hasHistory = (v.history || []).length > 0;
+  const hasLinks   = (v.linkedExpenses || []).length > 0 || (v.linkedPendencias || []).length > 0;
+  if (hasHistory || hasLinks) {
+    gdToast('Veículo com histórico ou vínculos não pode ser excluído. Use "Arquivar".', { type: 'error' });
+    return;
+  }
+  gdConfirm({
+    title: 'Excluir veículo',
+    msg: 'Excluir permanentemente este veículo? Esta ação não pode ser desfeita.',
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => {
+      D.vehicles = (D.vehicles || []).filter(x => x.id !== id);
+      save();
+      renderPatrimonioHome();
+      gdToast('Veículo excluído definitivamente.', { type: 'success' });
     },
   });
 }
