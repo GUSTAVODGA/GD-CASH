@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=71">
+<link rel="stylesheet" href="style.css?v=72">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -150,7 +150,7 @@
     <button class="user-avatar-btn" id="user-avatar-btn" style="display:none" onclick="openAccountMenu()" title="Minha conta">
       <img id="user-avatar-img" src="" alt="" class="user-avatar-img">
     </button>
-    <button class="gear-btn" onclick="openOverlay('modal-more')" title="Mais opções">
+    <button class="gear-btn" onclick="openAjustesFromGear()" title="Ajustes">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     </button>
   </div>
@@ -242,7 +242,7 @@
     <div class="hc-sec-hd">
       <span class="hc-tri-sm"></span>
       <span class="hc-sec-title">Próximos compromissos</span>
-      <button class="hc-sec-link" onclick="switchTab('pendencias')">Ver todos</button>
+      <button class="hc-sec-link" onclick="switchTab('pendencias','inicio')">Ver todos</button>
     </div>
     <div id="home-timeline" class="hc-timeline"></div>
   </div>
@@ -252,7 +252,7 @@
     <div class="hc-sec-hd">
       <span class="hc-tri-sm"></span>
       <span class="hc-sec-title">Meta em curso</span>
-      <button class="hc-sec-link" onclick="switchTab('metas')">Ver metas</button>
+      <button class="hc-sec-link" onclick="switchTab('metas','inicio')">Ver metas</button>
     </div>
     <div class="hc-goal-card">
       <div id="home-goal"></div>
@@ -264,7 +264,7 @@
     <div class="hc-sec-hd">
       <span class="hc-tri-sm"></span>
       <span class="hc-sec-title">Pendências</span>
-      <button class="hc-sec-link" onclick="switchTab('pendencias')">Ver todas</button>
+      <button class="hc-sec-link" onclick="switchTab('pendencias','inicio')">Ver todas</button>
     </div>
     <div id="home-pend-list" class="hc-pend-list"></div>
   </div>
@@ -295,52 +295,8 @@
   </div>
 
   <!-- ── RESERVA DO MÊS — shown only when relevant ── -->
-  <div class="hc-resv-note" id="home-resv-note" style="display:none" onclick="switchTab('reserva')" role="button" tabindex="0"></div>
+  <div class="hc-resv-note" id="home-resv-note" style="display:none" onclick="switchTab('reserva','inicio')" role="button" tabindex="0"></div>
 
-  <!-- ── 9. FERRAMENTAS ── -->
-  <div class="hc-tools">
-    <div class="hc-sec-hd">
-      <span class="hc-tri-sm"></span>
-      <span class="hc-sec-title">Acesso rápido</span>
-    </div>
-    <div class="hc-tools-grid">
-      <button class="hc-tool-item" onclick="switchTab('pendencias')">
-        <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="4" width="18" height="18" rx="2"/>
-          <line x1="16" y1="2" x2="16" y2="6"/>
-          <line x1="8" y1="2" x2="8" y2="6"/>
-          <line x1="3" y1="10" x2="21" y2="10"/>
-          <polyline points="9 16 11 18 15 14"/>
-        </svg>
-        <span class="hc-tool-lbl">Pendências</span>
-        <span class="hc-tool-badge" id="tools-pend-badge" style="display:none">0</span>
-      </button>
-      <button class="hc-tool-item" onclick="switchTab('fixos')">
-        <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="17 1 21 5 17 9"/>
-          <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
-          <polyline points="7 23 3 19 7 15"/>
-          <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
-        </svg>
-        <span class="hc-tool-lbl">Fixos</span>
-      </button>
-      <button class="hc-tool-item" onclick="switchTab('reserva')">
-        <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        </svg>
-        <span class="hc-tool-lbl">Reserva</span>
-      </button>
-      <button class="hc-tool-item" onclick="switchTab('conversor')">
-        <svg class="hc-tool-ico" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M8 3 4 7l4 4"/>
-          <path d="M4 7h16"/>
-          <path d="m16 21 4-4-4-4"/>
-          <path d="M20 17H4"/>
-        </svg>
-        <span class="hc-tool-lbl">Conversor</span>
-      </button>
-    </div>
-  </div>
   <div style="height:56px"></div>
 
 </section>
@@ -380,7 +336,10 @@
 <!-- ════ RESERVA ════ -->
 <section class="page" id="page-reserva">
   <div class="page-header-row">
-    <span class="page-header-title">Reserva de Emergência</span>
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Reserva de Emergência</span>
+    </div>
     <button class="tab-help-btn" onclick="showTabHelp('reserva')">?</button>
   </div>
   <div class="card av-card res-hero">
@@ -517,7 +476,10 @@
 <!-- ════ FIXOS ════ -->
 <section class="page" id="page-fixos">
   <div class="page-header-row">
-    <span class="page-header-title">Gastos Fixos</span>
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Gastos Fixos</span>
+    </div>
     <button class="tab-help-btn" onclick="showTabHelp('fixos')">?</button>
   </div>
   <div class="card av-card fixed-total-card">
@@ -545,7 +507,10 @@
 <!-- ════ PENDÊNCIAS ════ -->
 <section class="page" id="page-pendencias">
   <div class="page-header-row">
-    <span class="page-header-title">Pendências</span>
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Pendências</span>
+    </div>
     <button class="tab-help-btn" onclick="showTabHelp('pendencias')">?</button>
   </div>
   <div class="pend-filter-row">
@@ -559,7 +524,10 @@
 <!-- ════ CONVERSOR ════ -->
 <section class="page" id="page-conversor">
   <div class="page-header-row">
-    <span class="page-header-title">Conversor de Moedas</span>
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Conversor de Moedas</span>
+    </div>
     <button class="tab-help-btn" onclick="showTabHelp('conversor')">?</button>
   </div>
   <div class="card av-card conv-card">
@@ -606,7 +574,10 @@
 <!-- ════ AJUSTES ════ -->
 <section class="page" id="page-ajustes">
   <div class="page-header-row">
-    <span class="page-header-title">Ajustes</span>
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Ajustes</span>
+    </div>
   </div>
   <div id="ajustes-root"></div>
 </section>
@@ -617,7 +588,10 @@
   <!-- View: Home Meu Patrimônio (Patrimônio 2.0) -->
   <div id="pat-home-view">
     <div class="page-header-row" style="padding:0 20px;margin-top:12px">
-      <div class="page-header-title">Meu Patrimônio</div>
+      <div class="phr-left">
+        <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+        <div class="page-header-title">Meu Patrimônio</div>
+      </div>
     </div>
     <div id="pat-home-cont" style="padding:0 16px"></div>
   </div>
@@ -806,6 +780,14 @@
     </div>
   </div>
 
+<!-- ════ MAIS ════ -->
+<section class="page" id="page-mais">
+  <div class="page-header-row">
+    <span class="page-header-title">Mais</span>
+  </div>
+  <div id="mais-root"></div>
+</section>
+
 </main>
 
 <nav class="bottom-nav">
@@ -820,6 +802,10 @@
   <button class="nav-item" data-tab="mes" onclick="switchTab('mes')">
     <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span>Mês</span>
+  </button>
+  <button class="nav-item" data-tab="mais" onclick="switchTab('mais')">
+    <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+    <span>Mais</span>
   </button>
 </nav>
 
@@ -904,36 +890,6 @@
     <div class="dd-section-lbl" style="margin-top:20px">Gastos do dia</div>
     <div id="exp-list"></div>
     <div class="empty-state" id="exp-empty-msg">Nenhum gasto lançado</div>
-  </div>
-</div>
-
-<!-- Mais opções -->
-<div class="overlay" id="modal-more">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title">Mais</div>
-    <div class="more-grid">
-      <button class="more-item" onclick="switchMore('fixos')">
-        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
-        <span>Fixos</span>
-      </button>
-      <button class="more-item" onclick="switchMore('conversor')">
-        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4 4 4"/><path d="M17 8v12m0 0 4-4m-4 4-4-4"/></svg></span>
-        <span>Conversor</span>
-      </button>
-      <button class="more-item" onclick="switchMore('pendencias')">
-        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 12 2 2 4-4"/></svg></span>
-        <span>Pendências</span>
-      </button>
-      <button class="more-item" onclick="switchMore('patrimonio')">
-        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="4" height="8" rx="1"/><rect x="9" y="8" width="4" height="14" rx="1"/><rect x="16" y="4" width="4" height="18" rx="1"/></svg></span>
-        <span>Patrimônio</span>
-      </button>
-      <button class="more-item" onclick="switchMore('ajustes')">
-        <span class="more-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg></span>
-        <span>Ajustes</span>
-      </button>
-    </div>
   </div>
 </div>
 
@@ -1421,7 +1377,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=84" defer></script>
+<script src="app.js?v=85" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

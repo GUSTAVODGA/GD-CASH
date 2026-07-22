@@ -72,9 +72,9 @@ function initFirebase() {
       }
       initSettingsExtras();
       checkNotifPrompt();
-      // FAB só na aba Semana
+      // FAB "+" visível nas abas de conteúdo; boot inicia no Início, então exibe.
       const fab = document.getElementById('global-fab');
-      if (fab) fab.style.display = 'none';
+      if (fab) fab.style.display = '';
       // Defer non-critical checks so the first paint completes before they run
       setTimeout(() => {
         checkGoalNotifications();
@@ -435,10 +435,68 @@ function refreshAfterDayEdit() {
 }
 
 // ── Mais / FAB ──
-function openMoreMenu() { openOverlay('modal-more'); }
-function switchMore(tab) {
-  closeOverlayNav('modal-more');
-  switchTab(tab);
+// "Mais" agora é uma aba real. Estes wrappers mantêm compatibilidade com
+// chamadas/testes antigos.
+function openMoreMenu() { switchTab('mais'); }
+function switchMore(tab) { switchTab(tab, 'mais'); }
+// Voltar de uma tela interna → volta à origem (Mais ou Início).
+function navBack() { switchTab(_navOrigin || 'mais'); }
+// Engrenagem do cabeçalho → abre Ajustes direto, preservando a origem
+// (volta para a aba principal em que o usuário estava).
+function openAjustesFromGear() { switchTab('ajustes', _currentMainTab || 'inicio'); }
+
+// ── Aba MAIS: hub de telas secundárias e ferramentas ──
+function _maisChevron() {
+  return '<svg class="mais-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"/></svg>';
+}
+function renderMais() {
+  const root = document.getElementById('mais-root');
+  if (!root) return;
+  const pendAbertas = (D.pendencias || []).filter(p => p.status === 'aberta').length;
+  const fixTotal = (D.fixedExpenses || []).filter(f => !f.paused).reduce((s, f) => s + f.amount, 0);
+  const resCur = (D.emergency && D.emergency.current) || 0;
+  const resTgt = (D.emergency && D.emergency.target) || 0;
+  const resPct = resTgt > 0 ? Math.min(100, Math.round(resCur / resTgt * 100)) : 0;
+  const net = _patNetTotals(_patUnifiedItems()).net;
+  const themeLbls = { light:'Claro', dark:'Escuro', auto:'Automático' };
+  const theme = themeLbls[localStorage.getItem('gdcash_theme') || 'auto'] || 'Automático';
+
+  const item = (tab, icon, title, info) => `
+    <button class="mais-item" onclick="switchTab('${tab}','mais')">
+      <span class="mais-ico">${icon}</span>
+      <span class="mais-body">
+        <span class="mais-title">${title}</span>
+        ${info ? `<span class="mais-info">${info}</span>` : ''}
+      </span>
+      ${_maisChevron()}
+    </button>`;
+
+  const ICO = {
+    pend: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 12 2 2 4-4"/></svg>',
+    fix:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
+    res:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    pat:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="4" height="8" rx="1"/><rect x="9" y="8" width="4" height="14" rx="1"/><rect x="16" y="4" width="4" height="18" rx="1"/></svg>',
+    conv: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>',
+    adj:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>',
+  };
+
+  root.innerHTML = `
+    <div class="sec-label mais-sec">Resumos</div>
+    <div class="mais-group">
+      ${item('pendencias', ICO.pend, 'Pendências', pendAbertas > 0 ? `${pendAbertas} em aberto` : 'Nenhuma em aberto')}
+      ${item('fixos', ICO.fix, 'Gastos Fixos', `${R(fixTotal)} / mês`)}
+      ${item('reserva', ICO.res, 'Reserva de Emergência', resTgt > 0 ? `${R(resCur)} · ${resPct}% da meta` : R(resCur))}
+      ${item('patrimonio', ICO.pat, 'Patrimônio', `Líquido ${R(net)}`)}
+    </div>
+    <div class="sec-label mais-sec">Ferramentas</div>
+    <div class="mais-group">
+      ${item('conversor', ICO.conv, 'Conversor de Moedas', '')}
+    </div>
+    <div class="sec-label mais-sec">Aplicativo</div>
+    <div class="mais-group">
+      ${item('ajustes', ICO.adj, 'Ajustes', `${currSym} · ${theme}`)}
+    </div>
+    <div class="mais-bottom-spacer"></div>`;
 }
 
 let _fabOpen = false;
@@ -2443,18 +2501,28 @@ new MutationObserver((mutations) => {
 // ══════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════
-function switchTab(tab) {
+// Abas reais da navegação inferior e telas internas acessadas por "Mais".
+const MAIN_TABS = ['inicio','semana','mes','mais'];
+const INTERNAL_TABS = ['pendencias','fixos','reserva','patrimonio','conversor','ajustes','metas','lembretes'];
+var _currentMainTab = 'inicio';        // última aba principal ativa (p/ engrenagem)
+var _navOrigin      = 'mais';           // origem do Voltar de telas internas
+
+function switchTab(tab, origin) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   const page = document.getElementById('page-'+tab);
   if (!page) return;
   page.classList.add('active');
-  document.querySelector(`[data-tab="${tab}"]`)?.classList.add('active');
-  // Highlight "Mais" button for secondary tabs
-  const moreTabs = ['fixos','conversor','ajustes','lembretes','pendencias','patrimonio'];
+  // Rastreio de origem/aba principal para Voltar e engrenagem.
+  if (MAIN_TABS.includes(tab)) _currentMainTab = tab;
+  if (INTERNAL_TABS.includes(tab)) _navOrigin = MAIN_TABS.includes(origin) ? origin : 'mais';
+  // Destaque da bottom-nav: aba real quando principal; senão, a origem (mais/início).
+  const navTab = MAIN_TABS.includes(tab) ? tab : (MAIN_TABS.includes(_navOrigin) ? _navOrigin : 'mais');
+  document.querySelector(`[data-tab="${navTab}"]`)?.classList.add('active');
   if(tab==='inicio')    { renderInicio(); } /* renderInicioCards already called inside renderInicio */
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
+  if(tab==='mais')      renderMais();
   if(tab==='reserva')   renderReserva();
   if(tab==='metas')     renderGoals();
   if(tab==='fixos')      renderFixos();
@@ -2463,9 +2531,10 @@ function switchTab(tab) {
   if(tab==='lembretes')  renderLembretes();
   if(tab==='pendencias') renderPendencias();
   if(tab==='patrimonio') renderPatrimonio();
-  // Show FAB only on main tabs
+  // FAB "+" (novo lançamento): visível nas abas de conteúdo Início/Semana/Mês;
+  // oculto em Mais e telas internas (que têm suas próprias ações).
   const fab = document.getElementById('global-fab');
-  if (fab) fab.style.display = tab === 'semana' ? '' : 'none';
+  if (fab) fab.style.display = (tab==='inicio' || tab==='semana' || tab==='mes') ? '' : 'none';
   // FAB do Patrimônio só existe na aba patrimonio (renderPatrimonio decide a view)
   const patFab = document.getElementById('pat-fab');
   if (patFab && tab !== 'patrimonio') { patFab.style.display = 'none'; closePatSheet(); }
@@ -3570,7 +3639,7 @@ function renderHomeNew() {
         const assetName = _pendAssetName(p);
         const catLbl = (PEND_CAT_LABELS[p.category] || p.category || '').replace(/^[^\p{L}]*\s*/u, '');
         const ctx = [assetName, catLbl].filter(Boolean).join(' · ');
-        return `<div class="hc-pend-item" onclick="switchTab('pendencias')">
+        return `<div class="hc-pend-item" onclick="switchTab('pendencias','inicio')">
           <div class="hc-pend-bar ${barCls}"></div>
           <div class="hc-pend-info">
             <div class="hc-pend-name">${p.title}</div>
@@ -4314,7 +4383,7 @@ function renderPendInicio() {
   const vencidas = abertas.filter(p => p.deadline && p.deadline < hoje).length;
   const totalEst = abertas.reduce((s, p) => s + (p.estimatedValue || 0), 0);
   el.innerHTML = `
-    <div class="pend-inicio-header" onclick="switchMore('pendencias')">
+    <div class="pend-inicio-header" onclick="switchTab('pendencias','inicio')">
       <span class="pend-inicio-title">📋 Pendências</span>
       <span class="pend-inicio-link">Ver todas →</span>
     </div>
