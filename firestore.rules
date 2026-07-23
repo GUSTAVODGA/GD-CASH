@@ -1,0 +1,54 @@
+rules_version = '2';
+
+// ══════════════════════════════════════════════════════════════════
+// GD-CASH — Regras do Cloud Firestore
+//
+// Modelo de dados real do app:
+//   users/{uid}/data/main   → um único documento por usuário contendo TODO
+//   o objeto de dados (lançamentos, receitas, gastos, pendências, gastos
+//   fixos, reserva, patrimônios, veículos, imóveis, financiamentos,
+//   históricos, configurações, perfil e fotos em data URI base64).
+//
+// Isolamento: por CAMINHO. O uid do documento é o dono. Ninguém além do
+// próprio dono autenticado pode ler, listar, criar, editar ou excluir.
+// Padrão deny-all: qualquer caminho não coberto abaixo é negado.
+//
+// IMPORTANTE: as regras do Firestore são OR entre TODOS os match que
+// batem no caminho — por isso NÃO há um match amplo `{sub=**}` que
+// pudesse anular a validação abaixo. Só o caminho conhecido é liberado.
+// ══════════════════════════════════════════════════════════════════
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+    // Validação mínima que NÃO quebra gravações legítimas do app.
+    // (O app grava o objeto D inteiro; validação profunda por campo exigiria
+    //  refatoração de schema e está fora do escopo seguro deste incidente.)
+    function validUserDoc() {
+      let d = request.resource.data;
+      return d is map
+        && d.size() < 500
+        && (!('updatedAt' in d) || d.updatedAt is number);
+    }
+
+    // ── Único caminho de dados privados: users/{uid}/data/main ──
+    //    Menor privilégio: apenas o documento 'main' do próprio dono.
+    //    Documentos arbitrários dentro de /data caem no deny-all abaixo.
+    match /users/{uid}/data/main {
+      allow read:           if isOwner(uid);
+      allow create, update: if isOwner(uid) && validUserDoc();
+      // O app nunca apaga o documento; preservamos os dados por padrão.
+      allow delete:         if false;
+    }
+
+    // ── Deny-all explícito para qualquer outro caminho ──
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

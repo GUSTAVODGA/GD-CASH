@@ -86,6 +86,7 @@ function initFirebase() {
       }, 100);
     } else {
       currentUser = null;
+      _clearPrivateSession();   // remove dados do usuário anterior (memória + cache local)
       loginScreen.style.display = 'flex';
       avatarBtn.style.display   = 'none';
     }
@@ -785,6 +786,21 @@ function _flushCloudSync() {
   if (!_cloudSyncPending || !currentUser || !db) return;
   clearTimeout(_saveCloudTimer);
   saveToCloud();
+}
+
+// SEGURANÇA: ao sair ou trocar de conta, remove QUALQUER dado do usuário
+// anterior. O app não usa onSnapshot (apenas get() pontual), então não há
+// listeners a cancelar além do timer de gravação; zeramos memória e o cache
+// local privado para que nenhuma informação persista no dispositivo.
+function _clearPrivateSession() {
+  try { clearTimeout(_saveCloudTimer); } catch (e) {}
+  _cloudSyncPending  = false;
+  _saveCloudInFlight = false;
+  D = defaultData();
+  try {
+    localStorage.removeItem('gdcash_v1');
+    localStorage.removeItem('gdcash_migration_backup_v1');
+  } catch (e) {}
 }
 
 function exportData() {

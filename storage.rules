@@ -1,0 +1,22 @@
+rules_version = '2';
+
+// ══════════════════════════════════════════════════════════════════
+// GD-CASH — Regras do Cloud Storage
+//
+// O app NÃO usa Cloud Storage: fotos de veículos/patrimônio são gravadas
+// como data URI base64 dentro do documento Firestore do próprio usuário.
+// Portanto, negamos TODO acesso ao Storage (deny-all). Se um dia fotos
+// migrarem para o Storage, substituir por regras por-uid:
+//   match /users/{uid}/{allPaths=**} {
+//     allow read, write: if request.auth != null && request.auth.uid == uid
+//       && request.resource.size < 5 * 1024 * 1024
+//       && request.resource.contentType.matches('image/.*');
+//   }
+// ══════════════════════════════════════════════════════════════════
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
