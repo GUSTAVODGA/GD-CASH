@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=74">
+<link rel="stylesheet" href="style.css?v=75">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -534,44 +534,52 @@
     <button class="tab-help-btn" onclick="showTabHelp('conversor')">?</button>
   </div>
   <div class="card av-card conv-card">
-    <div class="conv-row">
-      <div class="conv-field">
-        <label class="conv-label">Valor</label>
-        <input class="fi conv-input" type="number" id="conv-amount" placeholder="0" min="0" step="any" oninput="convertCurrency()">
-      </div>
-      <div class="conv-field">
-        <label class="conv-label">De</label>
-        <select class="fi conv-select" id="conv-from" onchange="convertCurrency()">
-          <option value="brl">🇧🇷 Real (BRL)</option>
-          <option value="usd">🇺🇸 Dólar (USD)</option>
-          <option value="eur">🇪🇺 Euro (EUR)</option>
-          <option value="gbp">🇬🇧 Libra (GBP)</option>
-        </select>
-      </div>
+    <div class="conv-field">
+      <label class="conv-label" for="conv-amount">Valor</label>
+      <input class="fi conv-input" type="text" inputmode="decimal" id="conv-amount" placeholder="0,00" autocomplete="off" oninput="convertCurrency()">
     </div>
 
-    <button class="conv-swap-btn" onclick="swapCurrencies()" title="Inverter moedas">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
-      </svg>
-    </button>
+    <div class="conv-field">
+      <label class="conv-label" for="conv-from">De</label>
+      <select class="fi conv-select" id="conv-from" onchange="convertCurrency()">
+        <option value="brl">BRL — Real</option>
+        <option value="usd">USD — Dólar</option>
+        <option value="eur">EUR — Euro</option>
+        <option value="gbp">GBP — Libra</option>
+      </select>
+    </div>
+
+    <div class="conv-swap-row">
+      <button class="conv-swap-btn" onclick="swapCurrencies()" aria-label="Inverter moedas de origem e destino" title="Inverter moedas">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/>
+        </svg>
+      </button>
+    </div>
 
     <div class="conv-field">
-      <label class="conv-label">Para</label>
+      <label class="conv-label" for="conv-to">Para</label>
       <select class="fi conv-select" id="conv-to" onchange="convertCurrency()">
-        <option value="usd">🇺🇸 Dólar (USD)</option>
-        <option value="brl">🇧🇷 Real (BRL)</option>
-        <option value="eur">🇪🇺 Euro (EUR)</option>
-        <option value="gbp">🇬🇧 Libra (GBP)</option>
+        <option value="usd">USD — Dólar</option>
+        <option value="brl">BRL — Real</option>
+        <option value="eur">EUR — Euro</option>
+        <option value="gbp">GBP — Libra</option>
       </select>
     </div>
 
     <div class="conv-result-box">
+      <div class="conv-result-lbl">Resultado</div>
       <div class="conv-result" id="conv-result">—</div>
       <div class="conv-rate" id="conv-rate"></div>
     </div>
     <div class="conv-updated" id="conv-updated"></div>
+
+    <div class="conv-actions">
+      <button class="btn btn-secondary conv-act" id="conv-refresh" onclick="refreshConvRates()">Atualizar cotação</button>
+      <button class="btn btn-secondary conv-act" id="conv-copy" onclick="copyConvResult()">Copiar resultado</button>
+    </div>
   </div>
+  <div class="fixed-bottom-spacer"></div>
 </section>
 
 <!-- ════ AJUSTES ════ -->
@@ -1418,7 +1426,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=88" defer></script>
+<script src="app.js?v=89" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

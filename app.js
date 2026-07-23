@@ -2688,51 +2688,135 @@ function switchTab(tab, origin) {
 // ══════════════════════════════════════════
 // CONVERSOR DE MOEDAS
 // ══════════════════════════════════════════
+// Fonte da cotação (INALTERADA): API pública fawazahmed0/currency-api via CDN jsdelivr,
+// base BRL. convRates[x] = quantos x por 1 BRL. Cache local apenas da última cotação
+// bem-sucedida (chave própria; não altera dados de outras áreas).
+const CONV_CACHE_KEY = 'gdcash_conv_rates';
+const CONV_SYMBOLS = { brl: 'R$', usd: 'US$', eur: '€', gbp: '£' };
 let convRates = null;
-let convRatesLoaded = false;
+let convRatesSource = null;   // 'live' | 'cache' | null
+let convRatesDate = null;     // data da cotação (da API)
+let convRatesFetchedAt = null;
 
-async function loadConversorRates() {
-  if (convRatesLoaded) { convertCurrency(); return; }
-  const rateEl   = document.getElementById('conv-rate');
-  const updatedEl= document.getElementById('conv-updated');
-  if (rateEl) rateEl.textContent = 'Buscando cotação...';
-  try {
-    const res  = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/brl.json');
-    const data = await res.json();
-    convRates = { ...data.brl, brl: 1 };
-    convRatesLoaded = true;
-    if (updatedEl) updatedEl.textContent = 'Cotação do dia: ' + data.date;
-    convertCurrency();
-  } catch {
-    if (rateEl) rateEl.textContent = 'Sem conexão. Verifique a internet.';
+function _convFmt(v, cur) {
+  return `${CONV_SYMBOLS[cur] || ''} ${(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+function _convFmtRate(v, cur) {
+  const dec = Math.abs(v) < 1 ? 4 : 2; // evita "0,00" em taxas pequenas
+  return `${CONV_SYMBOLS[cur] || ''} ${(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: dec })}`;
+}
+// Aceita vírgula/ponto e valores colados formatados (pt-BR ou en). Nunca NaN, nunca negativo.
+function _convParseAmount(str) {
+  if (str == null) return 0;
+  let s = String(str).trim().replace(/[^\d.,-]/g, '');
+  if (!s) return 0;
+  const hasComma = s.includes(','), hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    // separador decimal = o que aparece por último; o outro é milhar
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (hasComma) {
+    s = s.replace(',', '.');
+  }
+  const n = parseFloat(s);
+  return (isNaN(n) || n < 0) ? 0 : n;
+}
+function _convCacheRead() {
+  try { const s = localStorage.getItem(CONV_CACHE_KEY); if (s) return JSON.parse(s); } catch (e) {}
+  return null;
+}
+function _convFmtWhen(ts, date) {
+  if (ts) { try { return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) {} }
+  return date || '';
+}
+function _convSetStatus(state) {
+  const updatedEl = document.getElementById('conv-updated');
+  const refreshEl = document.getElementById('conv-refresh');
+  if (!updatedEl) return;
+  updatedEl.classList.remove('conv-cache', 'conv-error');
+  if (refreshEl) refreshEl.textContent = 'Atualizar cotação';
+  if (state === 'loading') {
+    updatedEl.textContent = 'Buscando cotação…';
+    if (refreshEl) refreshEl.textContent = 'Buscando…';
+  } else if (state === 'live') {
+    updatedEl.textContent = 'Atualizado em: ' + _convFmtWhen(convRatesFetchedAt, convRatesDate);
+  } else if (state === 'cache') {
+    updatedEl.textContent = 'Cotação armazenada — atualizada em ' + _convFmtWhen(convRatesFetchedAt, convRatesDate);
+    updatedEl.classList.add('conv-cache');
+  } else if (state === 'error') {
+    updatedEl.textContent = 'Conexão necessária para obter a cotação. Toque em Atualizar para tentar de novo.';
+    updatedEl.classList.add('conv-error');
+    const rateEl = document.getElementById('conv-rate');
+    const resEl = document.getElementById('conv-result');
+    if (rateEl) rateEl.textContent = '';
+    if (resEl) resEl.textContent = '—';
   }
 }
 
+async function loadConversorRates(force) {
+  // Já temos cotação VIVA nesta sessão e não é atualização forçada → só recalcula.
+  if (convRates && convRatesSource === 'live' && !force) { convertCurrency(); return; }
+  _convSetStatus('loading');
+  try {
+    const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/brl.json');
+    if (!res.ok) throw new Error('http ' + res.status);
+    const data = await res.json();
+    if (!data || !data.brl) throw new Error('payload');
+    convRates = { ...data.brl, brl: 1 };
+    convRatesSource = 'live';
+    convRatesDate = data.date || null;
+    convRatesFetchedAt = Date.now();
+    try { localStorage.setItem(CONV_CACHE_KEY, JSON.stringify({ rates: convRates, date: convRatesDate, fetchedAt: convRatesFetchedAt })); } catch (e) {}
+    _convSetStatus('live');
+    convertCurrency();
+  } catch (e) {
+    // Offline / API falhou → usa cache identificado, senão estado de erro claro.
+    const cache = _convCacheRead();
+    if (cache && cache.rates) {
+      convRates = cache.rates; convRatesSource = 'cache';
+      convRatesDate = cache.date || null; convRatesFetchedAt = cache.fetchedAt || null;
+      _convSetStatus('cache');
+      convertCurrency();
+    } else {
+      convRates = null; convRatesSource = null;
+      _convSetStatus('error');
+    }
+  }
+}
+function refreshConvRates() { loadConversorRates(true); }
+
 function convertCurrency() {
-  if (!convRates) return;
-  const amount = parseFloat(document.getElementById('conv-amount').value) || 0;
-  const from   = document.getElementById('conv-from').value;
-  const to     = document.getElementById('conv-to').value;
-
-  // convRates[x] = how many x per 1 BRL
-  const inBRL  = amount / convRates[from];
-  const result = inBRL  * convRates[to];
-  const rate   = convRates[to] / convRates[from];
-
-  const SYMBOLS = { brl: 'R$', usd: 'US$', eur: '€', gbp: '£' };
-  const fmt = (v, cur) => `${SYMBOLS[cur]} ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-  document.getElementById('conv-result').textContent = amount > 0 ? fmt(result, to) : '—';
-  document.getElementById('conv-rate').textContent   = `1 ${from.toUpperCase()} = ${fmt(rate, to)}`;
+  const resEl = document.getElementById('conv-result');
+  const rateEl = document.getElementById('conv-rate');
+  if (!resEl) return;
+  const amount = _convParseAmount((document.getElementById('conv-amount') || {}).value);
+  const from = (document.getElementById('conv-from') || {}).value;
+  const to = (document.getElementById('conv-to') || {}).value;
+  if (!convRates || !from || !to) { resEl.textContent = '—'; return; } // sem cotação → não calcula
+  const inBRL = amount / convRates[from];
+  const result = inBRL * convRates[to];
+  const rate = convRates[to] / convRates[from];
+  resEl.textContent = amount > 0 ? _convFmt(result, to) : '—';
+  if (rateEl) rateEl.textContent = `1 ${from.toUpperCase()} = ${_convFmtRate(rate, to)}`;
 }
 
 function swapCurrencies() {
   const fromEl = document.getElementById('conv-from');
   const toEl   = document.getElementById('conv-to');
+  if (!fromEl || !toEl) return;
   const tmp    = fromEl.value;
   fromEl.value = toEl.value;
   toEl.value   = tmp;
   convertCurrency();
+}
+function copyConvResult() {
+  const txt = (document.getElementById('conv-result') || {}).textContent || '';
+  if (!txt || txt === '—') { gdToast('Nada para copiar ainda.', { type: 'error' }); return; }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(() => gdToast('Resultado copiado.', { type: 'success' })).catch(() => gdToast('Não foi possível copiar.', { type: 'error' }));
+  } else {
+    gdToast('Cópia não suportada neste dispositivo.', { type: 'error' });
+  }
 }
 
 // ══════════════════════════════════════════
