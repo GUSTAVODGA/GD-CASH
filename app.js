@@ -2350,23 +2350,48 @@ function renderFixos() {
     const overDue = !paused && f.dueDay && f.dueDay < todayDay;
     const dueCls = nearDue ? ' fixed-due-near' : overDue ? ' fixed-due-over' : '';
     const dueTxt = f.dueDay ? ` · <span class="fixed-due-lbl${dueCls}">Vence dia ${f.dueDay}</span>` : '';
-    const pauseIcon = paused
-      ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
-      : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
     return `
       <div class="fixed-item av-item${nearDue ? ' fixed-near-due' : ''}${paused ? ' fixed-paused' : ''}">
         <div class="fixed-info">
-          <div class="fixed-name">${f.name}${paused ? ' <span class="fixed-paused-badge">pausado</span>' : ''}</div>
+          <div class="fixed-name">${f.name}${paused ? ' <span class="fixed-status">Pausado</span>' : ''}</div>
           <div class="fixed-meta">${f.category}${dueTxt}</div>
         </div>
         <div class="fixed-right">
           <span class="fixed-amt">${R(f.amount)}</span>
-          <button class="icon-btn icon-btn-pause" onclick="toggleFixedPaused('${f.id}')" title="${paused?'Reativar':'Pausar'}">${pauseIcon}</button>
-          <button class="icon-btn" onclick="openFixedModal('${f.id}')" title="Editar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-          <button class="icon-btn icon-btn-del" onclick="deleteFixed('${f.id}')" title="Excluir"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+          <div class="fixed-actions">
+            <button class="fixed-pause-btn${paused ? ' fixed-pause-btn-on' : ''}" onclick="toggleFixedPaused('${f.id}')">${paused ? 'Reativar' : 'Pausar'}</button>
+            <button class="fixed-kebab" onclick="openFixedMenu('${f.id}')" aria-label="Mais ações">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+            </button>
+          </div>
         </div>
       </div>`;
   }).join('');
+}
+// ── Kebab de ações secundárias (Editar / Excluir) ──
+var _fixedMenuTarget = null;
+function openFixedMenu(id) {
+  _fixedMenuTarget = id;
+  const f = (D.fixedExpenses || []).find(x => x.id === id);
+  const t = document.getElementById('fmenu-title');
+  if (t) t.textContent = f ? f.name : 'Gasto fixo';
+  openOverlay('fixed-menu-sheet');
+}
+function fixedMenuEdit() {
+  closeOverlay('fixed-menu-sheet');
+  if (_fixedMenuTarget) openFixedModal(_fixedMenuTarget);
+}
+function fixedMenuDelete() {
+  closeOverlay('fixed-menu-sheet');
+  const id = _fixedMenuTarget;
+  if (!id) return;
+  gdConfirm({
+    title: 'Excluir gasto fixo',
+    msg: 'Deseja excluir este gasto fixo permanentemente?',
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => { deleteFixed(id); haptic(10); gdToast('Gasto fixo excluído.', { type: 'success' }); },
+  });
 }
 function toggleFixedPaused(id) {
   const idx = D.fixedExpenses.findIndex(f => f.id === id);

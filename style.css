@@ -727,16 +727,38 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .res-q-btn{flex:1}
 
 /* ── Fixos ── */
-.fixed-total-card{text-align:center;margin-bottom:14px}
-.fixed-total-lbl{font-size:12px;color:var(--text2);font-weight:600}
-.fixed-total-val{font-size:36px;font-weight:900;color:var(--red);margin-top:6px;letter-spacing:-1px}
-.fixed-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+/* Card do total — compacto, valor sempre inteiro (sem corte) */
+.fixed-total-card{text-align:center;margin-bottom:14px;padding:13px 16px}
+.fixed-total-lbl{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.fixed-total-val{font-size:clamp(24px,7.5vw,32px);font-weight:900;color:var(--red);margin-top:3px;letter-spacing:-.5px;line-height:1.1;white-space:nowrap;overflow-wrap:normal}
+/* Item compacto: info à esquerda; valor + ações empilhados à direita */
+.fixed-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .fixed-item:last-child{border-bottom:none}
 .fixed-info{flex:1;min-width:0}
-.fixed-name{font-size:14px;font-weight:700}
-.fixed-meta{font-size:12px;color:var(--text3)}
-.fixed-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.fixed-amt{font-weight:800;color:var(--red)}
+.fixed-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fixed-meta{font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.fixed-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.fixed-amt{font-weight:800;color:var(--red);font-variant-numeric:tabular-nums;white-space:nowrap}
+.fixed-actions{display:flex;align-items:center;gap:6px}
+.fixed-status{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;vertical-align:middle}
+/* Ação direta única: Pausar / Reativar (pill compacto) */
+.fixed-pause-btn{
+  background:var(--ol1);border:1px solid var(--border);color:var(--text);
+  border-radius:16px;padding:4px 11px;font-size:12px;font-weight:600;cursor:pointer;
+  white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:background .15s;
+}
+.fixed-pause-btn:active{background:var(--ol2)}
+.fixed-pause-btn-on{color:var(--ac);border-color:var(--ac-b);background:var(--ac-t)}
+.fixed-kebab{
+  display:flex;align-items:center;justify-content:center;width:32px;height:32px;
+  border-radius:8px;border:none;background:none;color:var(--text3);cursor:pointer;flex-shrink:0;
+  -webkit-tap-highlight-color:transparent;transition:background .15s;
+}
+.fixed-kebab:active{background:var(--ol1)}
+.fixed-kebab:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+/* Botão criar + folga acima da bottom-nav (safe-area) */
+.fixed-add-btn{width:100%}
+.fixed-bottom-spacer{height:calc(96px + env(safe-area-inset-bottom,0px))}
 .fixed-del{background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:4px}
 .fab{
   position:fixed;right:18px;bottom:calc(86px + env(safe-area-inset-bottom,0px));z-index:55;
@@ -2850,9 +2872,9 @@ select.form-select {
 .fixed-due-lbl.fixed-due-over { color: var(--red); }
 
 /* ── Fixos paused state ── */
-.fixed-paused { opacity: .5; }
-.fixed-paused .fixed-name { text-decoration: line-through; }
-.fixed-paused-badge { font-size: 10px; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: .04em; vertical-align: middle; text-decoration: none !important; }
+/* Pausado: atenuado mas legível; sem line-through. O valor não entra no total. */
+.fixed-paused { opacity: .62; }
+.fixed-paused .fixed-amt { color: var(--text3); }
 .icon-btn-pause { color: var(--text3); }
 
 /* ══════════════════════════════════════════
