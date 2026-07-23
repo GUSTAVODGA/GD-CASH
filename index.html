@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=73">
+<link rel="stylesheet" href="style.css?v=74">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -343,34 +343,37 @@
     <button class="tab-help-btn" onclick="showTabHelp('reserva')">?</button>
   </div>
   <div class="card av-card res-hero">
-    <div class="res-ring-wrap">
-      <svg viewBox="0 0 160 160">
-        <defs>
-          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#2563EB"/>
-            <stop offset="100%" stop-color="#5B8AF5"/>
-          </linearGradient>
-        </defs>
-        <circle class="ring-bg" cx="80" cy="80" r="68"/>
-        <circle class="ring-fill" id="res-ring-fill" cx="80" cy="80" r="68"/>
-      </svg>
-      <div class="res-ring-center">
-        <div class="res-ring-lbl">Reserva</div>
-        <div class="res-ring-val" id="res-total">$ 0,00</div>
-        <div class="res-ring-pct" id="res-pct">0%</div>
+    <div class="res-hero-row">
+      <div class="res-ring-wrap res-ring-mini">
+        <svg viewBox="0 0 160 160">
+          <defs>
+            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#2563EB"/>
+              <stop offset="100%" stop-color="#5B8AF5"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="80" cy="80" r="68"/>
+          <circle class="ring-fill" id="res-ring-fill" cx="80" cy="80" r="68"/>
+        </svg>
+        <div class="res-ring-center"><div class="res-ring-pct" id="res-pct">0%</div></div>
+      </div>
+      <div class="res-hero-head">
+        <div class="res-lbl">Saldo da reserva</div>
+        <div class="res-sub" id="res-pct-line">0% da meta</div>
       </div>
     </div>
+    <div class="res-saldo" id="res-total">$ 0,00</div>
+    <div class="res-meta-row" id="res-meta">Meta: $ 0,00</div>
   </div>
-  <div class="res-meta-row" id="res-meta">Meta: $ 0,00</div>
 
   <div class="res-actions">
-    <button class="pill pill-dep" onclick="openResModal('dep')">＋ Adicionar</button>
-    <button class="pill pill-ret" onclick="openResModal('ret')">－ Retirar</button>
-    <button class="pill pill-meta" onclick="openResModal('meta')">🎯 Meta</button>
+    <button class="btn btn-primary res-add" onclick="openResModal('dep')">+ Adicionar</button>
+    <button class="btn btn-secondary res-withdraw" onclick="openResModal('ret')">Retirar</button>
   </div>
 
   <div class="sec-title av-sec-title">Histórico</div>
   <div class="card av-card"><div id="res-history"></div></div>
+  <div class="fixed-bottom-spacer"></div>
 </section>
 
 <!-- ════ METAS ════ -->
@@ -772,6 +775,25 @@
         </button>
       </div>
       <button class="btn btn-secondary" style="width:100%" onclick="closeOverlay('fixed-menu-sheet')">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Bottom sheet: ações de uma movimentação da reserva (Editar / Excluir) -->
+  <div class="overlay" id="res-menu-sheet" onclick="if(event.target===this)closeOverlay('res-menu-sheet')">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="rmenu-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Movimentação</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        <button class="av-sheet-opt" onclick="resMenuEdit()" aria-label="Editar movimentação">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--text)">Editar</span>
+        </button>
+        <button class="av-sheet-opt" onclick="resMenuDelete()" aria-label="Excluir movimentação">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--rd)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          <span style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--rd)">Excluir</span>
+        </button>
+      </div>
+      <button class="btn btn-secondary" style="width:100%" onclick="closeOverlay('res-menu-sheet')">Cancelar</button>
     </div>
   </div>
 
@@ -1396,7 +1418,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=87" defer></script>
+<script src="app.js?v=88" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

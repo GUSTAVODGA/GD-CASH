@@ -1549,35 +1549,104 @@ function pickMonth(year, month) {
 // ══════════════════════════════════════════
 // RENDER: RESERVA
 // ══════════════════════════════════════════
+// ── FONTE ÚNICA DA VERDADE da Reserva ──
+// A validação usa ORDEM CRONOLÓGICA (data real), NUNCA a ordem física do array
+// (que pode estar do mais recente para o mais antigo). Desempate estável por
+// ÍNDICE ORIGINAL do array (determinístico). A ordem persistida não é alterada.
+function _reservaChrono(hist) {
+  return (hist || []).map((h, i) => ({ h, i }))
+    .sort((a, b) => (a.h.date < b.h.date ? -1 : a.h.date > b.h.date ? 1 : 0) || (a.i - b.i))
+    .map(x => x.h);
+}
+// Saldo total = soma de todos os movimentos (independe da ordem).
+function _reservaSaldo(hist) {
+  return (hist || D.reservaHistory || []).reduce((s, h) => h.type === 'dep' ? s + h.amount : s - h.amount, 0);
+}
+// Avalia o saldo corrente em ordem CRONOLÓGICA: total, mínimo global e o saldo
+// imediatamente ANTES de cada movimento (por id) — para mensagens de "disponível".
+function _reservaEval(hist) {
+  const sorted = _reservaChrono(hist);
+  let s = 0, min = 0; const before = {};
+  for (const h of sorted) { before[h.id] = s; s += h.type === 'dep' ? h.amount : -h.amount; if (s < min) min = s; }
+  return { total: s, min, before };
+}
+// Histórico válido se o saldo cronológico nunca fica negativo em nenhum ponto.
+function _reservaHistoryValid(hist) { return _reservaEval(hist).min >= -1e-9; }
+// Detecta inconsistência de dados LEGADOS sem alterar nada (recomendação manual).
+function _reservaLegacyCheck() {
+  const computed = _reservaSaldo(D.reservaHistory);
+  const stored = (D.emergency && D.emergency.current) || 0;
+  const hasNegativePoint = !_reservaHistoryValid(D.reservaHistory);
+  return { consistent: Math.abs(computed - stored) < 0.005 && !hasNegativePoint, stored, computed, hasNegativePoint };
+}
+
 function renderReserva() {
+  // Regra preservada: saldo = D.emergency.current; pct = min(100, current/target*100)
+  // quando target>0, senão 0. Nada de percentual quando não há meta.
   const emg = D.emergency;
-  const pct = emg.target > 0 ? Math.min(100, (emg.current / emg.target) * 100) : 0;
-  document.getElementById('res-total').textContent = R(emg.current);
-  document.getElementById('res-pct').textContent = `${Math.round(pct)}%`;
+  const cur = emg.current || 0;
+  const tgt = emg.target || 0;
+  const hasMeta = tgt > 0;
+  const pct = hasMeta ? Math.min(100, (cur / tgt) * 100) : 0;
+  const atMeta = hasMeta && cur >= tgt;
+
+  document.getElementById('res-total').textContent = R(cur);
+  document.getElementById('res-pct').textContent = hasMeta ? `${Math.round(pct)}%` : '—';
   const ring = document.getElementById('res-ring-fill');
   ring.style.strokeDasharray = `${RING_CIRC}`;
-  ring.style.strokeDashoffset = `${RING_CIRC * (1 - pct / 100)}`;
-  document.getElementById('res-meta').textContent =
-    `Meta: ${R(emg.target)} — faltam ${R(Math.max(0, emg.target - emg.current))}`;
+  ring.style.strokeDashoffset = `${RING_CIRC * (1 - pct / 100)}`; // >100% nunca deforma (pct capado)
+
+  const pctLine = document.getElementById('res-pct-line');
+  if (pctLine) pctLine.textContent = !hasMeta ? 'Sem meta definida' : (atMeta ? 'Meta atingida' : `${Math.round(pct)}% da meta`);
+
+  const metaEl = document.getElementById('res-meta');
+  if (metaEl) {
+    if (!hasMeta) {
+      metaEl.innerHTML = `<button class="res-meta-link" onclick="openResModal('meta')">Definir meta da reserva</button>`;
+    } else {
+      const faltaTxt = atMeta ? 'Meta atingida' : `Faltam <strong>${R(Math.max(0, tgt - cur))}</strong>`;
+      metaEl.innerHTML = `<span class="res-meta-info">Meta: <strong>${R(tgt)}</strong> · ${faltaTxt}</span>` +
+        `<button class="res-meta-link" onclick="openResModal('meta')">Editar meta</button>`;
+    }
+  }
+
   const hist = document.getElementById('res-history');
   hist.innerHTML = D.reservaHistory.length
     ? [...D.reservaHistory].reverse().map(h => {
-        const lbl = (h.type === 'dep' ? 'Aporte' : 'Retirada') + (h.note ? ` · ${h.note}` : '');
+        const dep = h.type === 'dep';
+        const sub = fmtShort(h.date) + (h.note ? ` · ${escHtml(h.note)}` : '');
         return `<div class="res-hist-item av-item">
           <div class="res-hist-info">
-            <div class="res-hist-lbl">${lbl}</div>
-            <div class="res-hist-date">${fmtShort(h.date)}</div>
+            <div class="res-hist-lbl">${dep ? 'Aporte' : 'Retirada'}</div>
+            <div class="res-hist-date">${sub}</div>
           </div>
-          <span class="res-hist-amt" style="color:${h.type === 'dep' ? 'var(--green)' : 'var(--red)'}">
-            ${h.type === 'dep' ? '+' : '−'}${R(h.amount)}
-          </span>
-          <div class="res-hist-btns">
-            <button class="res-hist-edit" onclick="editResHist('${h.id}')" title="Editar">✎</button>
-            <button class="res-hist-del" onclick="deleteResHist('${h.id}')" title="Excluir">✕</button>
-          </div>
+          <span class="res-hist-amt" style="color:${dep ? 'var(--gn)' : 'var(--rd)'}">${dep ? '+' : '−'}${R(h.amount)}</span>
+          <button class="res-hist-kebab" onclick="openResMenu('${h.id}')" aria-label="Mais ações">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+          </button>
         </div>`;
       }).join('')
-    : '<div class="empty-state">Nenhuma movimentação ainda</div>';
+    : `<div class="res-empty">
+         <div class="res-empty-msg">Nenhuma movimentação ainda. Seus aportes e retiradas aparecerão aqui.</div>
+         <button class="btn btn-primary res-empty-btn" onclick="openResModal('dep')">Adicionar primeiro aporte</button>
+       </div>`;
+}
+// ── Kebab de ações de uma movimentação (Editar / Excluir) ──
+var _resMenuTarget = null;
+function openResMenu(id) {
+  _resMenuTarget = id;
+  const h = (D.reservaHistory || []).find(x => x.id === id);
+  const t = document.getElementById('rmenu-title');
+  if (t) t.textContent = h ? (h.type === 'dep' ? 'Aporte' : 'Retirada') : 'Movimentação';
+  openOverlay('res-menu-sheet');
+}
+function resMenuEdit() {
+  closeOverlay('res-menu-sheet');
+  if (_resMenuTarget) editResHist(_resMenuTarget);
+}
+function resMenuDelete() {
+  closeOverlay('res-menu-sheet');
+  if (_resMenuTarget) deleteResHist(_resMenuTarget); // deleteResHist já pede confirmação (gdConfirm)
 }
 
 function openResModal(type) {
@@ -1606,8 +1675,23 @@ function saveResMove(type) {
   const dateEl = document.getElementById('rm-date');
   const date = (dateEl && dateEl.value) ? dateEl.value : todayStr();
   if (!val || val <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
-  D.emergency.current = type === 'dep' ? D.emergency.current + val : Math.max(0, D.emergency.current - val);
-  D.reservaHistory.push({ id: uid(), type, amount: val, note, date });
+  // Bloqueio de histórico legado inconsistente: nenhuma ADIÇÃO nova até corrigir
+  // manualmente o movimento problemático (evita normalizar/esconder a inconsistência).
+  if (!_reservaLegacyCheck().consistent) {
+    gdToast('Há uma movimentação antiga inconsistente na reserva. Edite ou exclua o movimento problemático para corrigir antes de adicionar novos.', { type: 'error' });
+    return;
+  }
+  const move = { id: uid(), type, amount: val, note, date };
+  // Retirada não pode exceder o saldo disponível em ordem cronológica (sem movimento parcial).
+  if (type === 'ret') {
+    const ev = _reservaEval([...D.reservaHistory, move]);
+    if (ev.min < -1e-9) {
+      gdToast(`O valor da retirada é maior que o saldo disponível da reserva. Disponível: ${R(Math.max(0, ev.before[move.id]))}.`, { type: 'error' });
+      return; // formulário permanece aberto; nenhum dado é alterado
+    }
+  }
+  D.reservaHistory.push(move);
+  D.emergency.current = _reservaSaldo(D.reservaHistory); // fonte única
   save(); renderReserva(); renderInicio();
   if (type === 'ret') {
     window._resRetData = { amount: val, note, date };
@@ -1681,10 +1765,15 @@ function updateResHist(id) {
   if (!val || val <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   const idx = D.reservaHistory.findIndex(h => h.id === id);
   if (idx === -1) return;
-  D.reservaHistory[idx] = { ...D.reservaHistory[idx], amount: val, note, date };
-  D.emergency.current = D.reservaHistory.reduce((s, h) => h.type === 'dep' ? s + h.amount : s - h.amount, 0);
-  D.emergency.current = Math.max(0, D.emergency.current);
-  save(); closeOverlay('modal-res'); renderReserva();
+  // Simula o histórico com a alteração e bloqueia se ficar negativo em algum ponto.
+  const proposed = D.reservaHistory.map((h, i) => i === idx ? { ...h, amount: val, note, date } : h);
+  if (!_reservaHistoryValid(proposed)) {
+    gdToast('Esta alteração deixaria o saldo da reserva negativo em algum ponto do histórico.', { type: 'error' });
+    return; // formulário permanece aberto; nenhum dado é alterado
+  }
+  D.reservaHistory = proposed;
+  D.emergency.current = _reservaSaldo(D.reservaHistory); // fonte única
+  save(); closeOverlay('modal-res'); renderReserva(); renderInicio();
 }
 // ══════════════════════════════════════════
 // WEEKLY GOAL
@@ -2315,16 +2404,22 @@ function checkGoalNotifications() {
 
 function deleteResHist(id) {
   if (!D.reservaHistory.find(h => h.id === id)) return;
+  // Simula o histórico sem o movimento. Excluir retirada é sempre seguro;
+  // excluir aporte que sustenta retiradas posteriores é bloqueado.
+  const proposed = D.reservaHistory.filter(h => h.id !== id);
+  if (!_reservaHistoryValid(proposed)) {
+    gdToast('Não é possível excluir este aporte: há retiradas posteriores que dependem dele.', { type: 'error' });
+    return; // nenhum dado é alterado
+  }
   gdConfirm({
     title: 'Excluir movimentação',
     msg: 'Deseja excluir esta movimentação da reserva?',
     confirmText: 'Excluir',
     variant: 'danger',
     onConfirm: () => {
-      D.reservaHistory = D.reservaHistory.filter(h => h.id !== id);
-      D.emergency.current = D.reservaHistory.reduce((s, h) => h.type === 'dep' ? s + h.amount : s - h.amount, 0);
-      D.emergency.current = Math.max(0, D.emergency.current);
-      save(); renderReserva();
+      D.reservaHistory = proposed;
+      D.emergency.current = _reservaSaldo(D.reservaHistory); // fonte única
+      save(); renderReserva(); renderInicio();
     },
   });
 }
