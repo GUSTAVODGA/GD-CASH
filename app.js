@@ -2315,6 +2315,22 @@ function toggleCompDetails(btn) {
   btn.textContent = open ? 'Ver detalhes ↓' : 'Ocultar detalhes ↑';
 }
 
+// Mapa categoria→total de gastos de um mês (opcionalmente até um dia), a partir
+// dos dados existentes. Não altera nenhuma agregação persistida.
+function _monthCatMap(off, throughDay) {
+  var dset = {};
+  monthDates(off).forEach(function (dk) {
+    if (!throughDay || parseInt(dk.slice(8, 10), 10) <= throughDay) dset[dk] = 1;
+  });
+  var m = {};
+  (D.expenses || []).forEach(function (e) {
+    if (!dset[localDateKey(e.date)]) return;
+    var cat = (e.category != null && String(e.category).trim()) ? e.category : 'Sem categoria';
+    m[cat] = (m[cat] || 0) + e.amount;
+  });
+  return m;
+}
+
 function renderComparativo(off) {
   var el = document.getElementById('mes-comp-section');
   if (!el) return;
@@ -2346,35 +2362,37 @@ function renderComparativo(off) {
     return { text: txt, color: isGood ? 'var(--green)' : 'var(--red)' };
   }
 
-  // editorial sentence builder
-  function edLine(diff, prefix, wordPos, wordNeg, goodWhenPos) {
-    if (diff === 0) return '';
-    var cls = (goodWhenPos ? diff > 0 : diff < 0) ? 'pos' : 'neg';
-    return '<div class="comp-line ' + cls + '">' + prefix + ' <b>' + R(Math.abs(diff)) + '</b> ' + (diff > 0 ? wordPos : wordNeg) + '</div>';
+  // Resumo mais útil por categoria + maior lançamento (usa dados já existentes,
+  // sem nova agregação nem alteração de cálculo).
+  var throughDay = isPartialCurrent ? cur.period.dayOfMonth : null;
+  var curCatMap = _monthCatMap(off, throughDay);
+  var prevCatMap = _monthCatMap(off - 1, throughDay);
+  var allCats = {};
+  Object.keys(curCatMap).forEach(function (c) { allCats[c] = 1; });
+  Object.keys(prevCatMap).forEach(function (c) { allCats[c] = 1; });
+  var up = null, down = null;
+  Object.keys(allCats).forEach(function (c) {
+    var d = (curCatMap[c] || 0) - (prevCatMap[c] || 0);
+    if (d > 0 && (!up || d > up.d)) up = { c: c, d: d };
+    if (d < 0 && (!down || d < down.d)) down = { c: c, d: d };
+  });
+  var curDates = {};
+  monthDates(off).forEach(function (dk) { if (!throughDay || parseInt(dk.slice(8, 10), 10) <= throughDay) curDates[dk] = 1; });
+  var biggest = null;
+  (D.expenses || []).forEach(function (e) {
+    if (curDates[localDateKey(e.date)] && (!biggest || e.amount > biggest.amount)) biggest = e;
+  });
+  function compCatLine(label, cat, amount, cls, arrow) {
+    return '<div class="comp-line ' + cls + '">' + label + ': <b>' + escHtml(cat) + '</b> ' + arrow + ' ' + R(Math.abs(amount)) + '</div>';
   }
+  var summaryLines = [];
+  if (up)   summaryLines.push(compCatLine('Maior alta em gastos', up.c, up.d, 'neg', '▲'));
+  if (down) summaryLines.push(compCatLine('Maior queda em gastos', down.c, down.d, 'pos', '▼'));
+  if (biggest) summaryLines.push('<div class="comp-line neu">Maior lançamento: <b>' + escHtml(biggest.description || biggest.category) + '</b> · ' + R(biggest.amount) + '</div>');
+  if (!summaryLines.length) summaryLines.push('<div class="comp-line neu">Sem variações relevantes de categoria neste período.</div>');
 
-  var incDiff = cur.income.total - prev.income.total;
-  var expDiff = cur.expenses.total - prev.expenses.total;
-  var resDiff = cur.result.net - prev.result.net;
-
-  var incLine = incDiff === 0
-    ? '<div class="comp-line neu">Receita igual ao mesmo período</div>'
-    : edLine(incDiff, 'Entrou', 'a mais', 'a menos', true);
-
-  var expLine = expDiff === 0
-    ? '<div class="comp-line neu">Gastos iguais ao mesmo período</div>'
-    : edLine(expDiff, 'Você gastou', 'a mais', 'a menos', false);
-
-  var resLine = resDiff === 0
-    ? '<div class="comp-line neu">Resultado igual ao mesmo período</div>'
-    : edLine(resDiff, 'Seu resultado ficou', 'melhor', 'pior', true);
-
-  // Reserve — only if there was relevant movement in either month
+  // Reserve delta ainda usado na tabela de detalhes
   var hasReserve = cur.reserve.net !== 0 || prev.reserve.net !== 0;
-  var rvDiff = cur.reserve.net - prev.reserve.net;
-  var resvLine = (hasReserve && rvDiff !== 0)
-    ? '<div class="comp-line comp-line-sm ' + (rvDiff > 0 ? 'pos' : 'neg') + '">Reserva: <b>' + R(Math.abs(rvDiff)) + '</b> ' + (rvDiff > 0 ? 'a mais' : 'a menos') + '</div>'
-    : '';
 
   var periodNote = isPartialCurrent
     ? 'Comparado aos primeiros ' + cur.period.dayOfMonth + ' dias de ' + fmtMonthYear(off - 1)
@@ -2407,7 +2425,7 @@ function renderComparativo(off) {
     '<div class="sec-title">Comparativo</div>' +
     '<div class="card comp-card">' +
       '<div class="comp-period">' + periodNote + '</div>' +
-      '<div class="comp-lines">' + incLine + expLine + resLine + resvLine + '</div>' +
+      '<div class="comp-lines">' + summaryLines.join('') + '</div>' +
       '<button class="comp-toggle" onclick="toggleCompDetails(this)">Ver detalhes ↓</button>' +
       '<div class="comp-details" style="display:none">' + detailsHtml + '</div>' +
     '</div>';
@@ -3423,92 +3441,145 @@ function renderTrendsChart() {
 // ══════════════════════════════════════════
 // COMPARTILHAR RESUMO MENSAL
 // ══════════════════════════════════════════
+// Story de compartilhamento — 9:16, identidade AVENCO, adaptado ao tema atual.
+// Mesmos dados de sempre (resultado, receita, gastos, top categorias, mês).
 function shareMonthReport() {
-  const canvas = document.createElement('canvas');
-  canvas.width = 1080; canvas.height = 1080;
-  const ctx = canvas.getContext('2d');
-  const inc = sumMonthIncome(monthOffset), exp = sumMonthExpenses(monthOffset), liq = inc - exp;
+  const canvas = _buildMonthStoryCanvas();
   const mLabel = fmtMonthYear(monthOffset);
-
-  // BG
-  ctx.fillStyle = '#07080d'; ctx.fillRect(0, 0, 1080, 1080);
-  const grad = ctx.createRadialGradient(540, 0, 0, 540, 0, 700);
-  grad.addColorStop(0, 'rgba(255,184,0,0.13)'); grad.addColorStop(1, 'rgba(255,184,0,0)');
-  ctx.fillStyle = grad; ctx.fillRect(0, 0, 1080, 1080);
-
-  // Badge GD
-  ctx.beginPath();
-  const bx=80, by=80, bw=110, bh=110, br=26;
-  ctx.moveTo(bx+br,by); ctx.lineTo(bx+bw-br,by); ctx.arcTo(bx+bw,by,bx+bw,by+br,br);
-  ctx.lineTo(bx+bw,by+bh-br); ctx.arcTo(bx+bw,by+bh,bx+bw-br,by+bh,br);
-  ctx.lineTo(bx+br,by+bh); ctx.arcTo(bx,by+bh,bx,by+bh-br,br);
-  ctx.lineTo(bx,by+br); ctx.arcTo(bx,by,bx+br,by,br); ctx.closePath();
-  const bg = ctx.createLinearGradient(80,80,190,190);
-  bg.addColorStop(0,'#ffd633'); bg.addColorStop(1,'#e09400');
-  ctx.fillStyle=bg; ctx.fill();
-  ctx.fillStyle='rgba(0,0,0,0.7)'; ctx.font='bold 50px system-ui,sans-serif';
-  ctx.textAlign='center'; ctx.fillText('GD',135,150);
-
-  // CASH
-  ctx.fillStyle='#f5f6f8'; ctx.font='bold 56px system-ui,sans-serif';
-  ctx.textAlign='left'; ctx.fillText('CASH',212,151);
-
-  // Month
-  ctx.fillStyle='rgba(245,246,248,0.38)'; ctx.font='500 30px system-ui,sans-serif';
-  ctx.fillText(mLabel,80,240);
-
-  // Main value
-  ctx.fillStyle = liq>=0 ? '#00e6a0' : '#ff4d6a';
-  ctx.font = 'bold 100px system-ui,sans-serif';
-  ctx.fillText(R(liq), 80, 390);
-  ctx.fillStyle='rgba(245,246,248,0.4)'; ctx.font='500 28px system-ui,sans-serif';
-  ctx.fillText('Resultado do mês',80,435);
-
-  // Divider
-  ctx.fillStyle='rgba(255,255,255,0.07)'; ctx.fillRect(80,470,920,1);
-
-  // Inc / Exp
-  ctx.fillStyle='#00e6a0'; ctx.font='bold 48px system-ui,sans-serif';
-  ctx.fillText('↑ '+R(inc),80,548);
-  ctx.fillStyle='rgba(245,246,248,0.35)'; ctx.font='500 24px system-ui,sans-serif';
-  ctx.fillText('Receita',80,583);
-
-  ctx.fillStyle='#ff4d6a'; ctx.font='bold 48px system-ui,sans-serif';
-  ctx.fillText('↓ '+R(exp),580,548);
-  ctx.fillStyle='rgba(245,246,248,0.35)'; ctx.font='500 24px system-ui,sans-serif';
-  ctx.fillText('Gastos',580,583);
-
-  // Top cats
-  const dates = monthDates(monthOffset);
-  const catMap = {};
-  D.expenses.filter(e=>dates.includes(e.date)).forEach(e=>{catMap[e.category]=(catMap[e.category]||0)+e.amount;});
-  const topCats = Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,3);
-  if (topCats.length) {
-    ctx.fillStyle='rgba(255,255,255,0.07)'; ctx.fillRect(80,618,920,1);
-    ctx.fillStyle='rgba(245,246,248,0.35)'; ctx.font='500 24px system-ui,sans-serif';
-    ctx.fillText('Top categorias',80,664);
-    topCats.forEach(([cat,val],i) => {
-      ctx.fillStyle = PALETTE[i];
-      ctx.font = 'bold 36px system-ui,sans-serif';
-      ctx.fillText(`${cat}  ${R(val)}`, 80, 714+i*60);
-    });
-  }
-
-  // Footer
-  ctx.fillStyle='rgba(245,246,248,0.18)'; ctx.font='500 24px system-ui,sans-serif';
-  ctx.fillText('Avenco · gustavodga.github.io/GD-CASH/',80,1042);
-
   canvas.toBlob(blob => {
-    const file = new File([blob],'gdcash-resumo.png',{type:'image/png'});
-    if (navigator.share && navigator.canShare && navigator.canShare({files:[file]})) {
-      navigator.share({files:[file], title:`Avenco — ${mLabel}`}).catch(()=>{});
+    const file = new File([blob], 'avenco-resumo.png', { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: `Avenco — ${mLabel}` }).catch(() => {});
     } else {
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download=`avenco-${mLabel}.png`;
+      const a = document.createElement('a'); a.href = url; a.download = `avenco-${mLabel}.png`;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
   }, 'image/png');
+}
+
+function _buildMonthStoryCanvas() {
+  const W = 1080, H = 1920, M = 100;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const inc = sumMonthIncome(monthOffset), exp = sumMonthExpenses(monthOffset), liq = inc - exp;
+  const mLabel = fmtMonthYear(monthOffset);
+
+  const dark = document.documentElement.dataset.theme === 'dark';
+  const C = dark
+    ? { bg1:'#0F1629', bg2:'#0A0F1E', text:'#E8EDFF', dim:'rgba(232,237,255,.55)', faint:'rgba(232,237,255,.34)', ac:'#5B8AF5', gn:'#4ADE80', rd:'#F87171', line:'rgba(232,237,255,.12)', card:'rgba(232,237,255,.05)' }
+    : { bg1:'#F2F0EA', bg2:'#E7E4DB', text:'#0D1440', dim:'rgba(13,20,64,.58)', faint:'rgba(13,20,64,.38)', ac:'#2563EB', gn:'#16A34A', rd:'#DC2626', line:'rgba(13,20,64,.10)', card:'rgba(13,20,64,.04)' };
+  const F = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+
+  // Fundo com leve gradiente vertical + brilho do acento no topo
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+  bgGrad.addColorStop(0, C.bg1); bgGrad.addColorStop(1, C.bg2);
+  ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
+  const glow = ctx.createRadialGradient(W/2, 120, 0, W/2, 120, 720);
+  glow.addColorStop(0, dark ? 'rgba(91,138,245,.16)' : 'rgba(37,99,235,.10)');
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+
+  const roundRect = (x, y, w, h, r) => {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+    else {
+      ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+    }
+  };
+
+  // ── Marca AVENCO: badge com triângulo + wordmark ──
+  const bs = 120, bx = M, by = 150;
+  roundRect(bx, by, bs, bs, 30);
+  ctx.fillStyle = C.ac; ctx.fill();
+  // triângulo (contorno branco, apontando para cima) — igual ao logo do app
+  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 9; ctx.lineJoin = 'round';
+  const tcx = bx + bs/2, tcy = by + bs/2, ts = 34;
+  ctx.beginPath();
+  ctx.moveTo(tcx, tcy - ts); ctx.lineTo(tcx + ts*0.92, tcy + ts*0.72);
+  ctx.lineTo(tcx - ts*0.92, tcy + ts*0.72); ctx.closePath(); ctx.stroke();
+  ctx.fillStyle = C.text; ctx.font = `800 66px ${F}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText('Avenco', bx + bs + 34, by + 84);
+
+  // Mês
+  ctx.fillStyle = C.faint; ctx.font = `600 40px ${F}`;
+  ctx.fillText(mLabel.charAt(0).toUpperCase() + mLabel.slice(1), M, by + bs + 90);
+
+  // Auto-ajuste de fonte para nunca cortar valores grandes
+  const fitFont = (text, maxW, base, weight) => {
+    let size = base; ctx.font = `${weight} ${size}px ${F}`;
+    while (ctx.measureText(text).width > maxW && size > 22) { size -= 2; ctx.font = `${weight} ${size}px ${F}`; }
+    return size;
+  };
+  const contentW = W - M*2;
+
+  // ── Resultado do mês (destaque) ──
+  let y = by + bs + 250;
+  ctx.fillStyle = C.dim; ctx.font = `600 42px ${F}`;
+  ctx.fillText('Resultado do mês', M, y);
+  y += 130;
+  const liqTxt = R(liq);
+  const liqSize = fitFont(liqTxt, contentW, 150, '800');
+  ctx.fillStyle = liq >= 0 ? C.gn : C.rd; ctx.font = `800 ${liqSize}px ${F}`;
+  ctx.fillText(liqTxt, M, y);
+
+  // Divider
+  y += 90; ctx.fillStyle = C.line; ctx.fillRect(M, y, contentW, 2);
+
+  // ── Receita / Gastos (duas colunas, cada valor ajustado à sua metade) ──
+  y += 120;
+  const colW = (contentW - 50) / 2;
+  const colGx = M + colW + 50; // início da coluna de Gastos
+  const incTxt = '↑ ' + R(inc), expTxt = '↓ ' + R(exp);
+  const incSize = fitFont(incTxt, colW, 58, '800');
+  ctx.fillStyle = C.gn; ctx.font = `800 ${incSize}px ${F}`;
+  ctx.fillText(incTxt, M, y);
+  const expSize = fitFont(expTxt, colW, 58, '800');
+  ctx.fillStyle = C.rd; ctx.font = `800 ${expSize}px ${F}`;
+  ctx.fillText(expTxt, colGx, y);
+  ctx.fillStyle = C.faint; ctx.font = `600 34px ${F}`;
+  ctx.fillText('Receita', M, y + 56);
+  ctx.fillText('Gastos', colGx, y + 56);
+
+  // ── Top categorias ──
+  const dates = monthDates(monthOffset);
+  const catMap = {};
+  D.expenses.filter(e => dates.includes(e.date)).forEach(e => { catMap[e.category] = (catMap[e.category]||0) + e.amount; });
+  const topCats = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0, 3);
+  if (topCats.length) {
+    y += 170; ctx.fillStyle = C.line; ctx.fillRect(M, y, W - M*2, 2);
+    y += 80; ctx.fillStyle = C.dim; ctx.font = `600 38px ${F}`;
+    ctx.fillText('Top categorias', M, y);
+    y += 90;
+    topCats.forEach(([cat, val], i) => {
+      const ry = y + i*110;
+      roundRect(M, ry - 46, contentW, 92, 22);
+      ctx.fillStyle = C.card; ctx.fill();
+      ctx.fillStyle = PALETTE[i % PALETTE.length];
+      ctx.beginPath(); ctx.arc(M + 44, ry, 16, 0, Math.PI*2); ctx.fill();
+      // valor à direita (fonte fixa), nome à esquerda ajustado ao espaço restante
+      const valTxt = R(val);
+      ctx.font = `700 46px ${F}`;
+      const valW = ctx.measureText(valTxt).width;
+      const nameMaxW = contentW - 84 - 30 - valW - 40;
+      const nameSize = fitFont(cat, nameMaxW, 46, '700');
+      ctx.fillStyle = C.text; ctx.textAlign = 'left'; ctx.font = `700 ${nameSize}px ${F}`;
+      ctx.fillText(cat, M + 84, ry + 16);
+      ctx.font = `700 46px ${F}`; ctx.textAlign = 'right';
+      ctx.fillText(valTxt, W - M - 30, ry + 16);
+      ctx.textAlign = 'left';
+    });
+  }
+
+  // Footer AVENCO
+  ctx.fillStyle = C.faint; ctx.font = `600 34px ${F}`; ctx.textAlign = 'center';
+  ctx.fillText('Avenco', W/2, H - 90);
+  ctx.textAlign = 'left';
+
+  return canvas;
 }
 
 // ══════════════════════════════════════════
