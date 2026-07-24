@@ -3581,6 +3581,10 @@ var _vehLinkPendTarget = null;
 var _vehStatusTarget = null;
 var _pendVehicleId = null;
 var qaType = 'rec';
+// Estado de edição do formulário de lançamento (null = criação).
+// Formas: {kind:'exp', id} | {kind:'item', id} | {kind:'legacy', date, pid}
+var _qaEdit = null;
+var _qaSaving = false;
 var CAT_KEYWORDS = {
   'Alimentação': ['mercado', 'supermercado', 'ifood', 'rappi', 'pizza', 'burger', 'restaurante', 'lanche', 'comida', 'padaria', 'açaí'],
   'Transporte': ['uber', 'gasolina', '99', 'combustível', 'posto', 'estacionamento', 'ônibus', 'metrô', 'taxi'],
@@ -4046,7 +4050,8 @@ function renderDayAccordion() {
             </div>
             <div class="dacc-tx-info"><div class="dacc-tx-lbl">${p.name}${statusTag}</div><div class="dacc-tx-cat">${label !== p.name ? label : 'Receita'}</div></div>
             <div class="dacc-tx-amt" style="color:var(--gn)">+${R(it.amount)}</div>
-            <button class="dacc-tx-del" title="Remover" onclick="D.incomeItems=(D.incomeItems||[]).filter(x=>x.id!=='${it.id}');save();renderDayAccordion();refreshAfterDayEdit()">✕</button>
+            <button class="dacc-tx-edit" title="Editar" aria-label="Editar lançamento" onclick="openQuickAdd({kind:'item',id:'${it.id}'})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="dacc-tx-del" title="Remover" aria-label="Remover lançamento" onclick="D.incomeItems=(D.incomeItems||[]).filter(x=>x.id!=='${it.id}');save();renderDayAccordion();refreshAfterDayEdit()">✕</button>
           </div>`;
         }).join('');
       }
@@ -4058,7 +4063,8 @@ function renderDayAccordion() {
         </div>
         <div class="dacc-tx-info"><div class="dacc-tx-lbl">${p.name}</div><div class="dacc-tx-cat">Receita</div></div>
         <div class="dacc-tx-amt" style="color:var(--gn)">+${R(v)}</div>
-        <button class="dacc-tx-del" title="Remover" onclick="setDayIncome('${d}','${p.id}',0);renderDayAccordion();refreshAfterDayEdit()">✕</button>
+        <button class="dacc-tx-edit" title="Editar" aria-label="Editar lançamento" onclick="openQuickAdd({kind:'legacy',date:'${d}',pid:'${p.id}'})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="dacc-tx-del" title="Remover" aria-label="Remover lançamento" onclick="setDayIncome('${d}','${p.id}',0);renderDayAccordion();refreshAfterDayEdit()">✕</button>
       </div>`;
     }).join('');
 
@@ -4070,7 +4076,8 @@ function renderDayAccordion() {
         </div>
         <div class="dacc-tx-info"><div class="dacc-tx-lbl">${e.description||e.category}</div><div class="dacc-tx-cat">Gasto · ${e.category}</div></div>
         <div class="dacc-tx-amt" style="color:var(--rd)">−${R(e.amount)}</div>
-        <button class="dacc-tx-del" title="Remover" onclick="deleteExpense('${e.id}');renderDayAccordion();refreshAfterDayEdit()">✕</button>
+        <button class="dacc-tx-edit" title="Editar" aria-label="Editar lançamento" onclick="openQuickAdd({kind:'exp',id:'${e.id}'})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+        <button class="dacc-tx-del" title="Remover" aria-label="Remover lançamento" onclick="deleteExpense('${e.id}');renderDayAccordion();refreshAfterDayEdit()">✕</button>
       </div>`).join('');
 
     const hasData = dayInc > 0 || exps.length > 0;
@@ -4139,63 +4146,160 @@ function qaSuggestCat() {
 }
 
 function qaSetType(type) {
+  // Em modo edição o tipo é travado (não converte receita↔gasto).
+  if (_qaEdit) return;
   qaType = type;
-  document.getElementById('qa-btn-rec').classList.toggle('active', type === 'rec');
-  document.getElementById('qa-btn-gas').classList.toggle('active', type === 'gas');
+  const rec = document.getElementById('qa-btn-rec'), gas = document.getElementById('qa-btn-gas');
+  rec.classList.toggle('active', type === 'rec');
+  gas.classList.toggle('active', type === 'gas');
+  rec.setAttribute('aria-pressed', type === 'rec' ? 'true' : 'false');
+  gas.setAttribute('aria-pressed', type === 'gas' ? 'true' : 'false');
   document.getElementById('qa-cat-row').style.display = type === 'gas' ? '' : 'none';
   document.getElementById('qa-plat-row').style.display = type === 'rec' ? '' : 'none';
   document.getElementById('qa-suggest-row').style.display = 'none';
 }
 
-function qaUpdateAmt() {
-  const v = parseFloat(document.getElementById('qa-amt-input')?.value) || 0;
-  const el = document.getElementById('qa-amt-display');
-  if (el) el.textContent = R(v);
+// Popula os selects de plataforma e categoria do formulário de lançamento.
+function _qaPopulateSelects() {
+  const platSel = document.getElementById('qa-plat-sel');
+  if (platSel) platSel.innerHTML = D.platforms.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+  const catSel = document.getElementById('qa-cat-sel');
+  if (catSel) catSel.innerHTML = (D.expCats || []).map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
 }
 
-function openQuickAdd() {
-  // Populate selects
-  const platSel = document.getElementById('qa-plat-sel');
-  if (platSel) platSel.innerHTML = D.platforms.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-  const catSel = document.getElementById('qa-cat-sel');
-  if (catSel) catSel.innerHTML = (D.expCats || []).map(c => `<option value="${c}">${c}</option>`).join('');
+// Adiciona uma receita seguindo o modelo atual (itens têm prioridade quando já
+// existem no dia+plataforma; caso contrário usa o mapa legado dailyIncome).
+function _addIncome(date, pid, amt, note) {
+  const hasItems = (D.incomeItems||[]).some(it => localDateKey(it.date)===date && it.platformId===pid);
+  if (hasItems) {
+    if (!D.incomeItems) D.incomeItems = [];
+    D.incomeItems.push({ id: uid(), date, platformId: pid, amount: amt, note: note || '', status: 'paid' });
+    save();
+  } else {
+    const existing = getDayIncome(date)[pid] || 0;
+    setDayIncome(date, pid, existing + amt);
+  }
+}
 
-  // Use selected day in Semana, otherwise today
+// Ajusta o cabeçalho/estado do formulário para criação ou edição.
+function _qaApplyMode() {
+  const titleEl = document.getElementById('qa-title');
+  const delBtn = document.getElementById('qa-del-btn');
+  const toggle = document.getElementById('qa-type-toggle');
+  if (titleEl) titleEl.textContent = _qaEdit ? 'Editar lançamento' : 'Novo lançamento';
+  if (delBtn) delBtn.style.display = _qaEdit ? '' : 'none';
+  // Em edição, trava a troca de tipo (evita mover registro entre receita/gasto).
+  if (toggle) toggle.classList.toggle('qa-type-locked', !!_qaEdit);
+}
+
+function openQuickAdd(editRef) {
+  _qaEdit = editRef || null;
+  _qaSaving = false;
+  const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
+  _qaPopulateSelects();
   const dateEl = document.getElementById('qa-date');
-  if (dateEl) dateEl.value = selDate() || todayStr();
-
-  // Reset
-  document.getElementById('qa-amt-input').value = '';
-  document.getElementById('qa-amt-display').textContent = R(0);
-  document.getElementById('qa-desc').value = '';
+  const amtEl = document.getElementById('qa-amt-input');
+  const descEl = document.getElementById('qa-desc');
   document.getElementById('qa-suggest-row').style.display = 'none';
-  qaSetType('rec');
 
+  if (!_qaEdit) {
+    // ── Criação ──
+    if (dateEl) dateEl.value = selDate() || todayStr();
+    if (amtEl) amtEl.value = '';
+    if (descEl) descEl.value = '';
+    qaType = 'rec';
+    _qaApplyMode();
+    qaSetType('rec');
+    openOverlay('modal-quick-add');
+    return;
+  }
+
+  // ── Edição: pré-preenche a partir do registro ──
+  let type = 'gas', date = todayStr(), amount = 0, desc = '', pid = null, cat = null;
+  if (_qaEdit.kind === 'exp') {
+    const e = (D.expenses||[]).find(x => x.id === _qaEdit.id);
+    if (!e) { _qaEdit = null; return; }
+    type = 'gas'; date = e.date; amount = e.amount; desc = (e.description && e.description !== e.category) ? e.description : ''; cat = e.category;
+  } else if (_qaEdit.kind === 'item') {
+    const it = (D.incomeItems||[]).find(x => x.id === _qaEdit.id);
+    if (!it) { _qaEdit = null; return; }
+    type = 'rec'; date = localDateKey(it.date); amount = it.amount; desc = it.note || ''; pid = it.platformId;
+  } else if (_qaEdit.kind === 'legacy') {
+    type = 'rec'; date = _qaEdit.date; amount = getDayIncome(_qaEdit.date)[_qaEdit.pid] || 0; pid = _qaEdit.pid; desc = '';
+  }
+  qaType = type;
+  _qaApplyMode();
+  // Aplica visibilidade dos campos conforme o tipo, sem passar pela trava.
+  document.getElementById('qa-btn-rec').classList.toggle('active', type === 'rec');
+  document.getElementById('qa-btn-gas').classList.toggle('active', type === 'gas');
+  document.getElementById('qa-btn-rec').setAttribute('aria-pressed', type === 'rec' ? 'true' : 'false');
+  document.getElementById('qa-btn-gas').setAttribute('aria-pressed', type === 'gas' ? 'true' : 'false');
+  document.getElementById('qa-cat-row').style.display = type === 'gas' ? '' : 'none';
+  document.getElementById('qa-plat-row').style.display = type === 'rec' ? '' : 'none';
+
+  if (dateEl) dateEl.value = date || todayStr();
+  if (amtEl) amtEl.value = amount ? String(amount) : '';
+  if (descEl) descEl.value = desc;
+  if (pid) { const s = document.getElementById('qa-plat-sel'); if (s) s.value = pid; }
+  if (cat) { const s = document.getElementById('qa-cat-sel'); if (s) s.value = cat; }
   openOverlay('modal-quick-add');
 }
 
+// Fecha o formulário e limpa o estado de edição (Voltar/Cancelar → origem).
+function qaCancel() {
+  _qaEdit = null;
+  _pendVehicleId = null;
+  _qaSaving = false;
+  const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
+  closeOverlay('modal-quick-add');
+}
+
 function qaConfirm() {
+  if (_qaSaving) return; // impede duplicação por duplo toque
   const amt = parseFloat(document.getElementById('qa-amt-input')?.value);
   if (!amt || amt <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   const date = document.getElementById('qa-date')?.value || todayStr();
   const desc = document.getElementById('qa-desc')?.value || '';
+  _qaSaving = true;
+  const saveBtn = document.getElementById('qa-save-btn');
+  if (saveBtn) saveBtn.disabled = true;
 
-  if (qaType === 'rec') {
+  const edit = _qaEdit;
+  if (edit) {
+    // ── EDIÇÃO: atualiza o mesmo registro (sem duplicar) ──
+    if (edit.kind === 'exp') {
+      const e = (D.expenses||[]).find(x => x.id === edit.id);
+      if (e) {
+        const cat = document.getElementById('qa-cat-sel')?.value || e.category;
+        e.date = date; e.category = cat; e.description = desc || cat; e.amount = amt;
+        save(); checkBudgetAlerts(cat);
+      }
+    } else if (edit.kind === 'item') {
+      const it = (D.incomeItems||[]).find(x => x.id === edit.id);
+      if (it) {
+        const pid = document.getElementById('qa-plat-sel')?.value || it.platformId;
+        it.date = date; it.platformId = pid; it.amount = amt; it.note = desc || '';
+        save();
+      }
+    } else if (edit.kind === 'legacy') {
+      const pid = document.getElementById('qa-plat-sel')?.value || edit.pid;
+      if (date === edit.date && pid === edit.pid) {
+        setDayIncome(date, pid, amt); // mesma chave: sobrescreve
+      } else {
+        setDayIncome(edit.date, edit.pid, 0); // remove a origem
+        _addIncome(date, pid, amt, desc);      // grava na nova chave pelo modelo padrão
+      }
+    }
+  } else if (qaType === 'rec') {
+    // ── CRIAÇÃO receita ──
     const pid = document.getElementById('qa-plat-sel')?.value;
     if (pid) {
       const platName = D.platforms.find(p => p.id === pid)?.name || 'Receita';
-      const hasItems = (D.incomeItems||[]).some(it => it.date===date && it.platformId===pid);
-      if (hasItems) {
-        if (!D.incomeItems) D.incomeItems = [];
-        D.incomeItems.push({ id: uid(), date, platformId: pid, amount: amt, note: desc || '', status: 'paid' });
-        save();
-      } else {
-        const existing = getDayIncome(date)[pid] || 0;
-        setDayIncome(date, pid, existing + amt);
-      }
+      _addIncome(date, pid, amt, desc);
       notifyRegistered(amt, desc || platName, platName);
     }
   } else {
+    // ── CRIAÇÃO gasto ──
     const cat = document.getElementById('qa-cat-sel')?.value || (D.expCats[0] || 'Outros');
     const thisVehicleId = _pendVehicleId;
     _pendVehicleId = null;
@@ -4212,12 +4316,42 @@ function qaConfirm() {
     notifyRegistered(amt, desc || cat, cat);
   }
 
+  // NÃO reseta _qaSaving aqui: mantém o bloqueio até o formulário ser reaberto,
+  // impedindo que um segundo toque (síncrono) grave um duplicado.
+  _qaEdit = null;
   closeOverlay('modal-quick-add');
   haptic(10);
+  _refreshAfterEntry();
+}
 
-  // Refresh whatever is visible
+// Exclui o lançamento em edição (com confirmação) e atualiza as telas.
+function qaDelete() {
+  const edit = _qaEdit;
+  if (!edit) return;
+  gdConfirm({
+    title: 'Excluir lançamento?',
+    msg: 'Esta ação não pode ser desfeita.',
+    confirmText: 'Excluir', cancelText: 'Cancelar', variant: 'danger',
+    onConfirm: () => {
+      if (edit.kind === 'exp') {
+        deleteExpense(edit.id); // já remove vínculo com veículo e salva
+      } else if (edit.kind === 'item') {
+        D.incomeItems = (D.incomeItems||[]).filter(x => x.id !== edit.id); save();
+      } else if (edit.kind === 'legacy') {
+        setDayIncome(edit.date, edit.pid, 0);
+      }
+      _qaEdit = null;
+      closeOverlay('modal-quick-add');
+      _refreshAfterEntry();
+    },
+  });
+}
+
+// Re-renderiza a tela ativa após criar/editar/excluir um lançamento.
+function _refreshAfterEntry() {
   if (document.getElementById('page-inicio')?.classList.contains('active')) { renderInicio(); renderInicioCards(); }
   if (document.getElementById('page-semana')?.classList.contains('active')) { renderSemana(); renderDayAccordion(); }
+  if (document.getElementById('page-mes')?.classList.contains('active')) { renderMes(); }
 }
 
 function notifyRegistered(amount, label, category) {
@@ -4825,19 +4959,19 @@ function completePendencia(id) {
 }
 
 function openPendenciaAsExpense(p) {
+  _qaEdit = null;
+  _qaSaving = false;
+  const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   _pendVehicleId = p.vehicleId || null;
-  const platSel = document.getElementById('qa-plat-sel');
-  if (platSel) platSel.innerHTML = D.platforms.map(pl => `<option value="${pl.id}">${pl.name}</option>`).join('');
-  const catSel = document.getElementById('qa-cat-sel');
-  if (catSel) catSel.innerHTML = (D.expCats || []).map(c => `<option value="${c}">${c}</option>`).join('');
+  _qaPopulateSelects();
+  _qaApplyMode();
   const dateEl = document.getElementById('qa-date');
   if (dateEl) dateEl.value = todayStr();
   const amtEl = document.getElementById('qa-amt-input');
   if (amtEl) amtEl.value = p.estimatedValue;
-  const amtDisp = document.getElementById('qa-amt-display');
-  if (amtDisp) amtDisp.textContent = R(p.estimatedValue);
   const descEl = document.getElementById('qa-desc');
   if (descEl) descEl.value = p.title;
+  qaType = 'rec'; // garante que a trava não bloqueie a mudança para 'gas'
   qaSetType('gas');
   document.getElementById('qa-suggest-row').style.display = 'none';
   openOverlay('modal-quick-add');

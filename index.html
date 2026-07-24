@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=76">
+<link rel="stylesheet" href="style.css?v=77">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -1188,43 +1188,59 @@
 <div class="overlay" id="modal-quick-add">
   <div class="sheet sheet-qa">
     <div class="sheet-handle"></div>
-    <div class="qa-title">Novo lançamento</div>
-    <div class="qa-type-toggle">
-      <button class="qa-type-btn qa-type-rec active" id="qa-btn-rec" onclick="qaSetType('rec')">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+    <!-- Cabeçalho padrão: [ Voltar ] título [ excluir (só em edição) ] -->
+    <div class="page-header-row qa-header">
+      <div class="phr-left">
+        <button class="page-back-btn" onclick="qaCancel()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+        <span class="page-header-title" id="qa-title">Novo lançamento</span>
+      </div>
+      <button class="qa-del-btn" id="qa-del-btn" onclick="qaDelete()" aria-label="Excluir lançamento" style="display:none">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      </button>
+    </div>
+    <!-- Tipo -->
+    <div class="qa-type-toggle" id="qa-type-toggle" role="group" aria-label="Tipo do lançamento">
+      <button class="qa-type-btn qa-type-rec active" id="qa-btn-rec" onclick="qaSetType('rec')" aria-pressed="true">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         Receita
       </button>
-      <button class="qa-type-btn qa-type-gas" id="qa-btn-gas" onclick="qaSetType('gas')">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
+      <button class="qa-type-btn qa-type-gas" id="qa-btn-gas" onclick="qaSetType('gas')" aria-pressed="false">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
         Gasto
       </button>
     </div>
-    <div class="qa-amt-display" id="qa-amt-display">R$ 0,00</div>
-    <input class="fi qa-amt-input" type="number" id="qa-amt-input" min="0" step="0.01" placeholder="0,00" inputmode="decimal" oninput="qaUpdateAmt()">
-    <div class="qa-field-row">
-      <div class="fg" style="flex:1">
-        <label class="fl">Descrição</label>
-        <input class="fi" type="text" id="qa-desc" placeholder="Ex: Ifood, Supermercado..." oninput="qaSuggestCat()">
-      </div>
+    <!-- Valor (campo principal, único) -->
+    <div class="fg">
+      <label class="fl" for="qa-amt-input">Valor</label>
+      <input class="fi qa-amt-input" type="number" id="qa-amt-input" min="0" step="0.01" placeholder="0,00" inputmode="decimal">
     </div>
-    <div id="qa-suggest-row" class="qa-suggest-row" style="display:none">
-      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg>
-      Sugerido: <span id="qa-suggest-txt"></span>
-    </div>
-    <div class="fg" id="qa-cat-row" style="display:none">
-      <label class="fl">Categoria</label>
-      <select class="fi" id="qa-cat-sel"></select>
-    </div>
-    <div class="fg" id="qa-plat-row">
-      <label class="fl">Plataforma</label>
-      <select class="fi" id="qa-plat-sel"></select>
-    </div>
-    <div class="qa-date-row">
-      <label class="fl">Data</label>
+    <!-- Data -->
+    <div class="fg qa-date-row">
+      <label class="fl" for="qa-date">Data</label>
       <input class="fi" type="date" id="qa-date">
     </div>
-    <button class="btn btn-primary" onclick="qaConfirm()">Confirmar lançamento</button>
-    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-quick-add')">Cancelar</button>
+    <!-- Categoria (Gasto) -->
+    <div class="fg" id="qa-cat-row" style="display:none">
+      <label class="fl" for="qa-cat-sel">Categoria</label>
+      <select class="fi" id="qa-cat-sel"></select>
+    </div>
+    <!-- Plataforma (Receita) -->
+    <div class="fg" id="qa-plat-row">
+      <label class="fl" for="qa-plat-sel">Plataforma</label>
+      <select class="fi" id="qa-plat-sel"></select>
+    </div>
+    <!-- Descrição -->
+    <div class="fg">
+      <label class="fl" for="qa-desc">Descrição</label>
+      <input class="fi" type="text" id="qa-desc" placeholder="Ex: Ifood, Supermercado..." oninput="qaSuggestCat()">
+    </div>
+    <div id="qa-suggest-row" class="qa-suggest-row" style="display:none">
+      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg>
+      Sugerido: <span id="qa-suggest-txt"></span>
+    </div>
+    <button class="btn btn-primary" id="qa-save-btn" onclick="qaConfirm()">Salvar</button>
+    <button class="btn btn-secondary" style="margin-top:8px" onclick="qaCancel()">Cancelar</button>
+    <div class="qa-safe-spacer"></div>
   </div>
 </div>
 
@@ -1433,7 +1449,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=90" defer></script>
+<script src="app.js?v=91" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
