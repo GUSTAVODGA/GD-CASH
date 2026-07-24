@@ -962,6 +962,9 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .page-header-title{font-size:14px;font-weight:800;letter-spacing:-.2px}
 /* Grupo Voltar + título das telas internas abertas a partir de "Mais" */
 .phr-left{display:flex;align-items:center;gap:8px;min-width:0}
+.phr-left .page-header-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Ações à direita do cabeçalho (detalhe): Editar + kebab */
+.phr-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .page-back-btn{
   display:flex;align-items:center;justify-content:center;
   width:36px;height:36px;border-radius:10px;flex-shrink:0;
@@ -971,6 +974,9 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 }
 .page-back-btn:active{background:var(--ol2)}
 .page-back-btn:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+/* Área de toque mínima 44×44 mantendo o visual compacto (ícone 36 / ajuda 26) */
+.page-back-btn,.tab-help-btn{position:relative}
+.page-back-btn::before,.tab-help-btn::before{content:"";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:44px;height:44px}
 
 /* ══ Aba MAIS — hub de telas e ferramentas ══ */
 .mais-sec{margin:18px 4px 10px}

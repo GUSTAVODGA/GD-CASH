@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=75">
+<link rel="stylesheet" href="style.css?v=76">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -379,7 +379,10 @@
 <!-- ════ METAS ════ -->
 <section class="page" id="page-metas">
   <div class="page-header-row">
-    <span class="page-header-title">Minhas Metas</span>
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Minhas Metas</span>
+    </div>
     <button class="tab-help-btn" onclick="showTabHelp('metas')">?</button>
   </div>
   <div id="goals-list"></div>
@@ -500,11 +503,15 @@
 <!-- ════ LEMBRETES ════ -->
 <section class="page" id="page-lembretes">
   <div class="page-header-row">
-    <span class="page-header-title">Lembretes</span>
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Lembretes</span>
+    </div>
     <button class="tab-help-btn" onclick="showTabHelp('lembretes')">?</button>
   </div>
   <div id="lembretes-list"></div>
-  <button class="btn btn-secondary" style="margin-bottom:10px" onclick="openLembreteModal()">+ Novo lembrete</button>
+  <button class="btn btn-secondary fixed-add-btn" onclick="openLembreteModal()">+ Novo lembrete</button>
+  <div class="fixed-bottom-spacer"></div>
 </section>
 
 <!-- ════ PENDÊNCIAS ════ -->
@@ -609,10 +616,10 @@
 
   <!-- Fluxo legado de Veículos — intacto e acessível durante os testes -->
   <div class="page-header-row" id="veh-legacy-header" style="display:none;padding:0 20px;margin-top:12px">
-    <button class="btn-icon-sm" onclick="exitLegacyVehList()" aria-label="Voltar ao Meu Patrimônio" style="margin-right:10px">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-    </button>
-    <div class="page-header-title" style="flex:1">Veículos</div>
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="exitLegacyVehList()" aria-label="Voltar ao Meu Patrimônio"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Veículos</span>
+    </div>
     <button class="veh-add-btn" id="veh-add-btn" onclick="openVehForm()">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Novo
@@ -1426,7 +1433,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=89" defer></script>
+<script src="app.js?v=90" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

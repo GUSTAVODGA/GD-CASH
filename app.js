@@ -2655,6 +2655,9 @@ function switchTab(tab, origin) {
   // Destaque da bottom-nav: aba real quando principal; senão, a origem (mais/início).
   const navTab = MAIN_TABS.includes(tab) ? tab : (MAIN_TABS.includes(_navOrigin) ? _navOrigin : 'mais');
   document.querySelector(`[data-tab="${navTab}"]`)?.classList.add('active');
+  // Saudação "Olá, …" apenas nas abas principais (não em telas internas).
+  const greetEl = document.getElementById('logo-greeting');
+  if (greetEl) greetEl.style.display = MAIN_TABS.includes(tab) ? '' : 'none';
   if(tab==='inicio')    { renderInicio(); } /* renderInicioCards already called inside renderInicio */
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
@@ -4934,6 +4937,20 @@ function renderVehList() {
   _renderLegacyVehList();
 }
 
+// ── Cabeçalho padrão das telas internas: Voltar (ícone) + título + ação opcional ──
+function _backArrowSvg() {
+  return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>';
+}
+function _pageHeader(backOnclick, title, rightHtml) {
+  return `<div class="page-header-row">
+      <div class="phr-left">
+        <button class="page-back-btn" onclick="${backOnclick}" aria-label="Voltar">${_backArrowSvg()}</button>
+        <span class="page-header-title">${escHtml(title)}</span>
+      </div>
+      ${rightHtml || ''}
+    </div>`;
+}
+
 function _renderLegacyVehList() {
   _vehDetailId = null;
   _vehDetailMode = 'legacy';
@@ -5011,12 +5028,7 @@ function renderVehDetail(id) {
   const canHardDelete = history.length === 0 && (v.linkedExpenses||[]).length === 0 && (v.linkedPendencias||[]).length === 0;
 
   cont.innerHTML = `
-    <div class="veh-detail-topbar">
-      <button class="btn-icon-sm" onclick="${backFromLegacy}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        ${backFromLegacyLbl}
-      </button>
-    </div>
+    ${_pageHeader(backFromLegacy, 'Veículo')}
     <div class="veh-detail-header">
       ${v.photo ? `<img class="veh-detail-photo" src="${v.photo}" alt="${escHtml(v.name)}">` : `<div class="veh-detail-photo veh-detail-no-photo">${carSvg}</div>`}
       <div class="veh-detail-meta">
@@ -5083,12 +5095,7 @@ function openVehForm(id) {
   if (!cont) return;
   const cancelAction = id ? `_refreshVehDetail('${id}')` : 'renderVehList()';
   cont.innerHTML = `
-    <div class="veh-detail-topbar">
-      <button class="btn-icon-sm" onclick="${cancelAction}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        ${id ? 'Detalhes' : 'Lista'}
-      </button>
-    </div>
+    ${_pageHeader(cancelAction, id ? 'Editar veículo' : 'Novo veículo')}
     <div class="form-group">
       <label class="form-label">Nome / apelido *</label>
       <input class="form-input" id="vf-name" value="${escHtml(v?.name||'')}" placeholder="Ex: Prius Preto">
@@ -5953,13 +5960,7 @@ function openPatForm(tipo, id) {
   const statusSel = ['ativo','vendido','inativo'].map(s =>
     `<option value="${s}" ${(p?.status||'ativo')===s?'selected':''}>${_patStatusLabel(s)}</option>`).join('');
   cont.innerHTML = `
-    <div class="veh-detail-topbar">
-      <button class="btn-icon-sm" onclick="${backAction}">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        ${p ? 'Detalhes' : 'Meu Patrimônio'}
-      </button>
-    </div>
-    <div class="page-header-title" style="margin-bottom:16px">${p ? 'Editar' : 'Novo'} ${tipoLbl.toLowerCase()}</div>
+    ${_pageHeader(backAction, `${p ? 'Editar' : 'Novo'} ${tipoLbl.toLowerCase()}`)}
     <div class="form-group">
       <label class="form-label">Nome / apelido *</label>
       <input class="form-input" id="pf-nome" value="${escHtml(p?.nome||'')}" placeholder="${t==='imovel' ? 'Ex: Apartamento Centro' : 'Ex: Notebook Dell'}">
@@ -6234,13 +6235,7 @@ function renderPatDetail(id) {
       }).join('');
 
   cont.innerHTML = `
-    <div class="veh-detail-topbar">
-      <button class="btn-icon-sm" onclick="renderPatrimonioHome()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Meu Patrimônio
-      </button>
-      <button class="btn-pill" onclick="openPatForm(null,'${p.id}')">Editar</button>
-    </div>
+    ${_pageHeader("renderPatrimonioHome()", chipName, `<button class="btn-pill" onclick="openPatForm(null,'${p.id}')">Editar</button>`)}
 
     <div class="card pat-det-hero">
       <div class="pat-det-hero-row">
@@ -6577,18 +6572,13 @@ function renderVehPatDetail(id) {
     : _vehIconSvg(26);
 
   cont.innerHTML = `
-    <div class="veh-detail-topbar">
-      <button class="btn-icon-sm" onclick="_backToPatHomePreserveScroll()">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-        Meu Patrimônio
-      </button>
-      <div style="display:flex;gap:8px;align-items:center">
+    ${_pageHeader("_backToPatHomePreserveScroll()", 'Veículo', `
+      <div class="phr-actions">
         <button class="btn-pill" onclick="openVehForm('${v.id}')">Editar</button>
-        <button class="pat-kebab-btn" onclick="openVehMenu('${v.id}')" aria-label="Mais ações">
+        <button class="pat-kebab-btn" onclick="openVehMenu('${v.id}')" aria-label="Mais ações do veículo">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
         </button>
-      </div>
-    </div>
+      </div>`)}
 
     <div class="card pat-det-hero">
       <div class="pat-det-hero-row">
