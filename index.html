@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=77">
+<link rel="stylesheet" href="style.css?v=78">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -436,10 +436,10 @@
       <svg class="big-donut-svg" id="cat-donut" viewBox="0 0 200 200"></svg>
       <div class="big-donut-center" id="cat-donut-center">
         <div class="bdc-val" id="cat-donut-total">—</div>
-        <div class="bdc-lbl">total gasto</div>
+        <div class="bdc-lbl" id="cat-donut-lbl">total gasto</div>
       </div>
     </div>
-    <div class="cat-pills" id="cat-legend"></div>
+    <div class="cat-list" id="cat-legend"></div>
   </div>
 
   <!-- Receita por plataforma -->
@@ -586,6 +586,50 @@
       <button class="btn btn-secondary conv-act" id="conv-copy" onclick="copyConvResult()">Copiar resultado</button>
     </div>
   </div>
+  <div class="fixed-bottom-spacer"></div>
+</section>
+
+<!-- ════ PESQUISAR LANÇAMENTOS ════ -->
+<section class="page" id="page-pesquisa">
+  <div class="page-header-row">
+    <div class="phr-left">
+      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
+      <span class="page-header-title">Pesquisar lançamentos</span>
+    </div>
+  </div>
+
+  <div class="srch-field">
+    <svg class="srch-ico" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input class="fi srch-input" type="text" id="srch-q" placeholder="Buscar por descrição, categoria, plataforma..." autocomplete="off" oninput="renderPesquisaResults()" aria-label="Termo de busca">
+    <button class="srch-clear" id="srch-clear" onclick="srchClear()" aria-label="Limpar busca" style="display:none">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+
+  <div class="srch-filters">
+    <div class="srch-seg" role="group" aria-label="Tipo de lançamento">
+      <button class="srch-seg-btn active" id="srch-type-all"  onclick="srchSetType('all')"  aria-pressed="true">Todos</button>
+      <button class="srch-seg-btn"        id="srch-type-exp"  onclick="srchSetType('exp')"  aria-pressed="false">Despesas</button>
+      <button class="srch-seg-btn"        id="srch-type-inc"  onclick="srchSetType('inc')"  aria-pressed="false">Receitas</button>
+    </div>
+    <div class="srch-period-row">
+      <label class="fl" for="srch-period">Período</label>
+      <select class="fi" id="srch-period" onchange="srchSetPeriod(this.value)">
+        <option value="month">Este mês</option>
+        <option value="3m">Últimos 3 meses</option>
+        <option value="year">Este ano</option>
+        <option value="all" selected>Tudo</option>
+        <option value="custom">Personalizado</option>
+      </select>
+    </div>
+    <div class="srch-custom" id="srch-custom" style="display:none">
+      <div class="fg"><label class="fl" for="srch-from">De</label><input class="fi" type="date" id="srch-from" onchange="renderPesquisaResults()"></div>
+      <div class="fg"><label class="fl" for="srch-to">Até</label><input class="fi" type="date" id="srch-to" onchange="renderPesquisaResults()"></div>
+    </div>
+  </div>
+
+  <div class="srch-summary" id="srch-summary"></div>
+  <div class="srch-results" id="srch-results"></div>
   <div class="fixed-bottom-spacer"></div>
 </section>
 
@@ -1449,7 +1493,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=91" defer></script>
+<script src="app.js?v=92" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

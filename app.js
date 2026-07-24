@@ -478,6 +478,7 @@ function renderMais() {
     res:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
     pat:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="4" height="8" rx="1"/><rect x="9" y="8" width="4" height="14" rx="1"/><rect x="16" y="4" width="4" height="18" rx="1"/></svg>',
     conv: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>',
+    srch: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
     adj:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>',
   };
 
@@ -491,6 +492,7 @@ function renderMais() {
     </div>
     <div class="sec-label mais-sec">Ferramentas</div>
     <div class="mais-group">
+      ${item('pesquisa', ICO.srch, 'Pesquisar lançamentos', '')}
       ${item('conversor', ICO.conv, 'Conversor de Moedas', '')}
     </div>
     <div class="sec-label mais-sec">Aplicativo</div>
@@ -498,6 +500,216 @@ function renderMais() {
       ${item('ajustes', ICO.adj, 'Ajustes', `${currSym} · ${theme}`)}
     </div>
     <div class="mais-bottom-spacer"></div>`;
+}
+
+// ══════════════════════════════════════════
+// PESQUISAR LANÇAMENTOS
+// ══════════════════════════════════════════
+var _srchState = { q:'', type:'all', period:'all', from:'', to:'' };
+
+// Normaliza para busca: minúsculas + sem acentos (não persiste nada).
+function _srchNorm(s) {
+  return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+// Nome do veículo/patrimônio vinculado a um gasto, se houver.
+function _srchLinkName(e) {
+  if (e.vehicleId) {
+    const v = (D.vehicles||[]).find(x => x.id === e.vehicleId);
+    if (v) return v.name || '';
+  }
+  const p = (D.patrimonios||[]).find(x => (x.linkedExpenses||[]).includes(e.id));
+  return p ? (p.nome || '') : '';
+}
+
+// Reúne TODOS os lançamentos existentes num formato único (sem persistir).
+function _srchCollect() {
+  const out = [];
+  (D.expenses||[]).forEach(e => {
+    out.push({
+      type:'exp', date: localDateKey(e.date), amount: e.amount,
+      desc: e.description || '', tag: (e.category && String(e.category).trim()) ? e.category : 'Sem categoria',
+      link: _srchLinkName(e), editRef: { kind:'exp', id:e.id },
+    });
+  });
+  (D.incomeItems||[]).forEach(it => {
+    const pl = (D.platforms||[]).find(p => p.id === it.platformId);
+    out.push({
+      type:'inc', date: localDateKey(it.date), amount: it.amount,
+      desc: it.note || '', tag: pl ? pl.name : 'Receita', link:'',
+      pending: it.status === 'pending', editRef: { kind:'item', id:it.id },
+    });
+  });
+  Object.keys(D.dailyIncome||{}).forEach(dateKey => {
+    const dk = localDateKey(dateKey);
+    Object.keys(D.dailyIncome[dateKey] || {}).forEach(pid => {
+      const v = D.dailyIncome[dateKey][pid] || 0;
+      if (v <= 0) return;
+      // evita duplicar quando há itens no mesmo dia+plataforma (o modelo prioriza itens)
+      const hasItems = (D.incomeItems||[]).some(it => localDateKey(it.date) === dk && it.platformId === pid);
+      if (hasItems) return;
+      const pl = (D.platforms||[]).find(p => p.id === pid);
+      out.push({
+        type:'inc', date: dk, amount: v, desc:'', tag: pl ? pl.name : 'Receita',
+        link:'', editRef: { kind:'legacy', date: dateKey, pid },
+      });
+    });
+  });
+  return out;
+}
+
+// Intervalo [from,to] (YYYY-MM-DD, comparação local) do período selecionado.
+function _srchRange() {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const last = (yy,mm) => new Date(yy, mm+1, 0).getDate();
+  const key = (yy,mm,dd) => `${yy}-${String(mm+1).padStart(2,'0')}-${String(dd).padStart(2,'0')}`;
+  switch (_srchState.period) {
+    case 'month': return { from: key(y,m,1), to: key(y,m,last(y,m)) };
+    case '3m': { const d = new Date(y, m-2, 1); return { from: key(d.getFullYear(), d.getMonth(), 1), to: key(y,m,last(y,m)) }; }
+    case 'year': return { from: `${y}-01-01`, to: `${y}-12-31` };
+    case 'custom': return { from: _srchState.from || '', to: _srchState.to || '' };
+    default: return { from:'', to:'' }; // 'all'
+  }
+}
+
+function _srchPeriodLabel() {
+  const r = _srchRange();
+  switch (_srchState.period) {
+    case 'month': return 'Este mês';
+    case '3m': return 'Últimos 3 meses';
+    case 'year': return 'Este ano';
+    case 'custom': return (r.from||r.to) ? `${r.from ? fmtShort(r.from) : '…'} – ${r.to ? fmtShort(r.to) : '…'}` : 'Personalizado';
+    default: return 'Todo o período';
+  }
+}
+
+// Aplica tipo, período e termo de busca sobre a lista unificada.
+function _srchFilter() {
+  const { from, to } = _srchRange();
+  const q = _srchNorm(_srchState.q).trim();
+  return _srchCollect().filter(r => {
+    if (_srchState.type === 'exp' && r.type !== 'exp') return false;
+    if (_srchState.type === 'inc' && r.type !== 'inc') return false;
+    if (from && (!r.date || r.date < from)) return false;
+    if (to && (!r.date || r.date > to)) return false;
+    if (q) {
+      const hay = _srchNorm([r.desc, r.tag, r.link].join(' '));
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a,b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+function renderPesquisa() {
+  // Sincroniza a UI com o estado atual (preserva filtros ao voltar).
+  const q = document.getElementById('srch-q'); if (q) q.value = _srchState.q;
+  const per = document.getElementById('srch-period'); if (per) per.value = _srchState.period;
+  ['all','exp','inc'].forEach(t => {
+    const b = document.getElementById('srch-type-' + t);
+    if (b) { b.classList.toggle('active', _srchState.type === t); b.setAttribute('aria-pressed', _srchState.type === t ? 'true' : 'false'); }
+  });
+  const cust = document.getElementById('srch-custom'); if (cust) cust.style.display = _srchState.period === 'custom' ? '' : 'none';
+  const cf = document.getElementById('srch-from'); if (cf) cf.value = _srchState.from;
+  const ct = document.getElementById('srch-to'); if (ct) ct.value = _srchState.to;
+  renderPesquisaResults();
+}
+
+function srchSetType(t) {
+  _srchState.type = t;
+  ['all','exp','inc'].forEach(x => {
+    const b = document.getElementById('srch-type-' + x);
+    if (b) { b.classList.toggle('active', x === t); b.setAttribute('aria-pressed', x === t ? 'true' : 'false'); }
+  });
+  renderPesquisaResults();
+}
+
+function srchSetPeriod(p) {
+  _srchState.period = p;
+  const cust = document.getElementById('srch-custom');
+  if (cust) cust.style.display = p === 'custom' ? '' : 'none';
+  renderPesquisaResults();
+}
+
+function srchClear() {
+  _srchState.q = '';
+  const q = document.getElementById('srch-q'); if (q) q.value = '';
+  renderPesquisaResults();
+}
+
+function renderPesquisaResults() {
+  const qEl = document.getElementById('srch-q');
+  if (qEl) _srchState.q = qEl.value;
+  const cf = document.getElementById('srch-from'); if (cf) _srchState.from = cf.value;
+  const ct = document.getElementById('srch-to'); if (ct) _srchState.to = ct.value;
+  const clr = document.getElementById('srch-clear'); if (clr) clr.style.display = _srchState.q ? '' : 'none';
+
+  const rows = _srchFilter();
+  const sumEl = document.getElementById('srch-summary');
+  const listEl = document.getElementById('srch-results');
+  if (!sumEl || !listEl) return;
+
+  const n = rows.length;
+  const incTotal = rows.filter(r => r.type === 'inc').reduce((s,r) => s+r.amount, 0);
+  const expTotal = rows.filter(r => r.type === 'exp').reduce((s,r) => s+r.amount, 0);
+  const magTotal = incTotal + expTotal;
+  const periodLbl = _srchPeriodLabel();
+
+  if (n === 0) {
+    sumEl.innerHTML = `<div class="srch-sum-card"><div class="srch-sum-count">Nenhum lançamento encontrado.</div><div class="srch-sum-period">${escHtml(periodLbl)}</div></div>`;
+    listEl.innerHTML = '';
+    return;
+  }
+
+  // Bloco de valores: evita somar sinais de forma ambígua.
+  let valuesHtml = '';
+  const onlyExp = incTotal === 0 && expTotal > 0;
+  const onlyInc = expTotal === 0 && incTotal > 0;
+  if (_srchState.type === 'exp' || onlyExp) {
+    valuesHtml = `<div class="srch-sum-main"><span class="srch-sum-k">Total gasto</span><span class="srch-sum-v v-red">${R(expTotal)}</span></div>`;
+  } else if (_srchState.type === 'inc' || onlyInc) {
+    valuesHtml = `<div class="srch-sum-main"><span class="srch-sum-k">Total recebido</span><span class="srch-sum-v v-green">${R(incTotal)}</span></div>`;
+  } else {
+    const liq = incTotal - expTotal;
+    valuesHtml = `<div class="srch-sum-triple">
+        <div><span class="srch-sum-k">Receitas</span><span class="srch-sum-v v-green">${R(incTotal)}</span></div>
+        <div><span class="srch-sum-k">Despesas</span><span class="srch-sum-v v-red">${R(expTotal)}</span></div>
+        <div><span class="srch-sum-k">Líquido</span><span class="srch-sum-v ${liq>=0?'v-green':'v-red'}">${R(liq)}</span></div>
+      </div>`;
+  }
+  const avg = magTotal / n;
+  sumEl.innerHTML = `<div class="srch-sum-card">
+      <div class="srch-sum-head"><span class="srch-sum-count">${n} ${n===1?'lançamento':'lançamentos'}</span><span class="srch-sum-period">${escHtml(periodLbl)}</span></div>
+      ${valuesHtml}
+      <div class="srch-sum-avg">Média por lançamento: ${R(avg)}</div>
+    </div>`;
+
+  listEl.innerHTML = rows.map(r => {
+    const sign = r.type === 'inc' ? '+' : '−';
+    const cls = r.type === 'inc' ? 'v-green' : 'v-red';
+    const typeLbl = r.type === 'inc' ? 'Receita' : 'Gasto';
+    const title = r.desc || r.tag;
+    const linkHtml = r.link ? `<span class="srch-r-link">· ${escHtml(r.link)}</span>` : '';
+    const pend = r.pending ? ' <span class="srch-r-pend">(pendente)</span>' : '';
+    const ref = encodeURIComponent(JSON.stringify(r.editRef));
+    return `<button class="srch-r" onclick="srchOpen('${ref}')">
+        <span class="srch-r-ico ${r.type==='inc'?'srch-r-ico-inc':'srch-r-ico-exp'}">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${r.type==='inc'?'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>':'<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'}</svg>
+        </span>
+        <span class="srch-r-body">
+          <span class="srch-r-title">${escHtml(title)}${pend}</span>
+          <span class="srch-r-meta">${fmtShort(r.date)} · ${escHtml(r.tag)} · ${typeLbl} ${linkHtml}</span>
+        </span>
+        <span class="srch-r-amt ${cls}">${sign}${R(r.amount)}</span>
+      </button>`;
+  }).join('');
+}
+
+// Abre o lançamento no formulário de edição (mesmo registro, sem duplicar).
+function srchOpen(refStr) {
+  let ref;
+  try { ref = JSON.parse(decodeURIComponent(refStr)); } catch (e) { return; }
+  openQuickAdd(ref);
 }
 
 let _fabOpen = false;
@@ -1123,67 +1335,110 @@ function renderDonut(svgId, legendId, items) {
     </div>`).join('');
 }
 
-function renderBigDonut(svgId, pillsId, totalElId, items) {
-  const svg    = document.getElementById(svgId);
-  const pills  = document.getElementById(pillsId);
-  const totEl  = document.getElementById(totalElId);
-  const total  = items.reduce((s,i)=>s+i.value,0);
+// Estado da análise por categoria do Mês (para seleção/realce donut↔lista).
+var _mesCatItems = [];   // TODAS as categorias reais do mês (ordenadas desc)
+var _mesCatTotal = 0;
+var _mesCatSel = null;   // índice da categoria selecionada, ou null (mostra total)
 
-  if(totEl) { if(total>0) animCount(totEl,total,600); else totEl.textContent='—'; }
+// Monta os itens do GRÁFICO: mostra as maiores categorias e agrupa as menores
+// em "Outras categorias" APENAS no donut (a lista abaixo mostra todas).
+function _donutSlices(items) {
+  const MAX = 6;
+  if (items.length <= MAX + 1) return items.map((it,i)=>({ ...it, _idx:i }));
+  const top = items.slice(0, MAX).map((it,i)=>({ ...it, _idx:i }));
+  const rest = items.slice(MAX);
+  const restVal = rest.reduce((s,i)=>s+i.value,0);
+  top.push({ label:'Outras categorias', value:restVal, color:'#9CA3AF', _idx:null, _group:true });
+  return top;
+}
+
+function renderBigDonut(svgId, pillsId, totalElId, items) {
+  const svg   = document.getElementById(svgId);
+  const totEl = document.getElementById(totalElId);
+  const total = items.reduce((s,i)=>s+i.value,0);
+  _mesCatTotal = total;
+  _mesCatSel = null;
+  _mesUpdateCenter();
 
   if(!total) {
     svg.innerHTML = `<circle cx="100" cy="100" r="80" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="22"/>`;
-    pills.innerHTML = '<div class="empty-state">Nenhum gasto no mês</div>';
     return;
   }
 
+  const slices = _donutSlices(items);
   const r=80, cx=100, cy=100, gap=3;
   const circ=2*Math.PI*r;
   let offset=0, paths='', finalDash=[];
-  items.forEach((it,idx)=>{
+  slices.forEach((it,idx)=>{
     const len=Math.max(0,(it.value/total)*circ - gap);
     finalDash.push(`${len} ${circ-len}`);
-    paths+=`<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="22"
+    const target = it._idx==null ? '' : `onclick="_selectCat(${it._idx})"`;
+    paths+=`<circle class="cat-slice" data-idx="${it._idx==null?'':it._idx}" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${it.color}" stroke-width="22"
       stroke-dasharray="0 ${circ}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"
-      stroke-linecap="round" style="transition:stroke-dasharray .65s cubic-bezier(.35,.07,.24,.95) ${idx*0.07}s"/>`;
+      stroke-linecap="round" style="cursor:${it._idx==null?'default':'pointer'};transition:stroke-dasharray .65s cubic-bezier(.35,.07,.24,.95) ${idx*0.07}s,opacity .2s,stroke-width .2s" ${target}/>`;
     offset+=(it.value/total)*circ;
   });
   svg.innerHTML = paths;
   requestAnimationFrame(()=>requestAnimationFrame(()=>{
     svg.querySelectorAll('circle').forEach((c,i)=>c.setAttribute('stroke-dasharray',finalDash[i]));
   }));
-
-  pills.innerHTML = items.map(it=>`
-    <div class="cat-pill" style="border-color:${it.color}20;background:${it.color}12">
-      <span class="cat-pill-dot" style="background:${it.color}"></span>
-      <span class="cat-pill-name">${it.label}</span>
-      <span class="cat-pill-val" style="color:${it.color}">${R(it.value)}</span>
-    </div>`).join('');
 }
 
-// Vertical category list: top 5 + Outros, with bar, value and % of total (0–100%)
+// Lista detalhada: TODAS as categorias reais do mês, ordenadas por valor desc,
+// com valor e percentual. Sem truncar em top-5, sem "Outros" sintético.
 function renderCatRows(elId, items) {
   var el = document.getElementById(elId);
   if (!el) return;
+  _mesCatItems = items;
   var total = items.reduce(function(s, it) { return s + it.value; }, 0);
-  if (!total) return;
-  var top = items.slice(0, 5);
-  var rest = items.slice(5);
-  var rows = top.slice();
-  if (rest.length > 0) {
-    var otherVal = rest.reduce(function(s, it) { return s + it.value; }, 0);
-    rows.push({ label: 'Outros', value: otherVal, color: '#9CA3AF' });
-  }
-  el.innerHTML = rows.map(function(it) {
+  _mesCatTotal = total;
+  if (!total) { el.innerHTML = '<div class="empty-state">Nenhum gasto no mês</div>'; return; }
+  el.innerHTML = items.map(function(it, i) {
     var pct = Math.round(it.value / total * 100);
-    return '<div class="cat-row">' +
+    return '<div class="cat-row" data-idx="' + i + '" onclick="_selectCat(' + i + ')">' +
       '<span class="cat-row-dot" style="background:' + it.color + '"></span>' +
-      '<span class="cat-row-name">' + it.label + '</span>' +
+      '<span class="cat-row-name">' + escHtml(it.label) + '</span>' +
       '<span class="cat-row-val">' + R(it.value) + '</span>' +
       '<span class="cat-row-pct">' + pct + '%</span>' +
-      '<div class="cat-row-bar-wrap"><div class="cat-row-bar" style="width:' + pct + '%;background:' + it.color + '"></div></div>' +
     '</div>';
   }).join('');
+}
+
+// Atualiza o centro do donut (total geral ou categoria selecionada).
+function _mesUpdateCenter() {
+  var valEl = document.getElementById('cat-donut-total');
+  var lblEl = document.getElementById('cat-donut-lbl');
+  if (!valEl) return;
+  if (_mesCatSel == null || !_mesCatItems[_mesCatSel]) {
+    if (_mesCatTotal > 0) animCount(valEl, _mesCatTotal, 400); else valEl.textContent = '—';
+    if (lblEl) lblEl.textContent = 'total gasto';
+  } else {
+    var it = _mesCatItems[_mesCatSel];
+    var pct = _mesCatTotal ? Math.round(it.value / _mesCatTotal * 100) : 0;
+    valEl.textContent = R(it.value);
+    if (lblEl) lblEl.textContent = it.label + ' · ' + pct + '%';
+  }
+}
+
+// Seleciona/deseleciona uma categoria, realçando a fatia e a linha.
+function _selectCat(i) {
+  _mesCatSel = (_mesCatSel === i) ? null : i;
+  _mesUpdateCenter();
+  // realce nas linhas
+  document.querySelectorAll('#cat-legend .cat-row').forEach(function(row) {
+    var idx = parseInt(row.getAttribute('data-idx'), 10);
+    row.classList.toggle('cat-row-active', _mesCatSel === idx);
+    row.classList.toggle('cat-row-dim', _mesCatSel != null && _mesCatSel !== idx);
+  });
+  // realce nas fatias do donut
+  document.querySelectorAll('#cat-donut .cat-slice').forEach(function(c) {
+    var raw = c.getAttribute('data-idx');
+    var idx = raw === '' ? null : parseInt(raw, 10);
+    var on = _mesCatSel != null && idx === _mesCatSel;
+    var dim = _mesCatSel != null && idx !== _mesCatSel;
+    c.style.opacity = dim ? '0.3' : '1';
+    c.style.strokeWidth = on ? '26' : '22';
+  });
 }
 
 // ══════════════════════════════════════════
@@ -1452,10 +1707,16 @@ function renderMes() {
 
   const mExps=agg.lancamentos.gastos;
   const catMap={};
-  mExps.forEach(e=>{ catMap[e.category]=(catMap[e.category]||0)+e.amount; });
+  // Agregação por categoria REAL (string exata). Categoria vazia/ausente recebe
+  // um rótulo claro ("Sem categoria") em vez de virar um "Outros" indistinguível.
+  // Não unimos categorias diferentes por semelhança de nome/acento/caixa.
+  mExps.forEach(e=>{
+    const key = (e.category!=null && String(e.category).trim()) ? String(e.category) : 'Sem categoria';
+    catMap[key]=(catMap[key]||0)+e.amount;
+  });
   const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,color:PALETTE[i%PALETTE.length]}));
-  renderBigDonut('cat-donut','cat-legend','cat-donut-total',catItems);
-  renderCatRows('cat-legend', catItems);
+  renderCatRows('cat-legend', catItems);                        // lista: TODAS as categorias
+  renderBigDonut('cat-donut','cat-legend','cat-donut-total',catItems); // donut: maiores + "Outras categorias"
 
   const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:p.color})).filter(i=>i.value>0);
   renderDonut('plat-donut','plat-legend',platItems);
@@ -2639,7 +2900,7 @@ new MutationObserver((mutations) => {
 // ══════════════════════════════════════════
 // Abas reais da navegação inferior e telas internas acessadas por "Mais".
 const MAIN_TABS = ['inicio','semana','mes','mais'];
-const INTERNAL_TABS = ['pendencias','fixos','reserva','patrimonio','conversor','ajustes','metas','lembretes'];
+const INTERNAL_TABS = ['pendencias','fixos','reserva','patrimonio','conversor','pesquisa','ajustes','metas','lembretes'];
 var _currentMainTab = 'inicio';        // última aba principal ativa (p/ engrenagem)
 var _navOrigin      = 'mais';           // origem do Voltar de telas internas
 
@@ -2666,6 +2927,7 @@ function switchTab(tab, origin) {
   if(tab==='metas')     renderGoals();
   if(tab==='fixos')      renderFixos();
   if(tab==='conversor')  loadConversorRates();
+  if(tab==='pesquisa')   renderPesquisa();
   if(tab==='ajustes')    renderAjustes();
   if(tab==='lembretes')  renderLembretes();
   if(tab==='pendencias') renderPendencias();
@@ -4352,6 +4614,7 @@ function _refreshAfterEntry() {
   if (document.getElementById('page-inicio')?.classList.contains('active')) { renderInicio(); renderInicioCards(); }
   if (document.getElementById('page-semana')?.classList.contains('active')) { renderSemana(); renderDayAccordion(); }
   if (document.getElementById('page-mes')?.classList.contains('active')) { renderMes(); }
+  if (document.getElementById('page-pesquisa')?.classList.contains('active')) { renderPesquisaResults(); }
 }
 
 function notifyRegistered(amount, label, category) {
