@@ -357,20 +357,23 @@ function renderRecentTx() {
   if (!listEl) return;
   const platMap = Object.fromEntries((D.platforms || []).map(p => [p.id, p]));
   const exps = (D.expenses || []).map(e => ({
-    type: 'exp', id: e.id, date: e.date, label: e.description || e.category, sub: e.category, amount: e.amount
+    type: 'exp', id: e.id, date: e.date, label: e.description || e.category, sub: e.category, amount: e.amount,
+    editRef: { kind: 'exp', id: e.id }
   }));
   const incItems = (D.incomeItems || []).filter(it => it.status === 'paid').map(it => ({
     type: 'inc', id: it.id, date: it.date,
     label: it.note || platMap[it.platformId]?.name || 'Receita',
     sub: platMap[it.platformId]?.name || '',
-    amount: it.amount
+    amount: it.amount,
+    editRef: { kind: 'item', id: it.id }
   }));
   const manualInc = [];
   Object.entries(D.dailyIncome || {}).forEach(([date, pm]) => {
     (D.platforms || []).forEach(p => {
       const v = pm[p.id];
       if (v && v > 0 && !(D.incomeItems || []).some(it => it.date === date && it.platformId === p.id))
-        manualInc.push({ type: 'inc', id: '', date, label: p.name, sub: '', amount: v });
+        manualInc.push({ type: 'inc', id: '', date, label: p.name, sub: '', amount: v,
+          editRef: { kind: 'legacy', date, pid: p.id } });
     });
   });
   const all = [...exps, ...incItems, ...manualInc]
@@ -380,15 +383,29 @@ function renderRecentTx() {
     listEl.innerHTML = '<div class="empty-state">Sem movimentações ainda</div>';
     return;
   }
-  listEl.innerHTML = all.map((tx, i) => `
-    <div class="tx-item" style="--sd:${i*0.04}s"${tx.id ? ` data-id="${tx.id}" data-type="${tx.type}"` : ''}>
+  listEl.innerHTML = all.map((tx, i) => {
+    const ref = encodeURIComponent(JSON.stringify(tx.editRef));
+    return `
+    <div class="tx-item" style="--sd:${i*0.04}s"${tx.id ? ` data-id="${tx.id}" data-type="${tx.type}"` : ''} data-ref="${ref}" onclick="homeTxTap(this)" role="button" tabindex="0" aria-label="Editar ${escHtml(tx.label)}">
       <div class="tx-icon ${tx.type === 'inc' ? 'tx-icon-inc' : 'tx-icon-exp'}">${tx.type === 'inc' ? '↑' : '↓'}</div>
       <div class="tx-info">
-        <div class="tx-label">${tx.label}</div>
-        <div class="tx-sub">${tx.sub ? tx.sub + ' · ' : ''}${fmtShort(tx.date)}</div>
+        <div class="tx-label">${escHtml(tx.label)}</div>
+        <div class="tx-sub">${tx.sub ? escHtml(tx.sub) + ' · ' : ''}${tx.type === 'inc' ? 'Receita' : 'Gasto'} · ${fmtShort(tx.date)}</div>
       </div>
       <div class="tx-amt ${tx.type === 'inc' ? 'pos' : 'neg'}">${tx.type === 'inc' ? '+' : '−'}${currSym} ${Math.abs(tx.amount).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+// Toque em um lançamento recente → abre Editar lançamento (mesmo registro).
+// Se um long-press de exclusão acabou de disparar, o clique subsequente é ignorado.
+var _homeTxLP = false;
+function homeTxTap(el) {
+  if (_homeTxLP) { _homeTxLP = false; return; }
+  const raw = el && el.getAttribute('data-ref');
+  if (!raw) return;
+  let ref; try { ref = JSON.parse(decodeURIComponent(raw)); } catch (e) { return; }
+  openQuickAdd(ref);
 }
 
 // ── Dia: abrir / atualizar ──
@@ -2916,9 +2933,11 @@ function switchTab(tab, origin) {
   // Destaque da bottom-nav: aba real quando principal; senão, a origem (mais/início).
   const navTab = MAIN_TABS.includes(tab) ? tab : (MAIN_TABS.includes(_navOrigin) ? _navOrigin : 'mais');
   document.querySelector(`[data-tab="${navTab}"]`)?.classList.add('active');
-  // Saudação "Olá, …" apenas nas abas principais (não em telas internas).
+  // Saudação "Olá, …" na topbar: mostrada em Semana/Mês/Mais; oculta em telas
+  // internas e também na Home (onde o próprio hero já traz a saudação, evitando
+  // duas saudações competindo).
   const greetEl = document.getElementById('logo-greeting');
-  if (greetEl) greetEl.style.display = MAIN_TABS.includes(tab) ? '' : 'none';
+  if (greetEl) greetEl.style.display = (MAIN_TABS.includes(tab) && tab !== 'inicio') ? '' : 'none';
   if(tab==='inicio')    { renderInicio(); } /* renderInicioCards already called inside renderInicio */
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
@@ -3791,6 +3810,7 @@ function initLongPress() {
     if (!item || !item.dataset.id) return;
     lpTimer = setTimeout(() => {
       haptic(25);
+      _homeTxLP = true; // impede que o clique seguinte abra a edição
       item.classList.add('tx-pressing');
       setTimeout(() => item.classList.remove('tx-pressing'), 300);
       const { type, id } = item.dataset;
@@ -4003,6 +4023,10 @@ function renderHomeNew() {
   const nome = currentUser?.displayName?.split(' ')[0] || '';
   const greetEl = document.getElementById('home-greeting');
   if (greetEl) greetEl.textContent = saudacao + (nome ? ', ' + nome : '');
+  // A Home traz a saudação no hero; oculta a saudação da topbar aqui também
+  // (cobre o boot, que renderiza a Home sem passar por switchTab).
+  const topGreet = document.getElementById('logo-greeting');
+  if (topGreet) topGreet.style.display = 'none';
 
   const monthEl = document.getElementById('home-month');
   if (monthEl) {
@@ -4039,39 +4063,7 @@ function renderHomeNew() {
     }
   }
 
-  // 4. Timeline — pendencias with deadlines
   const hoje = todayStr();
-  const upcoming = (D.pendencias || [])
-    .filter(p => p.status === 'aberta' && p.deadline)
-    .sort((a, b) => a.deadline.localeCompare(b.deadline))
-    .slice(0, 4);
-
-  const tlWrap = document.getElementById('home-timeline-wrap');
-  const tlEl   = document.getElementById('home-timeline');
-  if (tlWrap && tlEl) {
-    if (upcoming.length > 0) {
-      tlWrap.style.display = '';
-      tlEl.innerHTML = upcoming.map(p => {
-        const isOv  = p.deadline < hoje;
-        const isTod = p.deadline === hoje;
-        const dt = parseDate(p.deadline).toLocaleDateString('pt-BR', {day: '2-digit', month: 'short'});
-        const dateLabel = isOv ? 'Vencida' : isTod ? 'Hoje' : dt;
-        const dayNum = isOv ? '!' : isTod ? '◆' : parseDate(p.deadline).getDate();
-        const badgeCls = p.priority === 'alta' ? 'hc-tl-badge--alta' : p.priority === 'media' ? 'hc-tl-badge--media' : 'hc-tl-badge--baixa';
-        const dateCls = isOv ? ' hc-tl-overdue' : isTod ? ' hc-tl-today' : '';
-        return `<div class="hc-tl-item">
-          <div class="hc-tl-badge ${badgeCls}">${dayNum}</div>
-          <div class="hc-tl-info">
-            <div class="hc-tl-name">${p.title}</div>
-            <div class="hc-tl-date-label${dateCls}">${dateLabel}</div>
-          </div>
-          <div class="hc-tl-right">${p.estimatedValue ? `<div class="hc-tl-amount">${R(p.estimatedValue)}</div>` : ''}</div>
-        </div>`;
-      }).join('');
-    } else {
-      tlWrap.style.display = 'none';
-    }
-  }
 
   // 5. Meta atual
   const activeGoals = (D.goals || []).filter(g => !g.completed);
@@ -4143,18 +4135,27 @@ function renderHomeNew() {
     }
   }
 
-  // Reserve movement note (visible only when there are reserve changes this month)
-  const resvChip = document.getElementById('home-resv-note');
-  if (resvChip) {
-    const resvNet = sumMonthReserva(monthOffset);
-    if (resvNet > 0) {
-      resvChip.style.display = '';
-      resvChip.innerHTML = `↑ Você guardou <strong>${R(resvNet)}</strong> na reserva em ${fmtMonthYear(monthOffset)}.`;
-    } else if (resvNet < 0) {
-      resvChip.style.display = '';
-      resvChip.innerHTML = `↓ Você retirou <strong>${R(Math.abs(resvNet))}</strong> da reserva em ${fmtMonthYear(monthOffset)}.`;
+  // Reserva — resumo curto: saldo + progresso/meta + acesso (sem repetir o hero da Reserva)
+  const resvSection = document.getElementById('home-resv-section');
+  const resvCard = document.getElementById('home-resv-card');
+  if (resvSection && resvCard) {
+    const saldo = (D.emergency && D.emergency.current) || 0;
+    const meta  = (D.emergency && D.emergency.target)  || 0;
+    if (saldo > 0 || meta > 0) {
+      resvSection.style.display = '';
+      const pct = meta > 0 ? Math.min(100, Math.round(saldo / meta * 100)) : 0;
+      const metaLine = meta > 0
+        ? `<div class="hc-resv-meta"><span>${pct}% da meta</span><span>Meta ${R(meta)}</span></div>
+           <div class="hc-resv-track"><div class="hc-resv-fill${pct>=100?' hc-resv-done':''}" style="width:${pct}%"></div></div>`
+        : `<div class="hc-resv-meta"><span>Sem meta definida</span></div>`;
+      resvCard.innerHTML = `
+        <div class="hc-resv-top">
+          <div class="hc-resv-lbl">Saldo guardado</div>
+          <div class="hc-resv-val">${R(saldo)}</div>
+        </div>
+        ${metaLine}`;
     } else {
-      resvChip.style.display = 'none';
+      resvSection.style.display = 'none';
     }
   }
 
@@ -4454,9 +4455,20 @@ function _qaApplyMode() {
   if (toggle) toggle.classList.toggle('qa-type-locked', !!_qaEdit);
 }
 
+// Oculta o FAB global enquanto o formulário/sheet está aberto e o restaura
+// conforme a aba ativa ao fechar.
+function _hideFabForSheet() { const f = document.getElementById('global-fab'); if (f) f.style.display = 'none'; }
+function _restoreFab() {
+  const f = document.getElementById('global-fab'); if (!f) return;
+  const active = document.querySelector('.page.active');
+  const id = active ? active.id : '';
+  f.style.display = (id === 'page-inicio' || id === 'page-semana' || id === 'page-mes') ? '' : 'none';
+}
+
 function openQuickAdd(editRef) {
   _qaEdit = editRef || null;
   _qaSaving = false;
+  _hideFabForSheet();
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   _qaPopulateSelects();
   const dateEl = document.getElementById('qa-date');
@@ -4514,6 +4526,7 @@ function qaCancel() {
   _qaSaving = false;
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   closeOverlay('modal-quick-add');
+  _restoreFab();
 }
 
 function qaConfirm() {
@@ -4582,6 +4595,7 @@ function qaConfirm() {
   // impedindo que um segundo toque (síncrono) grave um duplicado.
   _qaEdit = null;
   closeOverlay('modal-quick-add');
+  _restoreFab();
   haptic(10);
   _refreshAfterEntry();
 }
@@ -4604,6 +4618,7 @@ function qaDelete() {
       }
       _qaEdit = null;
       closeOverlay('modal-quick-add');
+      _restoreFab();
       _refreshAfterEntry();
     },
   });
@@ -5224,6 +5239,7 @@ function completePendencia(id) {
 function openPendenciaAsExpense(p) {
   _qaEdit = null;
   _qaSaving = false;
+  _hideFabForSheet();
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   _pendVehicleId = p.vehicleId || null;
   _qaPopulateSelects();

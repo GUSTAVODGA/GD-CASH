@@ -2500,6 +2500,21 @@ textarea.form-input{resize:none}
   border-color: rgba(22,163,74,.22);
 }
 
+/* Reserva — resumo curto na Home */
+.hc-resv-card { background:#FFFFFF; border-radius:16px; padding:16px; box-shadow:0 1px 6px rgba(12,18,64,.06); cursor:pointer; }
+:root[data-theme="dark"] .hc-resv-card { background:var(--surface2); box-shadow:none; border:1px solid var(--border); }
+.hc-resv-card:active { opacity:.7; }
+.hc-resv-top { display:flex; align-items:baseline; justify-content:space-between; gap:10px; }
+.hc-resv-lbl { font-size:12px; font-weight:600; color:var(--text3); }
+.hc-resv-val { font-size:20px; font-weight:900; color:var(--green); font-variant-numeric:tabular-nums; }
+.hc-resv-meta { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-top:10px; font-size:11.5px; font-weight:700; color:var(--text3); }
+.hc-resv-track { height:6px; border-radius:6px; background:var(--border); overflow:hidden; margin-top:6px; }
+.hc-resv-fill { height:100%; border-radius:6px; background:var(--green); transition:width .5s cubic-bezier(.35,.07,.24,.95); }
+.hc-resv-done { background:var(--accent, var(--green)); }
+/* Lançamento recente — toque abre Editar */
+.tx-item[role="button"] { cursor:pointer; }
+.tx-item[role="button"]:active { background:var(--surface2); }
+
 /* ══════════════════════════════════════════
    PATRIMÔNIO — VEÍCULOS
    ══════════════════════════════════════════ */

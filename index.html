@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=78">
+<link rel="stylesheet" href="style.css?v=79">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -237,39 +237,17 @@
     <p class="hc-insight-text" id="home-insight-text"></p>
   </div>
 
-  <!-- ── 4. PRÓXIMOS COMPROMISSOS ── -->
-  <div class="hc-section hc-section--sep" id="home-timeline-wrap" style="display:none">
-    <div class="hc-sec-hd">
-      <span class="hc-tri-sm"></span>
-      <span class="hc-sec-title">Próximos compromissos</span>
-      <button class="hc-sec-link" onclick="switchTab('pendencias','inicio')">Ver todos</button>
-    </div>
-    <div id="home-timeline" class="hc-timeline"></div>
-  </div>
-
-  <!-- ── 5. META EM CURSO ── -->
-  <div class="hc-section hc-section--sep" id="home-goal-section" style="display:none">
-    <div class="hc-sec-hd">
-      <span class="hc-tri-sm"></span>
-      <span class="hc-sec-title">Meta em curso</span>
-      <button class="hc-sec-link" onclick="switchTab('metas','inicio')">Ver metas</button>
-    </div>
-    <div class="hc-goal-card">
-      <div id="home-goal"></div>
-    </div>
-  </div>
-
-  <!-- ── 6. PENDÊNCIAS RELEVANTES ── -->
+  <!-- ── 4. PENDÊNCIAS IMPORTANTES (bloco único) ── -->
   <div class="hc-section hc-section--sep" id="home-pend-section" style="display:none">
     <div class="hc-sec-hd">
       <span class="hc-tri-sm"></span>
-      <span class="hc-sec-title">Pendências</span>
+      <span class="hc-sec-title">Pendências importantes</span>
       <button class="hc-sec-link" onclick="switchTab('pendencias','inicio')">Ver todas</button>
     </div>
     <div id="home-pend-list" class="hc-pend-list"></div>
   </div>
 
-  <!-- ── 7. RECENTES ── -->
+  <!-- ── 5. RECENTES ── -->
   <div class="hc-rule"></div>
   <div class="hc-section">
     <div class="hc-sec-hd">
@@ -286,16 +264,27 @@
     </div>
   </div>
 
-  <!-- ── 8. REGISTRAR ── -->
-  <div class="hc-register-wrap">
-    <button class="hc-register-btn" onclick="switchTab('semana')">
-      <span class="hc-btn-tri"></span>
-      Registrar lançamento
-    </button>
+  <!-- ── 6. RESERVA (resumo curto) ── -->
+  <div class="hc-section hc-section--sep" id="home-resv-section" style="display:none">
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">Reserva de emergência</span>
+      <button class="hc-sec-link" onclick="switchTab('reserva','inicio')">Ver reserva</button>
+    </div>
+    <div class="hc-resv-card" id="home-resv-card" onclick="switchTab('reserva','inicio')" role="button" tabindex="0"></div>
   </div>
 
-  <!-- ── RESERVA DO MÊS — shown only when relevant ── -->
-  <div class="hc-resv-note" id="home-resv-note" style="display:none" onclick="switchTab('reserva','inicio')" role="button" tabindex="0"></div>
+  <!-- ── 7. META EM CURSO (mantida, prioridade menor) ── -->
+  <div class="hc-section hc-section--sep" id="home-goal-section" style="display:none">
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">Meta em curso</span>
+      <button class="hc-sec-link" onclick="switchTab('metas','inicio')">Ver metas</button>
+    </div>
+    <div class="hc-goal-card">
+      <div id="home-goal"></div>
+    </div>
+  </div>
 
   <div style="height:56px"></div>
 
@@ -1493,7 +1482,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=92" defer></script>
+<script src="app.js?v=93" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
