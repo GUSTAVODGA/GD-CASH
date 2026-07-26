@@ -1403,59 +1403,130 @@ function renderBigDonut(svgId, pillsId, totalElId, items) {
 
 // Lista detalhada: TODAS as categorias reais do mês, ordenadas por valor desc,
 // com valor e percentual. Sem truncar em top-5, sem "Outros" sintético.
+// Lista de barras — PROTAGONISTA. Cada categoria: cor + nome + valor, barra
+// proporcional ao MAIOR gasto (trilho + gradiente + cantos), % do mês e um
+// painel de detalhe que expande ao selecionar. Sem nova agregação.
 function renderCatRows(elId, items) {
   var el = document.getElementById(elId);
   if (!el) return;
   _mesCatItems = items;
   var total = items.reduce(function(s, it) { return s + it.value; }, 0);
   _mesCatTotal = total;
+  var maxVal = items.length ? items[0].value : 0; // itens vêm ordenados desc
   if (!total) { el.innerHTML = '<div class="empty-state">Nenhum gasto no mês</div>'; return; }
   el.innerHTML = items.map(function(it, i) {
     var pct = Math.round(it.value / total * 100);
-    return '<div class="cat-row" data-idx="' + i + '" onclick="_selectCat(' + i + ')">' +
-      '<span class="cat-row-dot" style="background:' + it.color + '"></span>' +
-      '<span class="cat-row-name">' + escHtml(it.label) + '</span>' +
-      '<span class="cat-row-val">' + R(it.value) + '</span>' +
-      '<span class="cat-row-pct">' + pct + '%</span>' +
+    var w = maxVal ? Math.max(3, Math.round(it.value / maxVal * 100)) : 0;
+    return '<div class="mcat" data-idx="' + i + '" style="--c:' + it.color + '">' +
+      '<button class="mcat-row" onclick="_selectCat(' + i + ')" aria-label="' + escHtml(it.label) + '">' +
+        '<span class="mcat-line">' +
+          '<span class="mcat-dot"></span>' +
+          '<span class="mcat-name">' + escHtml(it.label) + '</span>' +
+          '<span class="mcat-val">' + R(it.value) + '</span>' +
+        '</span>' +
+        '<span class="mcat-track"><span class="mcat-fill" style="width:' + w + '%"></span></span>' +
+        '<span class="mcat-pct">' + pct + '% do mês</span>' +
+      '</button>' +
+      '<div class="mcat-detail" id="mcat-detail-' + i + '"></div>' +
     '</div>';
   }).join('');
 }
 
-// Atualiza o centro do donut (total geral ou categoria selecionada).
-function _mesUpdateCenter() {
+// Centro do donut — só o essencial (spec): padrão TOTAL GASTO/valor/nº categorias;
+// selecionado nome/valor/percentual. Sem nº de lançamentos nem frases.
+function _mesUpdateCenter(animate) {
+  var topEl = document.getElementById('cat-donut-top');
   var valEl = document.getElementById('cat-donut-total');
   var lblEl = document.getElementById('cat-donut-lbl');
+  var center = document.getElementById('cat-donut-center');
   if (!valEl) return;
   if (_mesCatSel == null || !_mesCatItems[_mesCatSel]) {
-    if (_mesCatTotal > 0) animCount(valEl, _mesCatTotal, 400); else valEl.textContent = '—';
-    if (lblEl) lblEl.textContent = 'total gasto';
+    if (topEl) topEl.textContent = 'Total gasto';
+    if (_mesCatTotal > 0) animCount(valEl, _mesCatTotal, 450); else valEl.textContent = '—';
+    if (lblEl) lblEl.textContent = _mesCatItems.length ? (_mesCatItems.length + (_mesCatItems.length === 1 ? ' categoria' : ' categorias')) : '';
+    if (center) center.classList.remove('bdc-sel');
   } else {
     var it = _mesCatItems[_mesCatSel];
     var pct = _mesCatTotal ? Math.round(it.value / _mesCatTotal * 100) : 0;
+    if (topEl) topEl.textContent = it.label;
     valEl.textContent = R(it.value);
-    if (lblEl) lblEl.textContent = it.label + ' · ' + pct + '%';
+    if (lblEl) lblEl.textContent = pct + '%';
+    if (center) { center.classList.add('bdc-sel'); center.style.setProperty('--cat-color', it.color); }
   }
+  if (animate && center) { center.classList.remove('bdc-swap'); void center.offsetWidth; center.classList.add('bdc-swap'); }
 }
 
-// Seleciona/deseleciona uma categoria, realçando a fatia e a linha.
+// Painel de detalhe da categoria (nome, valor, % do mês, nº de lançamentos,
+// maior lançamento e "Ver lançamentos"). Só leitura dos dados já carregados.
+// Painel simplificado — não repete o que já está na linha (nome/valor/%).
+// Mostra apenas o que agrega: maior gasto e último lançamento + CTA discreto.
+function _catDetailHTML(it, i) {
+  var rows = '';
+  if (it.top) {
+    rows += '<div class="mcat-d-row"><span class="mcat-d-lbl">Maior gasto</span>' +
+      '<span class="mcat-d-desc">' + escHtml(it.top.desc) + '</span>' +
+      '<span class="mcat-d-amt">' + R(it.top.amount) + '</span></div>';
+  }
+  rows += '<div class="mcat-d-row"><span class="mcat-d-lbl">Quantidade de lançamentos</span>' +
+    '<span class="mcat-d-desc"></span>' +
+    '<span class="mcat-d-amt">' + it.count + '</span></div>';
+  if (it.last) {
+    rows += '<div class="mcat-d-row"><span class="mcat-d-lbl">Último lançamento</span>' +
+      '<span class="mcat-d-desc">' + escHtml(it.last.desc) + '</span>' +
+      '<span class="mcat-d-amt mcat-d-date">' + fmtShort(it.last.date) + '</span></div>';
+  }
+  return '<div class="mcat-detail-in" style="--c:' + it.color + '">' +
+    rows +
+    '<button class="mcat-d-cta" onclick="_verLancamentos(' + i + ')">Ver lançamentos <span aria-hidden="true">→</span></button>' +
+  '</div>';
+}
+
+// Seleciona/deseleciona: destaca barra, linha, %, donut; esmaece as demais;
+// expande o painel de detalhe abaixo da categoria selecionada.
 function _selectCat(i) {
   _mesCatSel = (_mesCatSel === i) ? null : i;
-  _mesUpdateCenter();
-  // realce nas linhas
-  document.querySelectorAll('#cat-legend .cat-row').forEach(function(row) {
+  _mesUpdateCenter(true);
+  document.querySelectorAll('#cat-legend .mcat').forEach(function(row) {
     var idx = parseInt(row.getAttribute('data-idx'), 10);
-    row.classList.toggle('cat-row-active', _mesCatSel === idx);
-    row.classList.toggle('cat-row-dim', _mesCatSel != null && _mesCatSel !== idx);
+    var on = _mesCatSel === idx;
+    row.classList.toggle('mcat-active', on);
+    row.classList.toggle('mcat-dim', _mesCatSel != null && !on);
+    var det = row.querySelector('.mcat-detail');
+    if (det) {
+      if (on && _mesCatItems[idx]) { det.innerHTML = _catDetailHTML(_mesCatItems[idx], idx); det.classList.add('open'); }
+      else { det.classList.remove('open'); det.innerHTML = ''; }
+    }
   });
-  // realce nas fatias do donut
+  // realce nas fatias do donut (mantém interação/animação atuais)
   document.querySelectorAll('#cat-donut .cat-slice').forEach(function(c) {
     var raw = c.getAttribute('data-idx');
     var idx = raw === '' ? null : parseInt(raw, 10);
     var on = _mesCatSel != null && idx === _mesCatSel;
     var dim = _mesCatSel != null && idx !== _mesCatSel;
-    c.style.opacity = dim ? '0.3' : '1';
+    c.style.opacity = dim ? '0.65' : '1'; // demais fatias legíveis (~65%), foco na ativa
     c.style.strokeWidth = on ? '26' : '22';
   });
+}
+
+// "Ver lançamentos" → abre a Pesquisa já filtrada pela categoria e pelo mês
+// atualmente aberto (usa o estado existente da Pesquisa; sem filtros novos).
+function _verLancamentos(i) {
+  var it = _mesCatItems[i];
+  if (!it) return;
+  _srchState.q = it.label;
+  _srchState.type = 'exp';
+  if (monthOffset === 0) {
+    _srchState.period = 'month';
+    _srchState.from = ''; _srchState.to = '';
+  } else {
+    var d = new Date(); d.setMonth(d.getMonth() + monthOffset, 1);
+    var y = d.getFullYear(), m = d.getMonth(), last = new Date(y, m + 1, 0).getDate();
+    var mm = String(m + 1).padStart(2, '0');
+    _srchState.period = 'custom';
+    _srchState.from = y + '-' + mm + '-01';
+    _srchState.to = y + '-' + mm + '-' + String(last).padStart(2, '0');
+  }
+  switchTab('pesquisa', 'mes');
 }
 
 // ══════════════════════════════════════════
@@ -1723,17 +1794,23 @@ function renderMes() {
   document.getElementById('hero-mes').className='hero-card '+(liq>=0?'pos':'neg');
 
   const mExps=agg.lancamentos.gastos;
-  const catMap={};
+  const catMap={}, catCount={}, catTop={}, catLast={};
   // Agregação por categoria REAL (string exata). Categoria vazia/ausente recebe
   // um rótulo claro ("Sem categoria") em vez de virar um "Outros" indistinguível.
   // Não unimos categorias diferentes por semelhança de nome/acento/caixa.
+  // catCount/catTop/catLast (nº, maior e último lançamento) são apenas leitura
+  // dos gastos JÁ carregados — não recalculam agregação nem tocam monthAggregate.
   mExps.forEach(e=>{
     const key = (e.category!=null && String(e.category).trim()) ? String(e.category) : 'Sem categoria';
     catMap[key]=(catMap[key]||0)+e.amount;
+    catCount[key]=(catCount[key]||0)+1;
+    if(!catTop[key] || e.amount>catTop[key].amount) catTop[key]={ desc:(e.description||e.category||''), amount:e.amount };
+    const dk=localDateKey(e.date);
+    if(!catLast[key] || dk>catLast[key].date) catLast[key]={ desc:(e.description||e.category||''), date:dk };
   });
-  const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,color:PALETTE[i%PALETTE.length]}));
-  renderCatRows('cat-legend', catItems);                        // lista: TODAS as categorias
-  renderBigDonut('cat-donut','cat-legend','cat-donut-total',catItems); // donut: maiores + "Outras categorias"
+  const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,count:catCount[label]||0,top:catTop[label]||null,last:catLast[label]||null,color:PALETTE[i%PALETTE.length]}));
+  renderCatRows('cat-legend', catItems);                        // lista de barras: protagonista
+  renderBigDonut('cat-donut','cat-legend','cat-donut-total',catItems); // donut: resumo visual
 
   const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:p.color})).filter(i=>i.value>0);
   renderDonut('plat-donut','plat-legend',platItems);

@@ -593,12 +593,18 @@ main{background:var(--bg);min-height:100dvh}
 .dot-gold{background:var(--gold)}
 
 /* ── Big donut (categoria) ── */
-.big-donut-card{margin-bottom:14px;padding-bottom:16px}
-.big-donut-wrap{position:relative;display:flex;justify-content:center;align-items:center;margin:8px 0 16px}
-.big-donut-svg{width:240px;height:240px}
-.big-donut-center{position:absolute;text-align:center;pointer-events:none}
-.bdc-val{font-size:28px;font-weight:900;letter-spacing:-.8px;color:var(--text)}
-.bdc-lbl{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+.big-donut-card{margin-bottom:14px;padding-bottom:14px}
+.big-donut-wrap{position:relative;display:flex;justify-content:center;align-items:center;margin:6px 0 8px}
+/* donut = apenas resumo visual → ~17% menor, cedendo protagonismo à lista */
+.big-donut-svg{width:162px;height:162px}
+.big-donut-center{position:absolute;text-align:center;pointer-events:none;max-width:104px}
+.bdc-top{font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px;transition:color .3s}
+.bdc-val{font-size:18px;font-weight:900;letter-spacing:-.5px;color:var(--text);line-height:1.05}
+.bdc-lbl{font-size:9.5px;color:var(--text3);font-weight:700;letter-spacing:.02em;margin-top:2px;transition:color .3s}
+.bdc-sel .bdc-top{color:var(--cat-color,var(--ac))}
+@keyframes bdcSwap{0%{opacity:.2;transform:scale(.92)}100%{opacity:1;transform:scale(1)}}
+.bdc-swap{animation:bdcSwap .3s cubic-bezier(.34,1.4,.5,1)}
+@media (prefers-reduced-motion:reduce){.bdc-swap{animation:none}}
 .cat-pills{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}
 .cat-pills::-webkit-scrollbar{display:none}
 .cat-pill{
@@ -2765,18 +2771,43 @@ textarea.form-input{resize:none}
 /* Fix 3: Cat list — vertical, replaces horizontal pills */
 #cat-legend { display: flex; flex-direction: column; gap: 0; overflow-x: visible; padding: 0 2px 4px; }
 .cat-list { display:block; }
-.cat-row { display: grid; grid-template-columns: 10px 1fr auto 44px; align-items: center; gap: 8px; padding: 9px 6px; border-top: 1px solid var(--border); border-radius:8px; cursor:pointer; transition:background .15s, opacity .15s; }
-.cat-row:first-child { border-top: none; }
-.cat-row:active { background: var(--surface2); }
-.cat-row-active { background: var(--surface2); }
-.cat-row-active .cat-row-name { font-weight: 800; }
-.cat-row-dim { opacity: .45; }
-.cat-row-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.cat-row-name { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cat-row-bar-wrap { height: 4px; border-radius: 4px; background: var(--border); overflow: hidden; }
-.cat-row-bar { height: 100%; border-radius: 4px; transition: width .5s cubic-bezier(.35,.07,.24,.95); }
-.cat-row-val { font-size: 12px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
-.cat-row-pct { font-size: 11px; font-weight: 700; color: var(--text3); text-align: right; white-space: nowrap; }
+/* ══ LISTA DE BARRAS POR CATEGORIA (protagonista) ══ */
+/* trilho das barras com mais contraste → percebe-se de imediato quanto falta ao maior */
+:root{--donut-track:rgba(13,20,64,.13)}
+:root[data-theme="dark"]{--donut-track:rgba(232,237,255,.16)}
+#cat-legend{display:block}
+.mcat{ border-radius:14px; transition:opacity .2s; }
+.mcat + .mcat{ border-top:1px solid var(--border); }
+.mcat-active + .mcat, .mcat-active{ border-top-color:transparent; }
+.mcat-dim{ opacity:.7; } /* demais categorias continuam perfeitamente legíveis */
+.mcat-row{ display:block; width:100%; text-align:left; background:transparent; border:none; border-left:3px solid transparent; border-radius:12px; padding:6px 12px 7px; cursor:pointer; transition:background .2s, transform .2s cubic-bezier(.34,1.3,.5,1); }
+.mcat-active .mcat-row{ background:color-mix(in srgb, var(--c) 12%, transparent); border-left-color:var(--c); transform:translateX(2px); }
+.mcat-line{ display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+.mcat-dot{ width:8px; height:8px; border-radius:50%; background:var(--c); flex-shrink:0; transition:box-shadow .2s; }
+.mcat-active .mcat-dot{ box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 22%, transparent); }
+.mcat-name{ flex:1; min-width:0; font-size:13px; font-weight:600; color:var(--text2); letter-spacing:-.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.mcat-val{ font-size:14px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; flex-shrink:0; }
+.mcat-track{ display:block; height:8px; border-radius:6px; background:var(--donut-track); overflow:hidden; }
+.mcat-fill{ display:block; height:100%; border-radius:6px; background:linear-gradient(90deg, color-mix(in srgb, var(--c) 62%, #ffffff), var(--c)); box-shadow:0 1px 3px color-mix(in srgb, var(--c) 40%, transparent); transition:width .6s cubic-bezier(.34,1.1,.5,1); }
+.mcat-pct{ display:block; margin-top:4px; font-size:10.5px; font-weight:700; color:var(--text3); }
+.mcat-active .mcat-name{ color:var(--text); font-weight:700; }
+.mcat-active .mcat-pct{ color:var(--c); font-weight:800; }
+/* painel de detalhe expansível — leve e arejado, expansão/recolhimento suaves */
+.mcat-detail{ overflow:hidden; max-height:0; opacity:0; transition:max-height .34s cubic-bezier(.4,0,.2,1), opacity .28s ease; }
+.mcat-detail.open{ max-height:200px; opacity:1; }
+.mcat-detail-in{ margin:0 12px 12px; padding:6px 12px 10px; transform:translateY(-4px); transition:transform .3s cubic-bezier(.34,1.2,.5,1); }
+.mcat-detail.open .mcat-detail-in{ transform:translateY(0); }
+/* linhas: rótulo · descrição · valor/data — sem repetir nome/valor/% da linha */
+.mcat-d-row{ display:grid; grid-template-columns:auto 1fr auto; align-items:baseline; gap:12px; padding:9px 2px; }
+.mcat-d-row + .mcat-d-row, .mcat-d-row:first-child{ border-top:1px solid var(--border); }
+.mcat-d-lbl{ font-size:10px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--text3); white-space:nowrap; }
+.mcat-d-desc{ min-width:0; font-size:13px; font-weight:600; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.mcat-d-amt{ font-size:13px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; white-space:nowrap; }
+.mcat-d-date{ font-weight:700; color:var(--text3); }
+/* CTA discreto no padrão de link do Avenco (ex.: "Ver mês") */
+.mcat-d-cta{ display:inline-flex; align-items:center; gap:5px; margin-top:10px; padding:5px 2px; background:none; border:none; color:var(--ac); font-size:13px; font-weight:800; cursor:pointer; }
+.mcat-d-cta span{ display:inline-block; transition:transform .2s; }
+.mcat-d-cta:active span{ transform:translateX(3px); }
 
 /* Fix 4: Semana hero — responsive value, no line-break on R$ */
 #hero-semana .hero-val { font-size: clamp(24px, 8vw, 38px); white-space: nowrap; letter-spacing: -1.5px; }

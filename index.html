@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=79">
+<link rel="stylesheet" href="style.css?v=80">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -415,21 +415,23 @@
     </div>
   </div>
 
-  <div id="mes-comp-section"></div>
-  <div id="mes-insights-section"></div>
-
   <!-- Gastos por categoria — grande -->
   <div class="sec-title av-sec-title">Gastos por categoria</div>
   <div class="card av-card big-donut-card">
     <div class="big-donut-wrap">
       <svg class="big-donut-svg" id="cat-donut" viewBox="0 0 200 200"></svg>
       <div class="big-donut-center" id="cat-donut-center">
+        <div class="bdc-top" id="cat-donut-top">Total gasto</div>
         <div class="bdc-val" id="cat-donut-total">—</div>
-        <div class="bdc-lbl" id="cat-donut-lbl">total gasto</div>
+        <div class="bdc-lbl" id="cat-donut-lbl">—</div>
       </div>
     </div>
     <div class="cat-list" id="cat-legend"></div>
   </div>
+
+  <!-- Comparativo com o mês anterior + Destaque do mês (após a seção de categorias) -->
+  <div id="mes-comp-section"></div>
+  <div id="mes-insights-section"></div>
 
   <!-- Receita por plataforma -->
   <div class="sec-title av-sec-title">Receita por plataforma</div>
@@ -1482,7 +1484,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=94" defer></script>
+<script src="app.js?v=95" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
