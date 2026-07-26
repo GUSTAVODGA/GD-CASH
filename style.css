@@ -359,7 +359,9 @@
 /* ══ PESQUISAR LANÇAMENTOS ══ */
 .srch-field{position:relative;margin-bottom:12px}
 .srch-ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none}
-.srch-input{padding-left:38px;padding-right:38px}
+/* Especificidade elevada p/ vencer .fi{padding:...} definido depois:
+   garante que texto/placeholder nunca fiquem sobre a lupa. */
+.srch-field .srch-input{padding-left:40px;padding-right:38px}
 .srch-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:28px;height:28px;border:none;background:var(--surface2);border-radius:8px;color:var(--text2);display:flex;align-items:center;justify-content:center;cursor:pointer}
 .srch-filters{margin-bottom:14px}
 .srch-seg{display:flex;background:var(--surface2);border-radius:12px;padding:3px;gap:3px;margin-bottom:10px}
@@ -493,7 +495,10 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
   position:sticky;top:0;z-index:50;
   background:var(--topbar-bg);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);
   border-bottom:1px solid var(--border);
-  display:flex;align-items:center;padding:14px 18px;
+  display:flex;align-items:center;
+  /* Respeita o safe-area do topo (notch/Dynamic Island) em PWA standalone.
+     Sem viewport-fit=cover o inset é 0 → idêntico ao layout anterior. */
+  padding:calc(14px + env(safe-area-inset-top,0px)) calc(18px + env(safe-area-inset-right,0px)) 14px calc(18px + env(safe-area-inset-left,0px));
 }
 .logo{display:flex;align-items:center;gap:9px;font-weight:800;font-size:16px;flex:1}
 .curr-chip{
@@ -802,8 +807,9 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .fixed-total-lbl{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .fixed-total-val{font-size:clamp(24px,7.5vw,32px);font-weight:900;color:var(--red);margin-top:3px;letter-spacing:-.5px;line-height:1.1;white-space:nowrap;overflow-wrap:normal}
 /* Item compacto: info à esquerda; valor + ações empilhados à direita */
-.fixed-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.fixed-item{display:block;padding:9px 0;border-bottom:1px solid var(--border)}
 .fixed-item:last-child{border-bottom:none}
+.fixed-top{display:flex;align-items:center;gap:10px}
 .fixed-info{flex:1;min-width:0}
 .fixed-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fixed-meta{font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
@@ -811,6 +817,40 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .fixed-amt{font-weight:800;color:var(--red);font-variant-numeric:tabular-nums;white-space:nowrap}
 .fixed-actions{display:flex;align-items:center;gap:6px}
 .fixed-status{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;vertical-align:middle}
+/* Estado do ciclo mensal na meta */
+.fixed-pay-lbl{font-weight:700}
+.fixed-pay-done{color:var(--green,#16a34a)}
+.fixed-pay-over{color:var(--red)}
+.fixed-item-over{border-left:3px solid var(--red);padding-left:10px}
+/* Baixa mensal: linha de ação abaixo do item */
+.fixed-baixa-row{display:flex;justify-content:flex-end;margin-top:8px}
+.fixed-baixa-btn{
+  background:var(--ac);border:none;color:#fff;
+  border-radius:16px;padding:7px 16px;font-size:12.5px;font-weight:800;cursor:pointer;
+  min-height:32px;white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:filter .15s,transform .1s;
+}
+.fixed-baixa-btn:active{transform:scale(.96);filter:brightness(.94)}
+.fixed-item-over .fixed-baixa-btn{background:var(--red)}
+/* Resumo dentro do sheet de baixa */
+.baixa-summary{background:var(--surface2);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.baixa-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0}
+.baixa-lbl{font-size:12px;color:var(--text3);font-weight:600}
+.baixa-name{font-size:14px;font-weight:700;color:var(--text);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.baixa-amt{font-size:15px;font-weight:800;color:var(--red);font-variant-numeric:tabular-nums}
+/* Aviso compacto de gastos fixos vencidos na Home */
+.home-fixos-alert{
+  display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;cursor:pointer;
+  background:var(--red-t,rgba(220,38,38,.08));border:1px solid var(--red-b,rgba(220,38,38,.22));
+  border-radius:14px;padding:13px 15px;margin:14px 0 4px;-webkit-tap-highlight-color:transparent;
+  transition:background .15s,transform .1s;
+}
+.home-fixos-alert:active{transform:scale(.99)}
+.hfa-ico{flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;font-weight:900;font-size:15px;display:flex;align-items:center;justify-content:center;line-height:1;margin-top:1px}
+.hfa-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.hfa-title{font-size:14px;font-weight:800;color:var(--text)}
+.hfa-sub{font-size:12.5px;font-weight:600;color:var(--text2)}
+.hfa-total{font-size:12.5px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.hfa-cta{margin-top:5px;font-size:12.5px;font-weight:800;color:var(--red)}
 /* Ação direta única: Pausar / Reativar (pill compacto) */
 .fixed-pause-btn{
   background:var(--ol1);border:1px solid var(--border);color:var(--text);
@@ -1005,7 +1045,7 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .row-del{background:none;border:none;color:var(--red);font-size:16px;cursor:pointer;padding:4px 6px;flex-shrink:0}
 
 @media (min-width:600px){
-  .topbar{padding:14px 24px}
+  .topbar{padding:calc(14px + env(safe-area-inset-top,0px)) calc(24px + env(safe-area-inset-right,0px)) 14px calc(24px + env(safe-area-inset-left,0px))}
 }
 
 /* ══════════════════════════════════════════

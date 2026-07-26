@@ -266,7 +266,11 @@ async function loadFromCloud() {
       if (!D.pendencias) D.pendencias = [];
       if (!D.vehicles)    D.vehicles    = [];
       if (!D.patrimonios) D.patrimonios = [];
+      if (!Array.isArray(D.fixedPayments)) D.fixedPayments = [];
+      // Limpa marcadores de baixa órfãos vindos da nuvem; persiste pelo fluxo normal (save()).
+      const _fxCleaned = reconcileFixedPayments();
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
+      if (_fxCleaned) save();
     } else {
       // Primeiro login — oferece migrar dados locais existentes
       const local = localStorage.getItem('gdcash_v1');
@@ -350,6 +354,7 @@ function renderInicio() {
   renderRecentTx();
   renderInicioCards();
   renderHomeNew();
+  refreshHomeFixosAlert();
 }
 
 function renderRecentTx() {
@@ -798,6 +803,7 @@ function defaultData() {
     expenses: [],
     expCats: ['Gasolina','Alimentação','Moradia','Saúde','Lazer','Transporte','Serviços','Outros'],
     fixedExpenses: [],
+    fixedPayments: [],
     emergency: { target: 10000, current: 0 },
     reservaHistory: [],
     goals: [],
@@ -824,6 +830,7 @@ let D = (() => {
       if(!p.pendencias)  p.pendencias=[];
       if(!p.vehicles)    p.vehicles=[];
       if(!p.patrimonios) p.patrimonios=[];
+      if(!Array.isArray(p.fixedPayments)) p.fixedPayments=[];
       return p;
     }
   } catch(e){}
@@ -1771,8 +1778,11 @@ function deleteExpense(id) {
     if (veh) veh.linkedExpenses = (veh.linkedExpenses||[]).filter(eid => eid !== id);
   }
   D.expenses=D.expenses.filter(e=>e.id!==id);
+  // Se era uma despesa de baixa, remove o marcador órfão (o fixo volta a pendente/vencido).
+  reconcileFixedPayments();
   save();
   refreshAfterDayEdit();
+  refreshHomeFixosAlert();
 }
 
 // ══════════════════════════════════════════
@@ -2800,11 +2810,56 @@ function deleteResHist(id) {
 // ══════════════════════════════════════════
 // RENDER: FIXOS
 // ══════════════════════════════════════════
+// ══════════════════════════════════════════
+// GASTOS FIXOS — ciclo mensal e baixa (lançamento real)
+// O cadastro recorrente (D.fixedExpenses) nunca é alterado pela baixa.
+// O estado de pagamento é MENSAL e derivado de D.fixedPayments:
+//   { fixedId, cycle:'YYYY-MM', expenseId, paidDate:'YYYY-MM-DD' }
+// ══════════════════════════════════════════
+function fxCycleOf(dateKey) { const m = String(dateKey||'').match(/^(\d{4})-(\d{2})/); return m ? m[1]+'-'+m[2] : ''; }
+function fxCurrentCycle() { const d = new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function fxTodayKey() { return dateStr(new Date()); }
+// Data de vencimento válida no ciclo: 29/30/31 em mês curto → último dia do mês. Datas locais.
+function fxDueDateForCycle(dueDay, cycle) {
+  const m = String(cycle||'').match(/^(\d{4})-(\d{2})$/); if (!m || !dueDay) return null;
+  const y = +m[1], mo = +m[2] - 1;
+  const last = new Date(y, mo + 1, 0).getDate();
+  const day = Math.min(Math.max(1, dueDay), last);
+  return `${m[1]}-${m[2]}-${String(day).padStart(2,'0')}`;
+}
+function fxPayment(fixedId, cycle) { return (D.fixedPayments||[]).find(p => p.fixedId===fixedId && p.cycle===cycle) || null; }
+// Estado de um item num ciclo: 'paused' | 'paid' | 'overdue' | 'pending'
+function fxState(f, cycle) {
+  if (f.paused) return { status: 'paused' };
+  const pay = fxPayment(f.id, cycle);
+  if (pay) return { status: 'paid', paidDate: pay.paidDate, expenseId: pay.expenseId };
+  const dueDate = fxDueDateForCycle(f.dueDay, cycle);
+  if (dueDate && cycle <= fxCurrentCycle() && fxTodayKey() > dueDate) return { status: 'overdue', dueDate };
+  return { status: 'pending', dueDate };
+}
+// Itens ativos vencidos e sem baixa no ciclo atual (para o aviso da Home).
+function fxOverdueCurrent() {
+  const cycle = fxCurrentCycle();
+  return (D.fixedExpenses||[]).filter(f => fxState(f, cycle).status === 'overdue');
+}
+// Reconciliação segura: remove APENAS marcadores de baixa órfãos —
+// despesa vinculada inexistente (expenseId) ou cadastro inexistente (fixedId).
+// Não cria despesas, não altera lançamentos legítimos, não migra nada.
+// Retorna true se removeu algo (para persistir pelo fluxo normal).
+function reconcileFixedPayments() {
+  if (!Array.isArray(D.fixedPayments)) { D.fixedPayments = []; return false; }
+  const expIds = new Set((D.expenses || []).map(e => e.id));
+  const fixIds = new Set((D.fixedExpenses || []).map(f => f.id));
+  const before = D.fixedPayments.length;
+  D.fixedPayments = D.fixedPayments.filter(p => p && expIds.has(p.expenseId) && fixIds.has(p.fixedId));
+  return D.fixedPayments.length !== before;
+}
+
 function renderFixos() {
   document.getElementById('fixed-total').textContent=R(D.fixedExpenses.filter(f=>!f.paused).reduce((s,f)=>s+f.amount,0));
   const list=document.getElementById('fixed-list');
   if (!D.fixedExpenses.length) { list.innerHTML='<div class="empty-state">Nenhum gasto fixo cadastrado</div>'; return; }
-  const todayDay = new Date().getDate();
+  const cycle = fxCurrentCycle();
   // Ordenação apenas visual: dia de vencimento crescente; empate por nome;
   // sem dia válido (1–31) vai para o fim. Dados persistidos intocados.
   const fixosOrdenados = [...D.fixedExpenses].sort((a, b) => {
@@ -2813,28 +2868,115 @@ function renderFixos() {
     return ad - bd || (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' });
   });
   list.innerHTML = fixosOrdenados.map(f => {
-    const paused = !!f.paused;
-    const nearDue = !paused && f.dueDay && f.dueDay >= todayDay && f.dueDay <= todayDay + 3;
-    const overDue = !paused && f.dueDay && f.dueDay < todayDay;
-    const dueCls = nearDue ? ' fixed-due-near' : overDue ? ' fixed-due-over' : '';
-    const dueTxt = f.dueDay ? ` · <span class="fixed-due-lbl${dueCls}">Vence dia ${f.dueDay}</span>` : '';
+    const st = fxState(f, cycle);
+    const paused = st.status === 'paused';
+    // Linha de meta: categoria + estado do ciclo atual
+    let metaTail = '';
+    if (paused) metaTail = '';
+    else if (st.status === 'paid') metaTail = ` · <span class="fixed-pay-lbl fixed-pay-done">Pago em ${fmtShort(st.paidDate)}</span>`;
+    else if (st.status === 'overdue') metaTail = ` · <span class="fixed-pay-lbl fixed-pay-over">Vencido</span>`;
+    else if (f.dueDay) metaTail = ` · <span class="fixed-due-lbl">Vence dia ${f.dueDay}</span>`;
+    const itemCls = paused ? ' fixed-paused' : st.status === 'overdue' ? ' fixed-item-over' : st.status === 'paid' ? ' fixed-item-paid' : '';
+    const canBaixa = !paused && (st.status === 'pending' || st.status === 'overdue');
+    const baixaRow = canBaixa
+      ? `<div class="fixed-baixa-row"><button class="fixed-baixa-btn" onclick="darBaixaFixed('${f.id}')">Dar baixa</button></div>`
+      : '';
     return `
-      <div class="fixed-item av-item${nearDue ? ' fixed-near-due' : ''}${paused ? ' fixed-paused' : ''}">
-        <div class="fixed-info">
-          <div class="fixed-name">${f.name}${paused ? ' <span class="fixed-status">Pausado</span>' : ''}</div>
-          <div class="fixed-meta">${f.category}${dueTxt}</div>
-        </div>
-        <div class="fixed-right">
-          <span class="fixed-amt">${R(f.amount)}</span>
-          <div class="fixed-actions">
-            <button class="fixed-pause-btn${paused ? ' fixed-pause-btn-on' : ''}" onclick="toggleFixedPaused('${f.id}')">${paused ? 'Reativar' : 'Pausar'}</button>
-            <button class="fixed-kebab" onclick="openFixedMenu('${f.id}')" aria-label="Mais ações">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
-            </button>
+      <div class="fixed-item av-item${itemCls}">
+        <div class="fixed-top">
+          <div class="fixed-info">
+            <div class="fixed-name">${f.name}${paused ? ' <span class="fixed-status">Pausado</span>' : ''}</div>
+            <div class="fixed-meta">${f.category}${metaTail}</div>
+          </div>
+          <div class="fixed-right">
+            <span class="fixed-amt">${R(f.amount)}</span>
+            <div class="fixed-actions">
+              <button class="fixed-pause-btn${paused ? ' fixed-pause-btn-on' : ''}" onclick="toggleFixedPaused('${f.id}')">${paused ? 'Reativar' : 'Pausar'}</button>
+              <button class="fixed-kebab" onclick="openFixedMenu('${f.id}')" aria-label="Mais ações">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+              </button>
+            </div>
           </div>
         </div>
+        ${baixaRow}
       </div>`;
   }).join('');
+}
+
+// ── Baixa mensal: cria uma despesa real e marca o ciclo como pago ──
+var _baixaTarget = null;
+function darBaixaFixed(id) {
+  const f = (D.fixedExpenses || []).find(x => x.id === id);
+  if (!f) return;
+  // Impede baixa de item já pago no ciclo atual (proteção contra duplicidade).
+  if (fxPayment(id, fxCurrentCycle())) { gdToast('Este gasto já teve baixa neste mês.', { type: 'info' }); return; }
+  _baixaTarget = id;
+  document.getElementById('baixa-name').textContent = f.name;
+  document.getElementById('baixa-amt').textContent = R(f.amount);
+  // Data padrão = dia local do clique (nunca a data de vencimento).
+  document.getElementById('baixa-date').value = fxTodayKey();
+  const btn = document.getElementById('baixa-confirm-btn');
+  if (btn) btn.disabled = false;
+  openOverlay('modal-baixa');
+}
+function confirmBaixa() {
+  const id = _baixaTarget;
+  if (!id) return;
+  const f = (D.fixedExpenses || []).find(x => x.id === id);
+  if (!f) { closeOverlay('modal-baixa'); return; }
+  const btn = document.getElementById('baixa-confirm-btn');
+  if (btn && btn.disabled) return; // impede duplo toque
+  const dateInput = document.getElementById('baixa-date').value;
+  const date = localDateKey(dateInput) || fxTodayKey();
+  const cycle = fxCurrentCycle();
+  // Revalida no momento da confirmação (evita duplicidade em duplo toque).
+  if (fxPayment(id, cycle)) { closeOverlay('modal-baixa'); gdToast('Este gasto já teve baixa neste mês.', { type: 'info' }); renderFixos(); return; }
+  if (btn) btn.disabled = true;
+  const expId = uid();
+  // Metadado imutável de origem: a despesa carrega permanentemente que veio de uma baixa
+  // de gasto fixo (além do vínculo em fixedPayments). Apenas informativo; nada depende dele.
+  D.expenses.push({ id: expId, date, category: f.category, amount: f.amount, description: f.name, meta: { source: 'fixed-payment', fixedId: id, cycle } });
+  D.fixedPayments.push({ fixedId: id, cycle, expenseId: expId, paidDate: date });
+  _baixaTarget = null;
+  haptic(10); save();
+  closeOverlay('modal-baixa');
+  renderFixos();
+  refreshHomeFixosAlert();
+  refreshAfterDayEdit();
+  gdToast('Baixa registrada. Lançamento criado em Despesas.', { type: 'success' });
+}
+// ── Desfazer baixa do mês: remove só o lançamento gerado e volta a pendente ──
+function desfazerBaixaFixed(id) {
+  const cycle = fxCurrentCycle();
+  const pay = fxPayment(id, cycle);
+  if (!pay) return;
+  // Remove apenas a despesa vinculada por expenseId (nunca lançamentos manuais parecidos).
+  if (pay.expenseId) D.expenses = D.expenses.filter(e => e.id !== pay.expenseId);
+  D.fixedPayments = D.fixedPayments.filter(p => !(p.fixedId === id && p.cycle === cycle));
+  haptic(10); save();
+  renderFixos();
+  refreshHomeFixosAlert();
+  refreshAfterDayEdit();
+  gdToast('Baixa desfeita.', { type: 'success' });
+}
+// ── Aviso compacto na Home: gastos fixos ativos vencidos e sem baixa no mês ──
+function refreshHomeFixosAlert() {
+  const el = document.getElementById('home-fixos-alert');
+  if (!el) return;
+  const overdue = fxOverdueCurrent();
+  if (!overdue.length) { el.innerHTML = ''; return; }
+  const total = overdue.reduce((s, f) => s + f.amount, 0);
+  const n = overdue.length;
+  el.innerHTML = `
+    <button class="home-fixos-alert" onclick="switchTab('fixos','inicio')" aria-label="Ver gastos fixos vencidos">
+      <span class="hfa-ico" aria-hidden="true">!</span>
+      <span class="hfa-body">
+        <span class="hfa-title">Gastos fixos vencidos</span>
+        <span class="hfa-sub">${n} ${n === 1 ? 'pagamento pendente' : 'pagamentos pendentes'}</span>
+        <span class="hfa-total">Total: ${R(total)}</span>
+        <span class="hfa-cta" aria-hidden="true">Ver gastos fixos →</span>
+      </span>
+    </button>`;
 }
 // ── Kebab de ações secundárias (Editar / Excluir) ──
 var _fixedMenuTarget = null;
@@ -2843,11 +2985,26 @@ function openFixedMenu(id) {
   const f = (D.fixedExpenses || []).find(x => x.id === id);
   const t = document.getElementById('fmenu-title');
   if (t) t.textContent = f ? f.name : 'Gasto fixo';
+  // "Desfazer baixa deste mês" só aparece se houver baixa no ciclo atual.
+  const undo = document.getElementById('fmenu-undo');
+  if (undo) undo.style.display = fxPayment(id, fxCurrentCycle()) ? '' : 'none';
   openOverlay('fixed-menu-sheet');
 }
 function fixedMenuEdit() {
   closeOverlay('fixed-menu-sheet');
   if (_fixedMenuTarget) openFixedModal(_fixedMenuTarget);
+}
+function fixedMenuUndo() {
+  closeOverlay('fixed-menu-sheet');
+  const id = _fixedMenuTarget;
+  if (!id) return;
+  gdConfirm({
+    title: 'Desfazer baixa deste mês',
+    msg: 'Remove o lançamento criado por esta baixa e volta o gasto fixo para pendente neste mês. Não afeta outros meses nem lançamentos manuais.',
+    confirmText: 'Desfazer baixa',
+    variant: 'danger',
+    onConfirm: () => desfazerBaixaFixed(id),
+  });
 }
 function fixedMenuDelete() {
   closeOverlay('fixed-menu-sheet');
@@ -2876,7 +3033,12 @@ function openFixedModal(id) {
   document.getElementById('fi-cat').innerHTML=D.expCats.map(c=>`<option value="${c}" ${f?.category===c?'selected':''}>${c}</option>`).join('');
   openOverlay('modal-fixed');
 }
-function deleteFixed(id) { D.fixedExpenses=D.fixedExpenses.filter(f=>f.id!==id); save(); renderFixos(); }
+function deleteFixed(id) {
+  D.fixedExpenses = D.fixedExpenses.filter(f => f.id !== id);
+  // Remove só os marcadores de baixa do cadastro excluído; as despesas históricas permanecem.
+  D.fixedPayments = (D.fixedPayments || []).filter(p => p.fixedId !== id);
+  save(); renderFixos(); refreshHomeFixosAlert();
+}
 function saveFixed() {
   const id=document.getElementById('fixed-edit-id').value;
   const name=document.getElementById('fi-name').value.trim();
@@ -3968,7 +4130,7 @@ function initLongPress() {
         confirmText: 'Excluir',
         variant: 'danger',
         onConfirm: () => {
-          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); }
+          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); }
           else if (type === 'inc') { D.incomeItems = (D.incomeItems||[]).filter(it => it.id !== id); }
           save(); renderInicio();
         },
@@ -4694,8 +4856,25 @@ function qaConfirm() {
       const e = (D.expenses||[]).find(x => x.id === edit.id);
       if (e) {
         const cat = document.getElementById('qa-cat-sel')?.value || e.category;
+        // Se a despesa veio de "Dar baixa", mantém o vínculo coerente com a nova data.
+        const pay = (D.fixedPayments||[]).find(p => p.expenseId === e.id);
+        if (pay) {
+          const newCycle = fxCycleOf(date);
+          if (newCycle && newCycle !== pay.cycle) {
+            // Mudou de mês: bloqueia se já existir baixa desse fixo no ciclo de destino.
+            const conflito = (D.fixedPayments||[]).some(p => p !== pay && p.fixedId === pay.fixedId && p.cycle === newCycle);
+            if (conflito) {
+              gdToast('Já existe uma baixa deste gasto fixo no mês de destino. Edição cancelada.', { type: 'error' });
+              _qaSaving = false; if (saveBtn) saveBtn.disabled = false;
+              return; // não altera nada
+            }
+            pay.cycle = newCycle; // move o marcador para o ciclo correto
+          }
+          pay.paidDate = localDateKey(date) || date; // "Pago em DD/MM" reflete a nova data
+        }
         e.date = date; e.category = cat; e.description = desc || cat; e.amount = amt;
         save(); checkBudgetAlerts(cat);
+        refreshHomeFixosAlert();
       }
     } else if (edit.kind === 'item') {
       const it = (D.incomeItems||[]).find(x => x.id === edit.id);
