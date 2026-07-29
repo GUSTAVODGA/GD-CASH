@@ -2884,32 +2884,32 @@ function renderFixos() {
   list.innerHTML = fixosOrdenados.map(f => {
     const st = fxState(f, cycle);
     const paused = st.status === 'paused';
-    // Linha de meta: categoria + estado do ciclo atual
-    let metaTail = '';
-    if (paused) metaTail = '';
-    else if (st.status === 'paid') metaTail = ` · <span class="fixed-pay-lbl fixed-pay-done">Pago em ${fmtShort(st.paidDate)}</span>`;
-    else if (st.status === 'overdue') metaTail = ` · <span class="fixed-pay-lbl fixed-pay-over">Vencido</span>`;
-    else if (f.dueDay) metaTail = ` · <span class="fixed-due-lbl">Vence dia ${f.dueDay}</span>`;
+    // Chip de status (categoria à esquerda + estado do ciclo em pill colorido).
+    let chip = '';
+    if (paused) chip = '<span class="fixed-chip fixed-chip-paused">Pausado</span>';
+    else if (st.status === 'paid') chip = `<span class="fixed-chip fixed-chip-done">Pago em ${fmtShort(st.paidDate)}</span>`;
+    else if (st.status === 'overdue') chip = '<span class="fixed-chip fixed-chip-over">Vencido</span>';
+    else if (st.status === 'preexisting' && f.dueDay) chip = `<span class="fixed-chip fixed-chip-neutral">Vence dia ${f.dueDay}</span>`;
+    else if (f.dueDay) chip = `<span class="fixed-chip fixed-chip-due">Vence dia ${f.dueDay}</span>`;
     const itemCls = paused ? ' fixed-paused' : st.status === 'overdue' ? ' fixed-item-over' : st.status === 'paid' ? ' fixed-item-paid' : '';
+    const dotCls = paused ? 'fixed-dot-paused' : st.status === 'overdue' ? 'fixed-dot-over' : st.status === 'paid' ? 'fixed-dot-done' : 'fixed-dot-due';
     const canBaixa = !paused && (st.status === 'pending' || st.status === 'overdue');
     const baixaRow = canBaixa
       ? `<div class="fixed-baixa-row"><button class="fixed-baixa-btn" onclick="darBaixaFixed('${f.id}')">Dar baixa</button></div>`
       : '';
     return `
-      <div class="fixed-item av-item${itemCls}">
-        <div class="fixed-top">
+      <div class="fixed-item${itemCls}">
+        <div class="fixed-main">
+          <span class="fixed-dot ${dotCls}" aria-hidden="true"></span>
           <div class="fixed-info">
-            <div class="fixed-name">${f.name}${paused ? ' <span class="fixed-status">Pausado</span>' : ''}</div>
-            <div class="fixed-meta">${f.category}${metaTail}</div>
+            <div class="fixed-name">${f.name}</div>
+            <div class="fixed-meta"><span class="fixed-cat">${f.category}</span>${chip}</div>
           </div>
-          <div class="fixed-right">
+          <div class="fixed-end">
             <span class="fixed-amt">${R(f.amount)}</span>
-            <div class="fixed-actions">
-              <button class="fixed-pause-btn${paused ? ' fixed-pause-btn-on' : ''}" onclick="toggleFixedPaused('${f.id}')">${paused ? 'Reativar' : 'Pausar'}</button>
-              <button class="fixed-kebab" onclick="openFixedMenu('${f.id}')" aria-label="Mais ações">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
-              </button>
-            </div>
+            <button class="fixed-kebab" onclick="openFixedMenu('${f.id}')" aria-label="Mais ações">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+            </button>
           </div>
         </div>
         ${baixaRow}
@@ -3002,11 +3002,23 @@ function openFixedMenu(id) {
   // "Desfazer baixa deste mês" só aparece se houver baixa no ciclo atual.
   const undo = document.getElementById('fmenu-undo');
   if (undo) undo.style.display = fxPayment(id, fxCurrentCycle()) ? '' : 'none';
+  // Pausar/Reativar (ação secundária movida da linha para o menu).
+  const pausedNow = !!(f && f.paused);
+  const plbl = document.getElementById('fmenu-pause-lbl');
+  if (plbl) plbl.textContent = pausedNow ? 'Reativar' : 'Pausar';
+  const pico = document.getElementById('fmenu-pause-ico');
+  if (pico) pico.innerHTML = pausedNow
+    ? '<polygon points="6 4 20 12 6 20 6 4"/>'
+    : '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>';
   openOverlay('fixed-menu-sheet');
 }
 function fixedMenuEdit() {
   closeOverlay('fixed-menu-sheet');
   if (_fixedMenuTarget) openFixedModal(_fixedMenuTarget);
+}
+function fixedMenuPause() {
+  closeOverlay('fixed-menu-sheet');
+  if (_fixedMenuTarget) toggleFixedPaused(_fixedMenuTarget);
 }
 function fixedMenuUndo() {
   closeOverlay('fixed-menu-sheet');
@@ -3035,7 +3047,7 @@ function fixedMenuDelete() {
 function toggleFixedPaused(id) {
   const idx = D.fixedExpenses.findIndex(f => f.id === id);
   if (idx !== -1) D.fixedExpenses[idx].paused = !D.fixedExpenses[idx].paused;
-  save(); renderFixos();
+  save(); renderFixos(); refreshHomeFixosAlert();
 }
 function openFixedModal(id) {
   const f=id?D.fixedExpenses.find(f=>f.id===id):null;

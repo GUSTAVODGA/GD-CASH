@@ -775,7 +775,7 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .res-meta-link:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 /* Ações: Adicionar (principal) + Retirar (secundária), sem competir */
 .res-actions{display:flex;gap:10px;margin:0 0 18px}
-.res-add{flex:2}
+.res-add{flex:1}
 .res-withdraw{flex:1;color:var(--rd);border-color:var(--rd-t)}
 .res-withdraw:active{background:var(--rd-t)}
 /* Histórico compacto + kebab */
@@ -803,28 +803,36 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .fixed-total-card{text-align:center;margin-bottom:14px;padding:13px 16px}
 .fixed-total-lbl{font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .fixed-total-val{font-size:clamp(24px,7.5vw,32px);font-weight:900;color:var(--red);margin-top:3px;letter-spacing:-.5px;line-height:1.1;white-space:nowrap;overflow-wrap:normal}
-/* Item compacto: info à esquerda; valor + ações empilhados à direita */
-.fixed-item{display:block;padding:9px 0;border-bottom:1px solid var(--border)}
+/* Item premium: dot de status + info à esquerda; valor + kebab à direita.
+   Colunas alinhadas entre linhas; ações secundárias vão para o menu (⋮). */
+.fixed-item{display:block;padding:12px 0;border-bottom:1px solid var(--border)}
 .fixed-item:last-child{border-bottom:none}
-.fixed-top{display:flex;align-items:center;gap:10px}
+.fixed-main{display:flex;align-items:flex-start;gap:11px}
+.fixed-dot{flex-shrink:0;width:9px;height:9px;border-radius:50%;margin-top:5px;background:var(--text3)}
+.fixed-dot-over{background:var(--red)}
+.fixed-dot-done{background:var(--green,#16a34a)}
+.fixed-dot-due{background:var(--ac)}
+.fixed-dot-paused{background:var(--text3);opacity:.55}
 .fixed-info{flex:1;min-width:0}
-.fixed-name{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fixed-meta{font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
-.fixed-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
-.fixed-amt{font-weight:800;color:var(--red);font-variant-numeric:tabular-nums;white-space:nowrap}
-.fixed-actions{display:flex;align-items:center;gap:6px}
-.fixed-status{font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;vertical-align:middle}
-/* Estado do ciclo mensal na meta */
-.fixed-pay-lbl{font-weight:700}
-.fixed-pay-done{color:var(--green,#16a34a)}
-.fixed-pay-over{color:var(--red)}
-.fixed-item-over{border-left:3px solid var(--red);padding-left:10px}
-/* Baixa mensal: linha de ação abaixo do item */
-.fixed-baixa-row{display:flex;justify-content:flex-end;margin-top:8px}
+.fixed-name{font-size:14.5px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.01em}
+.fixed-meta{display:flex;align-items:center;gap:7px;margin-top:4px;min-width:0}
+.fixed-cat{font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:1;min-width:0}
+.fixed-chip{flex-shrink:0;font-size:10px;font-weight:800;letter-spacing:.02em;padding:2px 8px;border-radius:999px;white-space:nowrap;line-height:1.55}
+.fixed-chip-over{background:var(--red-t,rgba(220,38,38,.12));color:var(--red)}
+.fixed-chip-done{background:rgba(22,163,74,.13);color:var(--green,#16a34a)}
+.fixed-chip-due{background:var(--ac-t);color:var(--ac)}
+.fixed-chip-neutral{background:var(--surface2);color:var(--text3)}
+.fixed-chip-paused{background:var(--surface2);color:var(--text3);text-transform:uppercase}
+.fixed-end{display:flex;flex-direction:row;align-items:center;gap:4px;flex-shrink:0}
+.fixed-amt{font-size:14.5px;font-weight:800;color:var(--red);font-variant-numeric:tabular-nums;white-space:nowrap}
+.fixed-paused .fixed-amt{color:var(--text3)}
+.fixed-item-over{border-left:3px solid var(--red);padding-left:11px}
+/* Baixa mensal: linha de ação abaixo do item, alinhada à direita */
+.fixed-baixa-row{display:flex;justify-content:flex-end;margin-top:4px}
 .fixed-baixa-btn{
   background:var(--ac);border:none;color:#fff;
-  border-radius:16px;padding:7px 16px;font-size:12.5px;font-weight:800;cursor:pointer;
-  min-height:32px;white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:filter .15s,transform .1s;
+  border-radius:16px;padding:8px 18px;font-size:12.5px;font-weight:800;cursor:pointer;
+  min-height:34px;white-space:nowrap;-webkit-tap-highlight-color:transparent;transition:filter .15s,transform .1s;
 }
 .fixed-baixa-btn:active{transform:scale(.96);filter:brightness(.94)}
 .fixed-item-over .fixed-baixa-btn{background:var(--red)}
@@ -2942,8 +2950,15 @@ select.form-select {
   background-repeat: no-repeat !important; background-position: right 12px center !important; background-size: 12px !important;
 }
 
-/* Botões empilhados — sem inline style margin-top */
+/* Botões empilhados (verticais) — espaçamento entre eles */
 .btn + .btn { margin-top: 8px; }
+/* ...mas em linhas horizontais (flex + gap) o margin-top empurraria o 2º botão
+   para baixo, gerando a assimetria "um embaixo, outro em cima". Reset comum: */
+.btn-row .btn + .btn,
+.res-actions .btn + .btn,
+.res-q-actions .btn + .btn,
+.veh-form-btns .btn + .btn,
+.av-dialog-actions.av-row .btn + .btn { margin-top: 0; }
 
 /* Cards nas telas secundárias — mesmo estilo Home/Mês */
 #page-reserva .card, #page-fixos .card, #page-pendencias .card,
