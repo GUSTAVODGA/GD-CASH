@@ -267,10 +267,15 @@ async function loadFromCloud() {
       if (!D.vehicles)    D.vehicles    = [];
       if (!D.patrimonios) D.patrimonios = [];
       if (!Array.isArray(D.fixedPayments)) D.fixedPayments = [];
+      // Marco de adoção da função de baixa: só vencimentos a partir desta data
+      // contam como pendente/vencido. Vencimentos anteriores viram histórico neutro
+      // (evita cobrar/duplicar compromissos já pagos antes da função existir).
+      let _fxNeedSave = false;
+      if (!D.fixedStart) { D.fixedStart = dateStr(new Date()); _fxNeedSave = true; }
       // Limpa marcadores de baixa órfãos vindos da nuvem; persiste pelo fluxo normal (save()).
       const _fxCleaned = reconcileFixedPayments();
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
-      if (_fxCleaned) save();
+      if (_fxCleaned || _fxNeedSave) save();
     } else {
       // Primeiro login — oferece migrar dados locais existentes
       const local = localStorage.getItem('gdcash_v1');
@@ -804,6 +809,7 @@ function defaultData() {
     expCats: ['Gasolina','Alimentação','Moradia','Saúde','Lazer','Transporte','Serviços','Outros'],
     fixedExpenses: [],
     fixedPayments: [],
+    fixedStart: null,
     emergency: { target: 10000, current: 0 },
     reservaHistory: [],
     goals: [],
@@ -831,6 +837,7 @@ let D = (() => {
       if(!p.vehicles)    p.vehicles=[];
       if(!p.patrimonios) p.patrimonios=[];
       if(!Array.isArray(p.fixedPayments)) p.fixedPayments=[];
+      if(!p.fixedStart)  p.fixedStart=dateStr(new Date());
       return p;
     }
   } catch(e){}
@@ -2828,12 +2835,19 @@ function fxDueDateForCycle(dueDay, cycle) {
   return `${m[1]}-${m[2]}-${String(day).padStart(2,'0')}`;
 }
 function fxPayment(fixedId, cycle) { return (D.fixedPayments||[]).find(p => p.fixedId===fixedId && p.cycle===cycle) || null; }
-// Estado de um item num ciclo: 'paused' | 'paid' | 'overdue' | 'pending'
+// Data a partir da qual a baixa passa a valer para um item: por item (since,
+// gravado na criação) ou o marco global de adoção (D.fixedStart). Vencimentos
+// anteriores a essa data são pré-existentes (histórico, não acionáveis).
+function fxBaselineFor(f) { return (f && f.since) || D.fixedStart || ''; }
+// Estado de um item num ciclo: 'paused' | 'paid' | 'preexisting' | 'overdue' | 'pending'
 function fxState(f, cycle) {
   if (f.paused) return { status: 'paused' };
   const pay = fxPayment(f.id, cycle);
   if (pay) return { status: 'paid', paidDate: pay.paidDate, expenseId: pay.expenseId };
   const dueDate = fxDueDateForCycle(f.dueDay, cycle);
+  const baseline = fxBaselineFor(f);
+  // Vencimento anterior à adoção da função → histórico neutro (sem baixa/aviso).
+  if (dueDate && baseline && dueDate < baseline) return { status: 'preexisting', dueDate };
   if (dueDate && cycle <= fxCurrentCycle() && fxTodayKey() > dueDate) return { status: 'overdue', dueDate };
   return { status: 'pending', dueDate };
 }
@@ -3047,8 +3061,10 @@ function saveFixed() {
   const dueDay=parseInt(document.getElementById('fi-day').value)||null;
   if(!name||!amount){gdToast('Preencha nome e valor.', { type: 'error' });return;}
   if(id) { const idx=D.fixedExpenses.findIndex(f=>f.id===id); if(idx!==-1) D.fixedExpenses[idx]={...D.fixedExpenses[idx],name,amount,category,dueDay}; }
-  else D.fixedExpenses.push({id:uid(),name,amount,category,dueDay});
-  save(); closeOverlay('modal-fixed'); renderFixos();
+  // 'since' = data de criação: vencimentos anteriores a ela não geram baixa/aviso
+  // (evita cobrar retroativamente um fixo recém-cadastrado cujo dia já passou).
+  else D.fixedExpenses.push({id:uid(),name,amount,category,dueDay,since:dateStr(new Date())});
+  save(); closeOverlay('modal-fixed'); renderFixos(); refreshHomeFixosAlert();
 }
 
 // ══════════════════════════════════════════
