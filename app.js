@@ -6740,6 +6740,10 @@ function openPatForm(tipo, id) {
   if (!cont) return;
   const tipoLbl = PAT_TIPO_LABELS[t] || 'Patrimônio';
   const d = p?.detalhes || {};
+  const fin0 = (p?.financiamentos || [])[0] || null; // financiamento principal (para o switch inline)
+  const finOn = !!fin0;
+  const freqSel = ['mensal','quinzenal','semanal','anual','irregular'].map(fr =>
+    `<option value="${fr}" ${(fin0?.frequencia||'mensal')===fr?'selected':''}>${({mensal:'Mensal',quinzenal:'Quinzenal',semanal:'Semanal',anual:'Anual',irregular:'Irregular / sem periodicidade'})[fr]}</option>`).join('');
   const backAction = p ? `renderPatDetail('${p.id}')` : 'renderPatrimonioHome()';
   const statusSel = ['ativo','vendido','inativo'].map(s =>
     `<option value="${s}" ${(p?.status||'ativo')===s?'selected':''}>${_patStatusLabel(s)}</option>`).join('');
@@ -6804,6 +6808,39 @@ function openPatForm(tipo, id) {
       <div class="form-group"><label class="form-label">Matrícula</label><input class="form-input" id="pf-matricula" value="${escHtml(d.matricula||'')}" placeholder="Nº da matrícula"></div>
       <div class="form-group"><label class="form-label">Cartório</label><input class="form-input" id="pf-cartorio" value="${escHtml(d.cartorio||'')}" placeholder="Cartório de registro"></div>
     </div>` : ''}
+    <div class="pf-fin-toggle">
+      <div class="pf-fin-toggle-txt">
+        <span class="pf-fin-toggle-lbl">Este bem é financiado</span>
+        <span class="pf-fin-toggle-sub">Registre o financiamento junto com o bem</span>
+      </div>
+      <label class="pf-switch">
+        <input type="checkbox" id="pf-fin-on" ${finOn?'checked':''} onchange="_togglePfFin()">
+        <span class="pf-switch-track"><span class="pf-switch-thumb"></span></span>
+      </label>
+    </div>
+    <div id="pf-fin-fields" class="pf-fin-fields" style="display:${finOn?'block':'none'}">
+      <div class="form-group">
+        <label class="form-label">Instituição / credor</label>
+        <input class="form-input" id="pff-inst" value="${escHtml(fin0?.instituicao||'')}" placeholder="Ex: Caixa, Banco do Brasil">
+      </div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label">Valor do bem (${escHtml(currSym)})</label><input class="form-input" id="pff-bem" type="number" min="0" step="any" value="${fin0?.valorBem||''}" placeholder="300000"></div>
+        <div class="form-group"><label class="form-label">Valor financiado (${escHtml(currSym)}) *</label><input class="form-input" id="pff-financiado" type="number" min="0" step="any" value="${fin0?.valorFinanciado||''}" placeholder="240000"></div>
+      </div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label">Saldo devedor (${escHtml(currSym)}) *</label><input class="form-input" id="pff-saldo" type="number" min="0" step="any" value="${fin0?.saldoDevedor ?? ''}" placeholder="180000"></div>
+        <div class="form-group"><label class="form-label">Início</label><input class="form-input" id="pff-inicio" type="date" value="${fin0?.dataInicio||''}"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Frequência</label>
+        <select class="form-input" id="pff-freq">${freqSel}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observações</label>
+        <textarea class="form-input" id="pff-obs" rows="2" placeholder="Anotações (taxa, seguro, etc.)">${escHtml(fin0?.observacoes||'')}</textarea>
+      </div>
+      ${(p && (p.financiamentos||[]).length > 1) ? `<div class="pf-fin-note">Este bem tem mais de um financiamento — os demais podem ser gerenciados no detalhe.</div>` : ''}
+    </div>
     <input type="hidden" id="pf-photo-data" value="${p?.foto||''}">
     <input type="hidden" id="pf-id" value="${p?.id||''}">
     <input type="hidden" id="pf-tipo" value="${t}">
@@ -6815,6 +6852,19 @@ function openPatForm(tipo, id) {
     <div style="margin-top:14px">
       <button class="btn btn-secondary" style="width:100%;color:var(--red)" onclick="deletePatrimonioUI('${p.id}')">Excluir ${tipoLbl.toLowerCase()}</button>
     </div>` : ''}`;
+}
+
+// Mostra/oculta o sub-formulário de financiamento conforme o switch.
+function _togglePfFin() {
+  const on = document.getElementById('pf-fin-on')?.checked;
+  const box = document.getElementById('pf-fin-fields');
+  if (box) box.style.display = on ? 'block' : 'none';
+  if (on) {
+    // Pré-preenche "valor do bem" com o valor do patrimônio, se ainda vazio.
+    const bem = document.getElementById('pff-bem');
+    const val = document.getElementById('pf-valor')?.value;
+    if (bem && !bem.value && val) bem.value = val;
+  }
 }
 
 function onPatPhotoChange(input) {
@@ -6867,6 +6917,29 @@ function savePatrimonioForm() {
       cartorio:   (document.getElementById('pf-cartorio')?.value || '').trim(),
     });
   }
+  // ── Financiamento inline (switch "Este bem é financiado") ──
+  // Não altera a estrutura de dados nem a lógica de pagamentos: apenas cria/atualiza
+  // o financiamento principal (financiamentos[0]) preservando id + pagamentos.
+  const finOn = document.getElementById('pf-fin-on')?.checked;
+  let finToSave = null;
+  if (finOn) {
+    const financiadoRaw = document.getElementById('pff-financiado')?.value;
+    const saldoRaw = document.getElementById('pff-saldo')?.value;
+    if (financiadoRaw === '' || financiadoRaw == null || saldoRaw === '' || saldoRaw == null) {
+      gdToast('Preencha valor financiado e saldo devedor (ou desligue "Este bem é financiado").', { type: 'error' });
+      return;
+    }
+    finToSave = {
+      instituicao:     (document.getElementById('pff-inst')?.value || '').trim(),
+      valorBem:        _num('pff-bem'),
+      valorFinanciado: Number(financiadoRaw) || 0,
+      saldoDevedor:    Number(saldoRaw) || 0,
+      dataInicio:      document.getElementById('pff-inicio')?.value || '',
+      frequencia:      document.getElementById('pff-freq')?.value || 'mensal',
+      observacoes:     (document.getElementById('pff-obs')?.value || '').trim(),
+    };
+  }
+
   if (id) {
     // Reavaliação automática: só quando o valor realmente mudou numa edição
     const prev = getPatrimonio(id);
@@ -6883,13 +6956,29 @@ function savePatrimonioForm() {
       }]);
     }
     updatePatrimonio(id, fields);
+    // Switch ligado → cria/atualiza o financiamento principal (preserva pagamentos).
+    // Switch desligado → não mexe nos financiamentos existentes (sem perda de dados).
+    if (finToSave) {
+      const cur  = getPatrimonio(id);
+      const list = (cur?.financiamentos || []).slice();
+      const base = list[0] || { id: uid() };
+      const fin  = _normFinanciamento(Object.assign({}, base, finToSave));
+      if (list.length) list[0] = fin; else list.push(fin);
+      updatePatrimonio(id, { financiamentos: list });
+    }
     gdToast('Patrimônio atualizado.');
     renderPatDetail(id);
   } else {
     // Cadastro inicial: nenhum evento de reavaliação é criado
-    createPatrimonio(Object.assign({ tipo }, fields));
-    gdToast('Patrimônio adicionado.');
-    renderPatrimonioHome();
+    const novo = createPatrimonio(Object.assign({ tipo }, fields));
+    if (finToSave && novo) {
+      updatePatrimonio(novo.id, { financiamentos: [_normFinanciamento(finToSave)] });
+      gdToast('Patrimônio e financiamento adicionados.');
+      renderPatDetail(novo.id); // abre o detalhe já com o financiamento
+    } else {
+      gdToast('Patrimônio adicionado.');
+      renderPatrimonioHome();
+    }
   }
 }
 

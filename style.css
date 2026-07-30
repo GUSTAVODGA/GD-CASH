@@ -3820,6 +3820,20 @@ button:focus-visible, [role="button"]:focus-visible {
 }
 .pat-mini-edit:active { background: var(--surface3); color: var(--ac); }
 
+/* ── Switch "Este bem é financiado" no formulário do patrimônio ── */
+.pf-fin-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; margin-top: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 14px; }
+.pf-fin-toggle-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pf-fin-toggle-lbl { font-size: 14px; font-weight: 700; color: var(--tx); }
+.pf-fin-toggle-sub { font-size: 12px; color: var(--tx3); }
+.pf-switch { position: relative; flex-shrink: 0; width: 50px; height: 30px; cursor: pointer; }
+.pf-switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.pf-switch-track { position: absolute; inset: 0; border-radius: 999px; background: var(--ol2, rgba(120,130,160,.3)); transition: background .2s; }
+.pf-switch-thumb { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.3); transition: transform .2s cubic-bezier(.34,1.4,.6,1); }
+.pf-switch input:checked + .pf-switch-track { background: var(--ac); }
+.pf-switch input:checked + .pf-switch-track .pf-switch-thumb { transform: translateX(20px); }
+.pf-fin-fields { margin-top: 12px; padding: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; animation: fade-in var(--dur-normal) var(--ease-out) both; }
+.pf-fin-note { font-size: 11.5px; color: var(--tx3); margin-top: 4px; }
+
 /* ── Financiamento: card com resumo, progresso e histórico de pagamentos ── */
 .pat-fin-card { padding: 14px; }
 .pat-fin-card + .pat-fin-card { border-top: 1px solid var(--border); }
