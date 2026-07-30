@@ -6264,9 +6264,25 @@ function _normPatrimonioDetalhes(tipo, d) {
   return Object.assign({}, src);
 }
 
+// Normaliza um financiamento: garante os campos novos (opcionais) e o histórico
+// de pagamentos, preservando os campos legados de parcela. Retrocompatível.
+function _normFinanciamento(raw) {
+  const f = (raw && typeof raw === 'object') ? raw : {};
+  const out = Object.assign({
+    id: '', instituicao: '', descricao: '',
+    valorBem: 0, valorFinanciado: 0, saldoDevedor: 0,
+    dataInicio: '', frequencia: 'mensal', observacoes: '',
+    // legados de parcela — preservados, não usados pelo fluxo novo:
+    valorTotal: 0, parcelaMensal: 0, parcelasTotal: 0, parcelasPagas: 0,
+  }, f);
+  if (!out.id) out.id = uid();
+  out.pagamentos = Array.isArray(f.pagamentos) ? f.pagamentos : [];
+  return out;
+}
+
 function normalizePatrimonio(raw) {
   const p = Object.assign({}, _defaultPatrimonioFields(), raw);
-  if (!Array.isArray(p.financiamentos)) p.financiamentos = [];
+  p.financiamentos = (Array.isArray(p.financiamentos) ? p.financiamentos : []).map(_normFinanciamento);
   if (!Array.isArray(p.historico))      p.historico      = [];
   if (!Array.isArray(p.etiquetas))      p.etiquetas      = [];
   p.detalhes = _normPatrimonioDetalhes(p.tipo, p.detalhes);
@@ -6954,19 +6970,48 @@ function renderPatDetail(id) {
   const finHtml = fins.length === 0
     ? `<div class="pat-det-empty">Nenhum financiamento cadastrado.</div>`
     : fins.map(f => {
-        const parc = (f.parcelasTotal || 0) > 0 ? `${f.parcelasPagas || 0}/${f.parcelasTotal} parcelas` : '';
-        const parcela = f.parcelaMensal ? `${R(f.parcelaMensal)}/mês` : '';
-        const sub = [f.descricao, parc, parcela].filter(Boolean).join(' · ');
+        const pagos = (f.pagamentos || []).reduce((s, x) => s + (x.valor || 0), 0);
+        // % quitado com base no valor financiado (fallback: valor do bem).
+        const base = f.valorFinanciado || f.valorBem || 0;
+        const quitado = base > 0 ? Math.min(100, Math.round((base - (f.saldoDevedor || 0)) / base * 100)) : 0;
+        const freqLbl = { mensal:'Mensal', quinzenal:'Quinzenal', semanal:'Semanal', anual:'Anual', irregular:'Irregular' }[f.frequencia] || '';
+        const metaBits = [f.descricao, freqLbl].filter(Boolean).join(' · ');
+        // Histórico de pagamentos (mais recente primeiro).
+        const pags = (f.pagamentos || []).slice()
+          .map((x, i) => ({ x, i }))
+          .sort((a, b) => String(b.x.data || '').localeCompare(String(a.x.data || '')) || b.i - a.i)
+          .map(o => o.x);
+        const pagsHtml = pags.length === 0
+          ? `<div class="pagfin-empty">Nenhum pagamento registrado ainda.</div>`
+          : pags.map(x => `
+              <div class="pagfin-row">
+                <div class="pagfin-row-body">
+                  <span class="pagfin-row-desc">${escHtml(x.descricao || x.categoria || 'Pagamento')}</span>
+                  <span class="pagfin-row-date">${fmtShort(x.data)}</span>
+                </div>
+                <span class="pagfin-row-val">−${R(x.valor || 0)}</span>
+              </div>`).join('');
         return `
-        <div class="pat-fin-item" onclick="openPatFinForm('${p.id}','${f.id}')">
-          <div class="pat-fin-body">
-            <div class="pat-fin-name">${escHtml(f.instituicao || '')}</div>
-            ${sub ? `<div class="pat-fin-sub">${escHtml(sub)}</div>` : ''}
+        <div class="pat-fin-card">
+          <div class="pat-fin-head">
+            <div class="pat-fin-body">
+              <div class="pat-fin-name">${escHtml(f.instituicao || 'Financiamento')}</div>
+              ${metaBits ? `<div class="pat-fin-sub">${escHtml(metaBits)}</div>` : ''}
+            </div>
+            <div class="pat-fin-head-actions">
+              <button class="pat-mini-edit" onclick="openPatFinForm('${p.id}','${f.id}')" aria-label="Editar financiamento"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+              <button class="pat-mini-del" onclick="deletePatFin('${p.id}','${f.id}')" aria-label="Excluir financiamento">${_patTrashSvg()}</button>
+            </div>
           </div>
-          <div class="pat-fin-right">
-            <span class="pat-fin-saldo">−${R(f.saldoDevedor || 0)}</span>
-            <button class="pat-mini-del" onclick="event.stopPropagation();deletePatFin('${p.id}','${f.id}')" aria-label="Excluir financiamento">${_patTrashSvg()}</button>
+          <div class="pagfin-progress"><span class="pagfin-progress-fill" style="width:${quitado}%"></span></div>
+          <div class="pagfin-grid">
+            <div class="pagfin-cell"><span class="pagfin-cell-lbl">Valor do bem</span><span class="pagfin-cell-val">${R(f.valorBem || 0)}</span></div>
+            <div class="pagfin-cell"><span class="pagfin-cell-lbl">Já pago</span><span class="pagfin-cell-val pagfin-pos">${R(pagos)}</span></div>
+            <div class="pagfin-cell"><span class="pagfin-cell-lbl">Saldo devedor</span><span class="pagfin-cell-val pagfin-neg">${R(f.saldoDevedor || 0)}</span></div>
+            <div class="pagfin-cell"><span class="pagfin-cell-lbl">% quitado</span><span class="pagfin-cell-val">${quitado}%</span></div>
           </div>
+          <button class="btn btn-secondary pagfin-add-btn" onclick="openPagFinForm('${p.id}','${f.id}')">+ Registrar pagamento</button>
+          <div class="pagfin-hist">${pagsHtml}</div>
         </div>`;
       }).join('');
 
@@ -7051,18 +7096,18 @@ function openPatFinForm(patId, finId) {
   if (!p) return;
   const f = finId ? (p.financiamentos || []).find(x => x.id === finId) : null;
   document.getElementById('pfin-title').textContent = f ? 'Editar financiamento' : 'Novo financiamento';
-  document.getElementById('pfin-total-lbl').textContent   = `Valor total (${currSym})`;
-  document.getElementById('pfin-saldo-lbl').textContent   = `Saldo devedor (${currSym}) *`;
-  document.getElementById('pfin-parcela-lbl').textContent = `Parcela mensal (${currSym})`;
-  document.getElementById('pfin-inst').value    = f?.instituicao || '';
-  document.getElementById('pfin-desc').value    = f?.descricao || '';
-  document.getElementById('pfin-total').value   = f?.valorTotal || '';
-  document.getElementById('pfin-saldo').value   = f?.saldoDevedor ?? '';
-  document.getElementById('pfin-parcela').value = f?.parcelaMensal || '';
-  document.getElementById('pfin-inicio').value  = f?.dataInicio || '';
-  document.getElementById('pfin-ptotal').value  = f?.parcelasTotal || '';
-  document.getElementById('pfin-ppagas').value  = f?.parcelasPagas || '';
-  document.getElementById('pfin-id').value      = f?.id || '';
+  document.getElementById('pfin-bem-lbl').textContent        = `Valor do bem (${currSym})`;
+  document.getElementById('pfin-financiado-lbl').textContent = `Valor financiado (${currSym}) *`;
+  document.getElementById('pfin-saldo-lbl').textContent      = `Saldo devedor (${currSym}) *`;
+  document.getElementById('pfin-inst').value       = f?.instituicao || '';
+  document.getElementById('pfin-desc').value       = f?.descricao || '';
+  document.getElementById('pfin-bem').value        = f?.valorBem || '';
+  document.getElementById('pfin-financiado').value = f?.valorFinanciado || '';
+  document.getElementById('pfin-saldo').value      = f?.saldoDevedor ?? '';
+  document.getElementById('pfin-inicio').value     = f?.dataInicio || '';
+  document.getElementById('pfin-freq').value       = f?.frequencia || 'mensal';
+  document.getElementById('pfin-obs').value        = f?.observacoes || '';
+  document.getElementById('pfin-id').value         = f?.id || '';
   openOverlay('pat-fin-sheet');
 }
 
@@ -7073,30 +7118,90 @@ function savePatFin() {
   if (!p) return;
   const inst = (document.getElementById('pfin-inst')?.value || '').trim();
   if (!inst) { gdToast('Informe a instituição.'); return; }
+  const financiadoRaw = document.getElementById('pfin-financiado')?.value;
   const saldoRaw = document.getElementById('pfin-saldo')?.value;
+  if (financiadoRaw === '' || financiadoRaw == null) { gdToast('Informe o valor financiado.'); return; }
   if (saldoRaw === '' || saldoRaw == null) { gdToast('Informe o saldo devedor.'); return; }
   const num = elId => {
     const raw = document.getElementById(elId)?.value;
     return raw === '' || raw == null ? 0 : Number(raw) || 0;
   };
-  const fin = {
-    id:            t.finId || uid(),
-    instituicao:   inst,
-    descricao:     (document.getElementById('pfin-desc')?.value || '').trim(),
-    valorTotal:    num('pfin-total'),
-    saldoDevedor:  Number(saldoRaw) || 0,
-    parcelaMensal: num('pfin-parcela'),
-    parcelasTotal: num('pfin-ptotal'),
-    parcelasPagas: num('pfin-ppagas'),
-    dataInicio:    document.getElementById('pfin-inicio')?.value || '',
-  };
   const list = (p.financiamentos || []).slice();
-  const idx  = list.findIndex(x => x.id === fin.id);
+  const idx  = list.findIndex(x => x.id === (t.finId || null));
+  // Preserva o registro existente (pagamentos + campos legados) ao editar.
+  const base = idx >= 0 ? list[idx] : { id: uid() };
+  const fin = _normFinanciamento(Object.assign({}, base, {
+    instituicao:     inst,
+    descricao:       (document.getElementById('pfin-desc')?.value || '').trim(),
+    valorBem:        num('pfin-bem'),
+    valorFinanciado: num('pfin-financiado'),
+    saldoDevedor:    Number(saldoRaw) || 0,
+    dataInicio:      document.getElementById('pfin-inicio')?.value || '',
+    frequencia:      document.getElementById('pfin-freq')?.value || 'mensal',
+    observacoes:     (document.getElementById('pfin-obs')?.value || '').trim(),
+  }));
   if (idx >= 0) list[idx] = fin; else list.push(fin);
   updatePatrimonio(t.patId, { financiamentos: list });
   closeOverlay('pat-fin-sheet');
   renderPatDetail(t.patId);
   gdToast(idx >= 0 ? 'Financiamento atualizado.' : 'Financiamento adicionado.');
+}
+
+// ── Pagamento manual de financiamento: cria despesa normal + reduz saldo ──
+var _pagFinTarget = null; // { patId, finId }
+function openPagFinForm(patId, finId) {
+  const p = getPatrimonio(patId);
+  if (!p) return;
+  const f = (p.financiamentos || []).find(x => x.id === finId);
+  if (!f) return;
+  _pagFinTarget = { patId: patId, finId: finId };
+  const sum = document.getElementById('pagfin-summary');
+  if (sum) sum.innerHTML =
+    `<div class="pagfin-sum-row"><span>${escHtml(f.instituicao || 'Financiamento')}</span><span>Saldo <b>${R(f.saldoDevedor || 0)}</b></span></div>`;
+  document.getElementById('pagfin-valor-lbl').textContent = `Valor (${currSym}) *`;
+  document.getElementById('pagfin-valor').value = '';
+  document.getElementById('pagfin-data').value = todayStr();
+  document.getElementById('pagfin-desc').value = '';
+  const catSel = document.getElementById('pagfin-cat');
+  if (catSel) catSel.innerHTML = (D.expCats || []).map(c => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+  const btn = document.getElementById('pagfin-save-btn'); if (btn) btn.disabled = false;
+  openOverlay('pat-pagfin-sheet');
+}
+
+function salvarPagamentoFin() {
+  const t = _pagFinTarget;
+  if (!t) return;
+  const p = getPatrimonio(t.patId);
+  if (!p) return;
+  const list = (p.financiamentos || []).slice();
+  const idx  = list.findIndex(x => x.id === t.finId);
+  if (idx < 0) { closeOverlay('pat-pagfin-sheet'); return; }
+  const btn = document.getElementById('pagfin-save-btn');
+  if (btn && btn.disabled) return; // impede duplo toque
+  const valor = Number(document.getElementById('pagfin-valor')?.value) || 0;
+  if (valor <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
+  const data = localDateKey(document.getElementById('pagfin-data')?.value) || dateStr(new Date());
+  const cat = document.getElementById('pagfin-cat')?.value || (D.expCats[0] || 'Outros');
+  const descIn = (document.getElementById('pagfin-desc')?.value || '').trim();
+  const f = _normFinanciamento(list[idx]);
+  if (btn) btn.disabled = true;
+  const desc = descIn || `Financiamento — ${f.instituicao || 'pagamento'}`;
+  // 1) Cria uma despesa normal (aparece em Home/Semana/Mês/Pesquisa).
+  const expId = uid();
+  D.expenses.push({ id: expId, date: data, category: cat, amount: valor, description: desc,
+    meta: { source: 'financiamento', patId: t.patId, finId: t.finId } });
+  // 2) Reduz o saldo devedor (nunca abaixo de zero).
+  f.saldoDevedor = Math.max(0, (f.saldoDevedor || 0) - valor);
+  // 3) Registra no histórico do financiamento.
+  f.pagamentos = (f.pagamentos || []).concat([{ id: uid(), data, valor, descricao: descIn, categoria: cat, expenseId: expId, criadoEm: Date.now() }]);
+  list[idx] = f;
+  updatePatrimonio(t.patId, { financiamentos: list });
+  _pagFinTarget = null;
+  haptic(10);
+  closeOverlay('pat-pagfin-sheet');
+  renderPatDetail(t.patId);
+  refreshAfterDayEdit();
+  gdToast('Pagamento registrado. Lançamento criado em Despesas.', { type: 'success' });
 }
 
 function deletePatFin(patId, finId) {

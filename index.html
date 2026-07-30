@@ -25,7 +25,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" sizes="32x32" href="favicon.png">
 <script>try{var _t=localStorage.getItem('gdcash_theme');var _dk=_t==='dark'||(_t!=='light'&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_dk?'dark':'light')}catch(e){}</script>
-<link rel="stylesheet" href="style.css?v=85">
+<link rel="stylesheet" href="style.css?v=86">
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
@@ -751,21 +751,56 @@
         <input class="form-input" id="pfin-desc" placeholder="Ex: Financiamento habitacional">
       </div>
       <div class="veh-form-row">
-        <div class="form-group"><label class="form-label" id="pfin-total-lbl">Valor total</label><input class="form-input" id="pfin-total" type="number" min="0" step="any" placeholder="300000"></div>
-        <div class="form-group"><label class="form-label" id="pfin-saldo-lbl">Saldo devedor *</label><input class="form-input" id="pfin-saldo" type="number" min="0" step="any" placeholder="180000"></div>
+        <div class="form-group"><label class="form-label" id="pfin-bem-lbl">Valor do bem</label><input class="form-input" id="pfin-bem" type="number" min="0" step="any" placeholder="300000"></div>
+        <div class="form-group"><label class="form-label" id="pfin-financiado-lbl">Valor financiado *</label><input class="form-input" id="pfin-financiado" type="number" min="0" step="any" placeholder="240000"></div>
       </div>
       <div class="veh-form-row">
-        <div class="form-group"><label class="form-label" id="pfin-parcela-lbl">Parcela mensal</label><input class="form-input" id="pfin-parcela" type="number" min="0" step="any" placeholder="2100"></div>
+        <div class="form-group"><label class="form-label" id="pfin-saldo-lbl">Saldo devedor *</label><input class="form-input" id="pfin-saldo" type="number" min="0" step="any" placeholder="180000"></div>
         <div class="form-group"><label class="form-label">Início</label><input class="form-input" id="pfin-inicio" type="date"></div>
       </div>
-      <div class="veh-form-row">
-        <div class="form-group"><label class="form-label">Parcelas totais</label><input class="form-input" id="pfin-ptotal" type="number" min="0" step="1" placeholder="360"></div>
-        <div class="form-group"><label class="form-label">Parcelas pagas</label><input class="form-input" id="pfin-ppagas" type="number" min="0" step="1" placeholder="48"></div>
+      <div class="form-group">
+        <label class="form-label">Frequência</label>
+        <select class="form-input" id="pfin-freq">
+          <option value="mensal">Mensal</option>
+          <option value="quinzenal">Quinzenal</option>
+          <option value="semanal">Semanal</option>
+          <option value="anual">Anual</option>
+          <option value="irregular">Irregular / sem periodicidade</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observações</label>
+        <textarea class="form-input" id="pfin-obs" rows="2" placeholder="Anotações (taxa, seguro, etc.)"></textarea>
       </div>
       <input type="hidden" id="pfin-id">
       <div class="veh-form-btns" style="margin-top:4px">
         <button class="btn btn-secondary" onclick="closeOverlay('pat-fin-sheet')">Cancelar</button>
         <button class="btn btn-primary" onclick="savePatFin()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom sheet: registrar pagamento de financiamento (cria despesa + reduz saldo) -->
+  <div class="overlay" id="pat-pagfin-sheet" onclick="if(event.target===this)closeOverlay('pat-pagfin-sheet')">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Registrar pagamento</div>
+      <div class="pagfin-summary" id="pagfin-summary"></div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label" id="pagfin-valor-lbl">Valor *</label><input class="form-input" id="pagfin-valor" type="number" min="0" step="any" placeholder="2100"></div>
+        <div class="form-group"><label class="form-label">Data</label><input class="form-input" id="pagfin-data" type="date"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Categoria da despesa</label>
+        <select class="form-input" id="pagfin-cat"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrição (opcional)</label>
+        <input class="form-input" id="pagfin-desc" placeholder="Ex: Parcela julho">
+      </div>
+      <div class="veh-form-btns" style="margin-top:4px">
+        <button class="btn btn-secondary" onclick="closeOverlay('pat-pagfin-sheet')">Cancelar</button>
+        <button class="btn btn-primary" id="pagfin-save-btn" onclick="salvarPagamentoFin()">Registrar pagamento</button>
       </div>
     </div>
   </div>
@@ -1510,7 +1545,7 @@
   } catch(e) {}
 })();
 </script>
-<script src="app.js?v=99" defer></script>
+<script src="app.js?v=100" defer></script>
 <script>
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});

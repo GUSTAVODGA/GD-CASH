@@ -3812,6 +3812,39 @@ button:focus-visible, [role="button"]:focus-visible {
   transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
 }
 .pat-mini-del:active { background: var(--surface3); color: var(--red, #e5484d); }
+.pat-mini-edit {
+  width: 30px; height: 30px; border-radius: 8px; border: none; background: var(--surface2);
+  color: var(--tx3); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; flex-shrink: 0; -webkit-tap-highlight-color: transparent;
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+.pat-mini-edit:active { background: var(--surface3); color: var(--ac); }
+
+/* ── Financiamento: card com resumo, progresso e histórico de pagamentos ── */
+.pat-fin-card { padding: 14px; }
+.pat-fin-card + .pat-fin-card { border-top: 1px solid var(--border); }
+.pat-fin-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 12px; }
+.pat-fin-head-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.pagfin-progress { height: 7px; border-radius: 6px; background: var(--donut-track, rgba(120,130,160,.18)); overflow: hidden; margin-bottom: 12px; }
+.pagfin-progress-fill { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, color-mix(in srgb, var(--ac) 62%, #fff), var(--ac)); transition: width .5s cubic-bezier(.34,1.1,.5,1); }
+.pagfin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-bottom: 12px; }
+.pagfin-cell { display: flex; flex-direction: column; gap: 2px; }
+.pagfin-cell-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--tx3); }
+.pagfin-cell-val { font-size: 15px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; }
+.pagfin-cell-val.pagfin-pos { color: var(--green, #16a34a); }
+.pagfin-cell-val.pagfin-neg { color: var(--red, #e5484d); }
+.pagfin-add-btn { width: 100%; height: 40px; font-size: 13px; }
+.pagfin-hist { margin-top: 10px; }
+.pagfin-empty { font-size: 12px; color: var(--tx3); text-align: center; padding: 8px 0 2px; }
+.pagfin-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; }
+.pagfin-row + .pagfin-row { border-top: 1px solid var(--border); }
+.pagfin-row-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pagfin-row-desc { font-size: 12.5px; font-weight: 600; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pagfin-row-date { font-size: 11px; color: var(--tx3); }
+.pagfin-row-val { font-size: 13px; font-weight: 800; color: var(--red, #e5484d); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+/* Resumo dentro do sheet de pagamento */
+.pagfin-summary { background: var(--surface2); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; }
+.pagfin-sum-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--tx); }
 
 .pat-hist-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; }
 .pat-hist-item + .pat-hist-item { border-top: 1px solid var(--border); }
