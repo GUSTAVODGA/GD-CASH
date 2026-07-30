@@ -3861,6 +3861,52 @@ button:focus-visible, [role="button"]:focus-visible {
 .pagfin-summary { background: var(--surface2); border-radius: 12px; padding: 10px 14px; margin-bottom: 14px; }
 .pagfin-sum-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--tx); }
 
+/* ── Parcelamentos (Compras Parceladas) ── */
+.parcel-item { background: var(--card, var(--surface)); border: 1px solid var(--border); border-radius: 14px; padding: 13px 14px; margin-bottom: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.parcel-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.parcel-info { min-width: 0; flex: 1; }
+.parcel-name { font-size: 14.5px; font-weight: 800; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.parcel-meta { display: flex; align-items: center; gap: 8px; margin-top: 3px; flex-wrap: wrap; }
+.parcel-cat { font-size: 11.5px; color: var(--tx3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
+/* Badge discreto: contagem de parcelas em tom neutro, sem roubar o foco. */
+.parcel-chip { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.parcel-chip-open { color: var(--tx3); background: var(--donut-track, rgba(120,130,160,.14)); }
+.parcel-chip-done { color: var(--green, #16a34a); background: rgba(22,163,74,.12); }
+/* Próxima parcela: bloco de duas linhas — o VALOR é o destaque do card. */
+.parcel-next { margin-top: 10px; }
+.parcel-next-cap { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--tx3); margin-bottom: 1px; }
+.parcel-next-line { font-size: 13px; font-weight: 600; color: var(--tx2, var(--tx)); font-variant-numeric: tabular-nums; }
+.parcel-next-amt { font-size: 15px; font-weight: 800; color: var(--ac); }
+.parcel-end { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.parcel-amt-lbl { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--tx3); }
+.parcel-amt { font-size: 13.5px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; }
+.parcel-progress { height: 6px; border-radius: 6px; background: var(--donut-track, rgba(120,130,160,.18)); overflow: hidden; margin: 11px 0; }
+.parcel-progress-fill { display: block; height: 100%; border-radius: 6px; background: linear-gradient(90deg, color-mix(in srgb, var(--ac) 62%, #fff), var(--ac)); transition: width .5s cubic-bezier(.34,1.1,.5,1); }
+.parcel-action-row { margin-top: 2px; }
+.parcel-confirm-btn { width: 100%; height: 32px; font-size: 12.5px; }
+.parcel-done-selo { display: flex; align-items: center; justify-content: center; gap: 6px; height: 38px; border-radius: 12px; font-size: 12.5px; font-weight: 800; color: var(--green, #16a34a); background: rgba(22,163,74,.10); border: 1px solid rgba(22,163,74,.25); }
+/* Detalhe (sheet) */
+.parcel-det-head { margin-bottom: 12px; }
+.parcel-det-name { font-size: 17px; font-weight: 800; color: var(--tx); }
+.parcel-det-sub { font-size: 12.5px; color: var(--tx3); margin-top: 2px; }
+.parcel-next-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface2); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; }
+.parcel-next-lbl { font-size: 12px; font-weight: 700; color: var(--tx3); }
+.parcel-next-val { font-size: 12.5px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; }
+.parcel-det-action { margin-bottom: 14px; }
+.parcel-confirm-primary { width: 100%; }
+.parcel-det-hist-lbl { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--tx3); margin-bottom: 4px; }
+.parcel-det-btns { display: flex; gap: 10px; margin-top: 14px; }
+.parcel-det-btns .btn { flex: 1; }
+.parcel-del-btn { color: var(--rd, #e5484d); }
+.parcel-form-hint { font-size: 11.5px; color: var(--tx3); margin: -4px 0 10px; }
+/* Chip verde "Paga" no histórico — leitura rápida do que já foi quitado. */
+.parcel-paid-chip { flex-shrink: 0; display: inline-flex; align-items: center; font-size: 9.5px; font-weight: 800; color: var(--green, #16a34a); background: rgba(22,163,74,.12); border-radius: 999px; padding: 1px 6px; margin-right: 7px; letter-spacing: .02em; vertical-align: middle; }
+:root[data-theme="dark"] .parcel-cat,
+:root[data-theme="dark"] .parcel-next-cap,
+:root[data-theme="dark"] .parcel-amt-lbl,
+:root[data-theme="dark"] .parcel-det-sub,
+:root[data-theme="dark"] .parcel-next-lbl { color: rgba(232,237,255,.58); }
+
 .pat-hist-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; }
 .pat-hist-item + .pat-hist-item { border-top: 1px solid var(--border); }
 .pat-hist-dot-col { padding-top: 5px; flex-shrink: 0; }

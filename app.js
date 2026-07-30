@@ -205,6 +205,11 @@ const TAB_HELP = {
     title: 'Pendências',
     text: 'Registre tudo que precisa resolver — compra, documento, manutenção, conta. Defina prioridade e prazo. Ao concluir, você pode registrar como gasto real se quiser.',
   },
+  parcelamentos: {
+    icon: '🧾',
+    title: 'Parcelamentos',
+    text: 'Cadastre compras parceladas (ex: iPhone em 12x). As parcelas futuras ficam previstas — a cada mês você toca em "Confirmar parcela" e só aquela vira despesa. Acompanhe pagas, restantes e o quanto falta.',
+  },
 };
 
 function showTabHelp(tab) {
@@ -266,6 +271,8 @@ async function loadFromCloud() {
       if (!D.pendencias) D.pendencias = [];
       if (!D.vehicles)    D.vehicles    = [];
       if (!D.patrimonios) D.patrimonios = [];
+      if (!Array.isArray(D.installments)) D.installments = [];
+      if (!Array.isArray(D.installmentPayments)) D.installmentPayments = [];
       if (!Array.isArray(D.fixedPayments)) D.fixedPayments = [];
       // Marco de adoção da função de baixa: só vencimentos a partir desta data
       // contam como pendente/vencido. Vencimentos anteriores viram histórico neutro
@@ -275,8 +282,9 @@ async function loadFromCloud() {
       // Limpa marcadores de baixa órfãos vindos da nuvem; persiste pelo fluxo normal (save()).
       const _fxCleaned = reconcileFixedPayments();
       const _finCleaned = reconcilePatFinPayments();
+      const _instCleaned = reconcileInstallmentPayments();
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
-      if (_fxCleaned || _finCleaned || _fxNeedSave) save();
+      if (_fxCleaned || _finCleaned || _instCleaned || _fxNeedSave) save();
     } else {
       // Primeiro login — oferece migrar dados locais existentes
       const local = localStorage.getItem('gdcash_v1');
@@ -487,6 +495,8 @@ function renderMais() {
   const resTgt = (D.emergency && D.emergency.target) || 0;
   const resPct = resTgt > 0 ? Math.min(100, Math.round(resCur / resTgt * 100)) : 0;
   const net = _patNetTotals(_patUnifiedItems()).net;
+  const parcAtivos = (D.installments || []).filter(i => !_instState(i).concluido).length;
+  const parcAberto = (D.installments || []).reduce((s, i) => s + Math.max(0, _instState(i).emAberto), 0);
   const themeLbls = { light:'Claro', dark:'Escuro', auto:'Automático' };
   const theme = themeLbls[localStorage.getItem('gdcash_theme') || 'auto'] || 'Automático';
 
@@ -505,6 +515,7 @@ function renderMais() {
     fix:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
     res:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
     pat:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="4" height="8" rx="1"/><rect x="9" y="8" width="4" height="14" rx="1"/><rect x="16" y="4" width="4" height="18" rx="1"/></svg>',
+    parc: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
     conv: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>',
     srch: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
     adj:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>',
@@ -517,6 +528,7 @@ function renderMais() {
       ${item('fixos', ICO.fix, 'Gastos Fixos', `${R(fixTotal)} / mês`)}
       ${item('reserva', ICO.res, 'Reserva de Emergência', resTgt > 0 ? `${R(resCur)} · ${resPct}% da meta` : R(resCur))}
       ${item('patrimonio', ICO.pat, 'Patrimônio', `Líquido ${R(net)}`)}
+      ${item('parcelamentos', ICO.parc, 'Parcelamentos', parcAtivos > 0 ? `${parcAtivos} ativo(s) · ${R(parcAberto)} em aberto` : 'Nenhum ativo')}
     </div>
     <div class="sec-label mais-sec">Ferramentas</div>
     <div class="mais-group">
@@ -821,6 +833,8 @@ function defaultData() {
     pendencias: [],
     vehicles: [],
     patrimonios: [],
+    installments: [],
+    installmentPayments: [],
   };
 }
 
@@ -837,6 +851,8 @@ let D = (() => {
       if(!p.pendencias)  p.pendencias=[];
       if(!p.vehicles)    p.vehicles=[];
       if(!p.patrimonios) p.patrimonios=[];
+      if(!Array.isArray(p.installments)) p.installments=[];
+      if(!Array.isArray(p.installmentPayments)) p.installmentPayments=[];
       if(!Array.isArray(p.fixedPayments)) p.fixedPayments=[];
       if(!p.fixedStart)  p.fixedStart=dateStr(new Date());
       return p;
@@ -1790,6 +1806,8 @@ function deleteExpense(id) {
   reconcileFixedPayments();
   // Se era um pagamento de financiamento, remove o pagamento e devolve o valor ao saldo.
   reconcilePatFinPayments();
+  // Se era uma parcela de compra parcelada, remove o marcador (a parcela volta a prevista).
+  reconcileInstallmentPayments();
   save();
   refreshAfterDayEdit();
   refreshHomeFixosAlert();
@@ -3100,6 +3118,354 @@ function addPlatform() { D.platforms.push({id:uid(),name:'Nova Fonte',color:PALE
 function deletePlatform(i) { if(D.platforms.length<=1){gdToast('Mantenha ao menos 1 plataforma.', { type: 'error' });return;} D.platforms.splice(i,1); save(); openPlatSettings(); }
 
 // ══════════════════════════════════════════
+// PARCELAMENTOS (Compras Parceladas)
+// Módulo INDEPENDENTE de Patrimônio/Financiamento. Espelha o padrão dos Gastos
+// Fixos: o cadastro (D.installments) é o "plano" imutável; cada parcela confirmada
+// gera UMA despesa real + um marcador (D.installmentPayments). Nenhuma despesa é
+// criada antecipadamente. Todo o estado (pagas, restantes, %, próxima) é DERIVADO
+// dos marcadores — fonte única, sem saldo armazenado.
+//   installment:        { id, descricao, valorTotal, parcelas, valorParcela,
+//                          dataPrimeira, frequencia, categoria, conta, observacoes, criadoEm }
+//   installmentPayment: { installmentId, parcelNo(1..N), expenseId, valor, paidDate }
+//   despesa gerada:     meta:{ source:'installment', installmentId, parcelNo }
+// ══════════════════════════════════════════
+function _round2(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+
+function _normInstallment(raw) {
+  const r = raw || {};
+  const N = Math.max(1, Math.round(Number(r.parcelas) || 1));
+  const total = Math.max(0, _round2(r.valorTotal));
+  let vp = _round2(r.valorParcela);
+  if (!(vp > 0)) vp = _round2(total / N);
+  return {
+    id: r.id || uid(),
+    descricao: String(r.descricao || '').trim() || 'Compra',
+    valorTotal: total,
+    parcelas: N,
+    valorParcela: vp,
+    dataPrimeira: r.dataPrimeira || dateStr(new Date()),
+    frequencia: r.frequencia || 'mensal',
+    categoria: r.categoria || (D.expCats && D.expCats[0]) || 'Outros',
+    conta: String(r.conta || '').trim(),
+    observacoes: String(r.observacoes || '').trim(),
+    criadoEm: r.criadoEm || Date.now(),
+  };
+}
+
+// Valor da parcela k (1..N): a ÚLTIMA absorve o resíduo de arredondamento, de modo
+// que a soma das parcelas seja exatamente igual ao valorTotal.
+function _instParcelaValor(inst, parcelNo) {
+  const N = inst.parcelas || 1;
+  const vp = _round2(inst.valorParcela);
+  if (parcelNo >= N) return _round2(inst.valorTotal - vp * (N - 1));
+  return vp;
+}
+// Vencimento da parcela k: dataPrimeira + frequência·(k−1). Mensal clampa dia curto.
+function _instDueDate(inst, parcelNo) {
+  const base = parseDate(inst.dataPrimeira);
+  if (!base || isNaN(base)) return '';
+  const k = Math.max(1, parcelNo) - 1;
+  const freq = inst.frequencia || 'mensal';
+  let d;
+  if (freq === 'semanal')       d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 7 * k);
+  else if (freq === 'quinzenal') d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 14 * k);
+  else if (freq === 'anual')     d = new Date(base.getFullYear() + k, base.getMonth(), base.getDate());
+  else { // mensal (default): preserva o dia, clampando ao último dia do mês curto
+    const y = base.getFullYear(), mo = base.getMonth() + k, day = base.getDate();
+    const last = new Date(y, mo + 1, 0).getDate();
+    d = new Date(y, mo, Math.min(day, last));
+  }
+  return dateStr(d);
+}
+function _instPayment(instId, parcelNo) {
+  return (D.installmentPayments || []).find(p => p.installmentId === instId && p.parcelNo === parcelNo) || null;
+}
+function _instPaidCount(inst) {
+  return (D.installmentPayments || []).filter(p => p.installmentId === inst.id).length;
+}
+function _instValorPago(inst) {
+  return _round2((D.installmentPayments || [])
+    .filter(p => p.installmentId === inst.id)
+    .reduce((s, p) => s + (Number(p.valor) || 0), 0));
+}
+// Estado derivado (FONTE ÚNICA). % concluído = parcelas pagas ÷ total (contagem).
+function _instState(inst) {
+  const N = inst.parcelas || 1;
+  const pagas = Math.min(N, _instPaidCount(inst));
+  const restantes = Math.max(0, N - pagas);
+  const pct = N > 0 ? Math.max(0, Math.min(100, Math.round(pagas / N * 100))) : 0;
+  const concluido = pagas >= N;
+  const proximaNo = concluido ? null : pagas + 1; // confirmação sempre sequencial
+  return {
+    N, pagas, restantes, pct, concluido, proximaNo,
+    proximaVenc: proximaNo ? _instDueDate(inst, proximaNo) : '',
+    proximaValor: proximaNo ? _instParcelaValor(inst, proximaNo) : 0,
+    pago: _instValorPago(inst),
+    emAberto: _round2(inst.valorTotal - _instValorPago(inst)),
+  };
+}
+// Reconciliação segura: remove APENAS marcadores órfãos — despesa vinculada
+// inexistente (expenseId) ou parcelamento inexistente (installmentId). Não cria
+// despesas, não migra nada. Como o estado é derivado, remover o marcador faz a
+// parcela voltar sozinha ao estado "prevista". Retorna true se removeu algo.
+function reconcileInstallmentPayments() {
+  if (!Array.isArray(D.installmentPayments)) { D.installmentPayments = []; return false; }
+  const expIds = new Set((D.expenses || []).map(e => e.id));
+  const instIds = new Set((D.installments || []).map(i => i.id));
+  const before = D.installmentPayments.length;
+  D.installmentPayments = D.installmentPayments.filter(p => p && expIds.has(p.expenseId) && instIds.has(p.installmentId));
+  return D.installmentPayments.length !== before;
+}
+
+function renderParcelamentos() {
+  const totalEl = document.getElementById('parcel-total');
+  const list = document.getElementById('parcel-list');
+  const insts = D.installments || [];
+  const emAbertoTotal = insts.reduce((s, i) => s + Math.max(0, _instState(i).emAberto), 0);
+  if (totalEl) totalEl.textContent = R(emAbertoTotal);
+  if (!list) return;
+  if (!insts.length) { list.innerHTML = '<div class="empty-state">Nenhuma compra parcelada cadastrada</div>'; return; }
+  // Ordenação visual: ativos primeiro (por próxima parcela), concluídos ao fim.
+  const ordered = [...insts].sort((a, b) => {
+    const sa = _instState(a), sb = _instState(b);
+    if (sa.concluido !== sb.concluido) return sa.concluido ? 1 : -1;
+    return String(sa.proximaVenc || '').localeCompare(String(sb.proximaVenc || '')) ||
+      String(a.descricao || '').localeCompare(String(b.descricao || ''), 'pt-BR', { sensitivity: 'base' });
+  });
+  list.innerHTML = ordered.map(i => {
+    const st = _instState(i);
+    const metaBits = [i.categoria, i.conta].filter(Boolean).join(' · ');
+    const chip = st.concluido
+      ? '<span class="parcel-chip parcel-chip-done">Concluído</span>'
+      : `<span class="parcel-chip parcel-chip-open">${st.pagas}/${st.N}</span>`;
+    // Foco do card: a próxima parcela, com o VALOR em destaque.
+    const venc = st.proximaNo
+      ? `<div class="parcel-next">
+           <span class="parcel-next-cap">Próxima parcela</span>
+           <span class="parcel-next-line">${fmtShort(st.proximaVenc)} · <span class="parcel-next-amt">${R(st.proximaValor)}</span></span>
+         </div>`
+      : '';
+    const action = st.concluido
+      ? '<div class="parcel-done-selo">✓ Parcelamento concluído</div>'
+      : `<button class="btn btn-secondary parcel-confirm-btn" onclick="event.stopPropagation();confirmarParcela('${i.id}')">Confirmar parcela</button>`;
+    return `
+      <div class="parcel-item" onclick="openParcelDetail('${i.id}')">
+        <div class="parcel-main">
+          <div class="parcel-info">
+            <div class="parcel-name">${escHtml(i.descricao)}</div>
+            <div class="parcel-meta">${metaBits ? `<span class="parcel-cat">${escHtml(metaBits)}</span>` : ''}${chip}</div>
+          </div>
+          <div class="parcel-end">
+            <span class="parcel-amt-lbl">Valor total</span>
+            <span class="parcel-amt">${R(i.valorTotal)}</span>
+          </div>
+        </div>
+        ${venc}
+        <div class="parcel-progress"><span class="parcel-progress-fill" style="width:${st.pct}%"></span></div>
+        <div class="parcel-action-row">${action}</div>
+      </div>`;
+  }).join('');
+}
+
+function _parcelFillCatSelect(sel, current) {
+  if (!sel) return;
+  const cats = D.expCats || [];
+  sel.innerHTML = cats.map(c => `<option value="${escHtml(c)}"${c === current ? ' selected' : ''}>${escHtml(c)}</option>`).join('');
+}
+// Sugere valor da parcela = total ÷ nº enquanto o usuário não editar o campo à mão.
+function _parcelSuggestValor() {
+  const total = Number(document.getElementById('pc-total').value) || 0;
+  const n = Math.max(1, Math.round(Number(document.getElementById('pc-n').value) || 0));
+  const vpEl = document.getElementById('pc-valor');
+  if (!vpEl || vpEl.dataset.touched === '1') return;
+  if (total > 0 && n >= 1) vpEl.value = _round2(total / n);
+}
+function openParcelForm(id) {
+  const inst = id ? (D.installments || []).find(x => x.id === id) : null;
+  document.getElementById('parcel-modal-title').textContent = inst ? 'Editar parcelamento' : 'Nova compra parcelada';
+  document.getElementById('parcel-edit-id').value = inst ? inst.id : '';
+  document.getElementById('pc-desc').value = inst ? inst.descricao : '';
+  document.getElementById('pc-total').value = inst ? inst.valorTotal : '';
+  document.getElementById('pc-n').value = inst ? inst.parcelas : '';
+  const vpEl = document.getElementById('pc-valor');
+  vpEl.value = inst ? inst.valorParcela : '';
+  vpEl.dataset.touched = inst ? '1' : '';
+  document.getElementById('pc-data').value = inst ? inst.dataPrimeira : dateStr(new Date());
+  document.getElementById('pc-freq').value = inst ? inst.frequencia : 'mensal';
+  _parcelFillCatSelect(document.getElementById('pc-cat'), inst ? inst.categoria : ((D.expCats || [])[0] || ''));
+  document.getElementById('pc-conta').value = inst ? inst.conta : '';
+  document.getElementById('pc-obs').value = inst ? inst.observacoes : '';
+  // Com parcelas já confirmadas, o nº de parcelas fica travado (evita inconsistência).
+  const paid = inst ? _instPaidCount(inst) : 0;
+  const nInput = document.getElementById('pc-n');
+  nInput.disabled = paid > 0;
+  const hint = document.getElementById('pc-n-hint');
+  if (hint) hint.style.display = paid > 0 ? '' : 'none';
+  openOverlay('modal-parcel');
+}
+function salvarParcelamento() {
+  const id = document.getElementById('parcel-edit-id').value;
+  const descricao = document.getElementById('pc-desc').value.trim();
+  const valorTotal = _round2(Number(document.getElementById('pc-total').value) || 0);
+  const parcelas = Math.round(Number(document.getElementById('pc-n').value) || 0);
+  let valorParcela = _round2(Number(document.getElementById('pc-valor').value) || 0);
+  const dataPrimeira = localDateKey(document.getElementById('pc-data').value) || '';
+  const frequencia = document.getElementById('pc-freq').value || 'mensal';
+  const categoria = document.getElementById('pc-cat').value || (D.expCats || [])[0] || 'Outros';
+  const conta = document.getElementById('pc-conta').value.trim();
+  const observacoes = document.getElementById('pc-obs').value.trim();
+  if (!descricao) { gdToast('Informe a descrição da compra.', { type: 'error' }); return; }
+  if (!(valorTotal > 0)) { gdToast('Informe o valor total.', { type: 'error' }); return; }
+  if (!(parcelas >= 1)) { gdToast('Informe a quantidade de parcelas.', { type: 'error' }); return; }
+  if (!dataPrimeira) { gdToast('Informe a data da primeira parcela.', { type: 'error' }); return; }
+  if (!(valorParcela > 0)) valorParcela = _round2(valorTotal / parcelas);
+  D.installments = D.installments || [];
+  if (id) {
+    const idx = D.installments.findIndex(x => x.id === id);
+    if (idx < 0) { closeOverlay('modal-parcel'); return; }
+    // Nº de parcelas não pode ficar abaixo do já confirmado (mantém o travamento do form).
+    const paid = _instPaidCount(D.installments[idx]);
+    const N = paid > 0 ? D.installments[idx].parcelas : parcelas;
+    D.installments[idx] = _normInstallment({ ...D.installments[idx], descricao, valorTotal, parcelas: N, valorParcela, dataPrimeira, frequencia, categoria, conta, observacoes });
+  } else {
+    D.installments.push(_normInstallment({ descricao, valorTotal, parcelas, valorParcela, dataPrimeira, frequencia, categoria, conta, observacoes }));
+  }
+  haptic(10); save();
+  closeOverlay('modal-parcel');
+  renderParcelamentos();
+  if (id && document.getElementById('parcel-detail-sheet')?.classList.contains('open')) openParcelDetail(id);
+  gdToast(id ? 'Parcelamento atualizado.' : 'Compra parcelada cadastrada.', { type: 'success' });
+}
+
+// ── Confirmar parcela: cria uma despesa real e marca a parcela como paga ──
+var _parcelConfirmTarget = null;
+function confirmarParcela(id) {
+  const inst = (D.installments || []).find(x => x.id === id);
+  if (!inst) return;
+  const st = _instState(inst);
+  // Bloqueio: nada a confirmar quando já concluído (nunca além da última parcela).
+  if (st.concluido || !st.proximaNo) { gdToast('Parcelamento já concluído.', { type: 'info' }); return; }
+  _parcelConfirmTarget = { id: id, parcelNo: st.proximaNo };
+  const valor = _instParcelaValor(inst, st.proximaNo);
+  const sum = document.getElementById('parcel-confirm-summary');
+  if (sum) sum.innerHTML =
+    `<div class="pagfin-sum-row"><span>${escHtml(inst.descricao)}</span><span>Parcela ${st.proximaNo}/${st.N}</span></div>` +
+    `<div class="pagfin-sum-row"><span>Valor</span><span>${R(valor)}</span></div>`;
+  const dateEl = document.getElementById('parcel-confirm-date');
+  if (dateEl) dateEl.value = st.proximaVenc || dateStr(new Date());
+  const btn = document.getElementById('parcel-confirm-save');
+  if (btn) btn.disabled = false;
+  openOverlay('parcel-confirm-sheet');
+}
+function salvarConfirmarParcela() {
+  const t = _parcelConfirmTarget;
+  if (!t) return;
+  const inst = (D.installments || []).find(x => x.id === t.id);
+  if (!inst) { closeOverlay('parcel-confirm-sheet'); return; }
+  const btn = document.getElementById('parcel-confirm-save');
+  if (btn && btn.disabled) return; // impede duplo toque
+  const st = _instState(inst);
+  // Revalida no momento da confirmação: só a PRÓXIMA parcela sequencial, nunca além
+  // da última, nunca duplicando (protege contra duplo toque e estado obsoleto).
+  if (st.concluido || t.parcelNo !== st.proximaNo || _instPayment(inst.id, t.parcelNo)) {
+    closeOverlay('parcel-confirm-sheet');
+    gdToast('Esta parcela não pode ser confirmada.', { type: 'info' });
+    renderParcelamentos();
+    return;
+  }
+  if (btn) btn.disabled = true;
+  const date = localDateKey(document.getElementById('parcel-confirm-date').value) || dateStr(new Date());
+  const valor = _instParcelaValor(inst, st.proximaNo);
+  const expId = uid();
+  // Metadados de auditoria/reconciliação na despesa gerada.
+  D.expenses.push({
+    id: expId, date, category: inst.categoria, amount: valor,
+    description: `${inst.descricao} (parcela ${st.proximaNo}/${st.N})`,
+    meta: { source: 'installment', installmentId: inst.id, parcelNo: st.proximaNo },
+  });
+  D.installmentPayments = D.installmentPayments || [];
+  D.installmentPayments.push({ installmentId: inst.id, parcelNo: st.proximaNo, expenseId: expId, valor: valor, paidDate: date });
+  _parcelConfirmTarget = null;
+  haptic(10); save();
+  closeOverlay('parcel-confirm-sheet');
+  renderParcelamentos();
+  if (document.getElementById('parcel-detail-sheet')?.classList.contains('open')) openParcelDetail(inst.id);
+  refreshAfterDayEdit();
+  const done = _instState(inst).concluido;
+  gdToast(done ? 'Parcela confirmada. Parcelamento concluído! 🎉' : 'Parcela confirmada. Lançamento criado em Despesas.', { type: 'success' });
+}
+
+function openParcelDetail(id) {
+  const inst = (D.installments || []).find(x => x.id === id);
+  if (!inst) return;
+  const body = document.getElementById('parcel-detail-body');
+  if (!body) return;
+  const st = _instState(inst);
+  const metaBits = [inst.categoria, inst.conta].filter(Boolean).join(' · ');
+  const pays = (D.installmentPayments || []).filter(p => p.installmentId === inst.id)
+    .slice().sort((a, b) => (b.parcelNo || 0) - (a.parcelNo || 0));
+  const histHtml = pays.length === 0
+    ? '<div class="pagfin-empty">Nenhuma parcela confirmada ainda.</div>'
+    : pays.map(p => `
+        <div class="pagfin-row">
+          <div class="pagfin-row-body">
+            <span class="pagfin-row-desc"><span class="parcel-paid-chip">✓ Paga</span>Parcela ${p.parcelNo}/${st.N}</span>
+            <span class="pagfin-row-date">${fmtShort(p.paidDate)}</span>
+          </div>
+          <span class="pagfin-row-val">−${R(p.valor || 0)}</span>
+        </div>`).join('');
+  const proxima = st.proximaNo
+    ? `<div class="parcel-next-row"><span class="parcel-next-lbl">Próxima parcela</span><span class="parcel-next-val">${st.proximaNo}ª · ${fmtShort(st.proximaVenc)} · ${R(st.proximaValor)}</span></div>`
+    : '';
+  const action = st.concluido
+    ? '<div class="parcel-done-selo">✓ Parcelamento concluído</div>'
+    : `<button class="btn btn-primary parcel-confirm-primary" onclick="confirmarParcela('${inst.id}')">Confirmar parcela</button>`;
+  body.innerHTML = `
+    <div class="parcel-det-head">
+      <div class="parcel-det-name">${escHtml(inst.descricao)}</div>
+      ${metaBits ? `<div class="parcel-det-sub">${escHtml(metaBits)}</div>` : ''}
+    </div>
+    <div class="parcel-progress"><span class="parcel-progress-fill" style="width:${st.pct}%"></span></div>
+    <div class="pagfin-grid">
+      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Total</span><span class="pagfin-cell-val">${R(inst.valorTotal)}</span></div>
+      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Pagas</span><span class="pagfin-cell-val pagfin-pos">${st.pagas}/${st.N}</span></div>
+      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Restantes</span><span class="pagfin-cell-val">${st.restantes}</span></div>
+      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Concluído</span><span class="pagfin-cell-val">${st.pct}%</span></div>
+    </div>
+    ${proxima}
+    <div class="parcel-det-action">${action}</div>
+    <div class="parcel-det-hist-lbl">Histórico das parcelas</div>
+    <div class="pagfin-hist">${histHtml}</div>
+    <div class="parcel-det-btns">
+      <button class="btn btn-secondary" onclick="closeOverlay('parcel-detail-sheet');openParcelForm('${inst.id}')">Editar</button>
+      <button class="btn btn-secondary parcel-del-btn" onclick="excluirParcelamento('${inst.id}')">Excluir</button>
+    </div>`;
+  openOverlay('parcel-detail-sheet');
+}
+
+function excluirParcelamento(id) {
+  const inst = (D.installments || []).find(x => x.id === id);
+  if (!inst) return;
+  const paid = _instPaidCount(inst);
+  const desp = paid === 1 ? '1 despesa já registrada permanece' : `${paid} despesas já registradas permanecem`;
+  gdConfirm({
+    title: 'Excluir parcelamento',
+    msg: `O controle do parcelamento e seus marcadores serão removidos. ${paid > 0 ? desp : 'Nenhuma despesa foi gerada ainda'} no histórico financeiro — as despesas apenas perdem o vínculo ativo com o parcelamento, sem deixar referências órfãs.`,
+    confirmText: 'Excluir parcelamento',
+    variant: 'danger',
+    onConfirm: () => {
+      // Remove o vínculo ativo (marcadores) e o cadastro; as despesas ficam no histórico.
+      D.installmentPayments = (D.installmentPayments || []).filter(p => p.installmentId !== id);
+      D.installments = (D.installments || []).filter(x => x.id !== id);
+      haptic(10); save();
+      closeOverlay('parcel-detail-sheet');
+      renderParcelamentos();
+      gdToast('Parcelamento excluído. Despesas mantidas no histórico.', { type: 'success' });
+    },
+  });
+}
+
+// ══════════════════════════════════════════
 // CATEGORY MANAGEMENT
 // ══════════════════════════════════════════
 function openCatModal() {
@@ -3205,7 +3571,7 @@ new MutationObserver((mutations) => {
 // ══════════════════════════════════════════
 // Abas reais da navegação inferior e telas internas acessadas por "Mais".
 const MAIN_TABS = ['inicio','semana','mes','mais'];
-const INTERNAL_TABS = ['pendencias','fixos','reserva','patrimonio','conversor','pesquisa','ajustes','metas','lembretes'];
+const INTERNAL_TABS = ['pendencias','fixos','reserva','patrimonio','parcelamentos','conversor','pesquisa','ajustes','metas','lembretes'];
 var _currentMainTab = 'inicio';        // última aba principal ativa (p/ engrenagem)
 var _navOrigin      = 'mais';           // origem do Voltar de telas internas
 
@@ -3239,6 +3605,7 @@ function switchTab(tab, origin) {
   if(tab==='lembretes')  renderLembretes();
   if(tab==='pendencias') renderPendencias();
   if(tab==='patrimonio') renderPatrimonio();
+  if(tab==='parcelamentos') renderParcelamentos();
   // FAB "+" (novo lançamento): visível nas abas de conteúdo Início/Semana/Mês;
   // oculto em Mais e telas internas (que têm suas próprias ações).
   const fab = document.getElementById('global-fab');
@@ -4161,7 +4528,7 @@ function initLongPress() {
         confirmText: 'Excluir',
         variant: 'danger',
         onConfirm: () => {
-          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); reconcilePatFinPayments(); }
+          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); reconcilePatFinPayments(); reconcileInstallmentPayments(); }
           else if (type === 'inc') { D.incomeItems = (D.incomeItems||[]).filter(it => it.id !== id); }
           save(); renderInicio();
         },
