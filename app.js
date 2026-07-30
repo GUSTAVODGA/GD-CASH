@@ -7057,7 +7057,7 @@ function renderPatDetail(id) {
 
   // ── Financiamentos ──
   const finHtml = fins.length === 0
-    ? `<div class="pat-det-empty">Nenhum financiamento cadastrado.</div>`
+    ? `<div class="pat-det-empty">Nenhum financiamento. Para adicionar, toque em "Editar" e ative "Este bem é financiado".</div>`
     : fins.map(f => {
         const pagos = (f.pagamentos || []).reduce((s, x) => s + (x.valor || 0), 0);
         // % quitado com base no valor financiado (fallback: valor do bem).
@@ -7166,7 +7166,6 @@ function renderPatDetail(id) {
 
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Financiamentos</div>
-      <button class="btn-pill" onclick="openPatFinForm('${p.id}')">+ Adicionar</button>
     </div>
     <div class="pat-list-group" style="margin-bottom:0">${finHtml}</div>
 
