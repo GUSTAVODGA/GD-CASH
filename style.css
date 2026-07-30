@@ -3848,6 +3848,7 @@ button:focus-visible, [role="button"]:focus-visible {
 .pagfin-cell-val.pagfin-pos { color: var(--green, #16a34a); }
 .pagfin-cell-val.pagfin-neg { color: var(--red, #e5484d); }
 .pagfin-add-btn { width: 100%; height: 40px; font-size: 13px; }
+.pagfin-quitado { display: flex; align-items: center; justify-content: center; gap: 6px; height: 40px; border-radius: 12px; font-size: 13px; font-weight: 800; color: var(--green, #16a34a); background: rgba(22,163,74,.10); border: 1px solid rgba(22,163,74,.25); }
 .pagfin-hist { margin-top: 10px; }
 .pagfin-empty { font-size: 12px; color: var(--tx3); text-align: center; padding: 8px 0 2px; }
 .pagfin-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; }

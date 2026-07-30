@@ -274,8 +274,9 @@ async function loadFromCloud() {
       if (!D.fixedStart) { D.fixedStart = dateStr(new Date()); _fxNeedSave = true; }
       // Limpa marcadores de baixa órfãos vindos da nuvem; persiste pelo fluxo normal (save()).
       const _fxCleaned = reconcileFixedPayments();
+      const _finCleaned = reconcilePatFinPayments();
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
-      if (_fxCleaned || _fxNeedSave) save();
+      if (_fxCleaned || _finCleaned || _fxNeedSave) save();
     } else {
       // Primeiro login — oferece migrar dados locais existentes
       const local = localStorage.getItem('gdcash_v1');
@@ -1787,6 +1788,8 @@ function deleteExpense(id) {
   D.expenses=D.expenses.filter(e=>e.id!==id);
   // Se era uma despesa de baixa, remove o marcador órfão (o fixo volta a pendente/vencido).
   reconcileFixedPayments();
+  // Se era um pagamento de financiamento, remove o pagamento e devolve o valor ao saldo.
+  reconcilePatFinPayments();
   save();
   refreshAfterDayEdit();
   refreshHomeFixosAlert();
@@ -4158,7 +4161,7 @@ function initLongPress() {
         confirmText: 'Excluir',
         variant: 'danger',
         onConfirm: () => {
-          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); }
+          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); reconcilePatFinPayments(); }
           else if (type === 'inc') { D.incomeItems = (D.incomeItems||[]).filter(it => it.id !== id); }
           save(); renderInicio();
         },
@@ -6280,6 +6283,40 @@ function _normFinanciamento(raw) {
   return out;
 }
 
+// ── Fonte única dos números do financiamento ──────────────────────────────
+// "Valor já pago", "Saldo devedor" e "% quitado" derivam SEMPRE de
+// (valorFinanciado, saldoDevedor). Assim nunca há divergência entre eles.
+function _finJaPago(f) { return Math.max(0, (f?.valorFinanciado || 0) - (f?.saldoDevedor || 0)); }
+function _finQuitadoPct(f) {
+  const base = f?.valorFinanciado || 0;
+  if (base <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((base - (f.saldoDevedor || 0)) / base * 100)));
+}
+// Reconciliação segura dos pagamentos de financiamento: remove pagamentos cuja
+// despesa não existe mais (expenseId inválido) e devolve o valor ao saldo devedor,
+// recalculando-o automaticamente. Nunca deixa pagamento órfão. Retorna true se mudou.
+function reconcilePatFinPayments() {
+  const expIds = new Set((D.expenses || []).map(e => e.id));
+  let changed = false;
+  (D.patrimonios || []).forEach(p => {
+    (p.financiamentos || []).forEach(f => {
+      if (!Array.isArray(f.pagamentos) || !f.pagamentos.length) return;
+      const kept = [];
+      let back = 0;
+      f.pagamentos.forEach(pg => {
+        if (pg && pg.expenseId && !expIds.has(pg.expenseId)) back += (pg.valor || 0);
+        else kept.push(pg);
+      });
+      if (kept.length !== f.pagamentos.length) {
+        f.saldoDevedor = (f.saldoDevedor || 0) + back; // devolve ao saldo o valor dos órfãos
+        f.pagamentos = kept;
+        changed = true;
+      }
+    });
+  });
+  return changed;
+}
+
 function normalizePatrimonio(raw) {
   const p = Object.assign({}, _defaultPatrimonioFields(), raw);
   p.financiamentos = (Array.isArray(p.financiamentos) ? p.financiamentos : []).map(_normFinanciamento);
@@ -6814,7 +6851,7 @@ function openPatForm(tipo, id) {
         <span class="pf-fin-toggle-sub">Registre o financiamento junto com o bem</span>
       </div>
       <label class="pf-switch">
-        <input type="checkbox" id="pf-fin-on" ${finOn?'checked':''} onchange="_togglePfFin()">
+        <input type="checkbox" id="pf-fin-on" ${finOn?'checked':''} onchange="_togglePfFin()" aria-label="Este bem é financiado">
         <span class="pf-switch-track"><span class="pf-switch-thumb"></span></span>
       </label>
     </div>
@@ -7059,10 +7096,10 @@ function renderPatDetail(id) {
   const finHtml = fins.length === 0
     ? `<div class="pat-det-empty">Nenhum financiamento. Para adicionar, toque em "Editar" e ative "Este bem é financiado".</div>`
     : fins.map(f => {
-        const pagos = (f.pagamentos || []).reduce((s, x) => s + (x.valor || 0), 0);
-        // % quitado com base no valor financiado (fallback: valor do bem).
-        const base = f.valorFinanciado || f.valorBem || 0;
-        const quitado = base > 0 ? Math.min(100, Math.round((base - (f.saldoDevedor || 0)) / base * 100)) : 0;
+        // Fonte única: já pago e % quitado derivam de (valorFinanciado, saldoDevedor).
+        const pagos = _finJaPago(f);
+        const quitado = _finQuitadoPct(f);
+        const quitadoTotal = (f.valorFinanciado || 0) > 0 && (f.saldoDevedor || 0) <= 0; // financiamento quitado
         const freqLbl = { mensal:'Mensal', quinzenal:'Quinzenal', semanal:'Semanal', anual:'Anual', irregular:'Irregular' }[f.frequencia] || '';
         const metaBits = [f.descricao, freqLbl].filter(Boolean).join(' · ');
         // Histórico de pagamentos (mais recente primeiro).
@@ -7099,7 +7136,9 @@ function renderPatDetail(id) {
             <div class="pagfin-cell"><span class="pagfin-cell-lbl">Saldo devedor</span><span class="pagfin-cell-val pagfin-neg">${R(f.saldoDevedor || 0)}</span></div>
             <div class="pagfin-cell"><span class="pagfin-cell-lbl">% quitado</span><span class="pagfin-cell-val">${quitado}%</span></div>
           </div>
-          <button class="btn btn-secondary pagfin-add-btn" onclick="openPagFinForm('${p.id}','${f.id}')">+ Registrar pagamento</button>
+          ${quitadoTotal
+            ? `<div class="pagfin-quitado">✓ Financiamento quitado</div>`
+            : `<button class="btn btn-secondary pagfin-add-btn" onclick="openPagFinForm('${p.id}','${f.id}')">+ Registrar pagamento</button>`}
           <div class="pagfin-hist">${pagsHtml}</div>
         </div>`;
       }).join('');
@@ -7242,6 +7281,8 @@ function openPagFinForm(patId, finId) {
   if (!p) return;
   const f = (p.financiamentos || []).find(x => x.id === finId);
   if (!f) return;
+  // Bloqueio de pagamento após quitação: sem saldo, não há o que pagar.
+  if ((f.saldoDevedor || 0) <= 0) { gdToast('Este financiamento já está quitado.', { type: 'info' }); return; }
   _pagFinTarget = { patId: patId, finId: finId };
   const sum = document.getElementById('pagfin-summary');
   if (sum) sum.innerHTML =
@@ -7266,6 +7307,8 @@ function salvarPagamentoFin() {
   if (idx < 0) { closeOverlay('pat-pagfin-sheet'); return; }
   const btn = document.getElementById('pagfin-save-btn');
   if (btn && btn.disabled) return; // impede duplo toque
+  // Bloqueio de pagamento após quitação (revalida no salvar).
+  if ((list[idx].saldoDevedor || 0) <= 0) { closeOverlay('pat-pagfin-sheet'); gdToast('Este financiamento já está quitado.', { type: 'info' }); return; }
   const valor = Number(document.getElementById('pagfin-valor')?.value) || 0;
   if (valor <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   const data = localDateKey(document.getElementById('pagfin-data')?.value) || dateStr(new Date());
