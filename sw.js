@@ -1,9 +1,9 @@
-const CACHE = 'avenco-v48';
+const CACHE = 'avenco-v49';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
-  './style.css?v=84',
+  './style.css?v=85',
   './app.js?v=99',
 ];
 

@@ -2953,11 +2953,15 @@ select.form-select {
 /* Botões empilhados (verticais) — espaçamento entre eles */
 .btn + .btn { margin-top: 8px; }
 /* ...mas em linhas horizontais (flex + gap) o margin-top empurraria o 2º botão
-   para baixo, gerando a assimetria "um embaixo, outro em cima". Reset comum: */
+   para baixo, gerando a assimetria "um embaixo, outro em cima".
+   Reset comum em TODAS as linhas horizontais de botões do app.
+   (Se criar uma nova linha horizontal de .btn, adicione o contêiner aqui.) */
 .btn-row .btn + .btn,
 .res-actions .btn + .btn,
 .res-q-actions .btn + .btn,
 .veh-form-btns .btn + .btn,
+.veh-detail-footer .btn + .btn,
+.conv-actions .btn + .btn,
 .av-dialog-actions.av-row .btn + .btn { margin-top: 0; }
 
 /* Cards nas telas secundárias — mesmo estilo Home/Mês */
