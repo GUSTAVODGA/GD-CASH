@@ -371,6 +371,7 @@ function renderInicio() {
   renderInicioCards();
   renderHomeNew();
   refreshHomeFixosAlert();
+  renderHomeVencimentos();
 }
 
 function renderRecentTx() {
@@ -1973,10 +1974,33 @@ function renderMes() {
       </span>
     </div>`;
   document.getElementById('s2s-bars').innerHTML=weeksHTML+totalHTML;
+  renderMesPrevisto(monthOffset);
   renderTrendsChart();
   renderCatBudgets();
   renderComparativo(monthOffset);
   renderInsights(monthOffset);
+}
+function _monthYM(off) { const d = new Date(); d.setMonth(d.getMonth() + off, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+// Previsto do mês (dívidas) — bloco SEPARADO, rotulado; NÃO entra em receitas/gastos/
+// resultado líquido realizado. Apenas projeção derivada de D.debts.
+function renderMesPrevisto(off) {
+  const el = document.getElementById('mes-previsto'); if (!el) return;
+  const ym = _monthYM(off);
+  const { total, itens } = _debtPrevistoDoMes(ym);
+  if (!itens.length) { el.innerHTML = ''; return; }
+  const atrasados = itens.filter(v => v.atrasada).length;
+  const rows = itens.slice().sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate))).map(_vencRowHtml).join('');
+  el.innerHTML = `
+    <div class="card av-card mes-prev-card">
+      <div class="mes-prev-hd">
+        <div>
+          <div class="mes-prev-lbl">A vencer no mês <span class="mes-prev-tag">Previsto</span></div>
+          <div class="mes-prev-sub">${itens.length} compromisso(s)${atrasados ? ` · ${atrasados} em atraso` : ''} — não entra no resultado realizado</div>
+        </div>
+        <div class="mes-prev-total">${R(total)}</div>
+      </div>
+      <div class="home-venc-list mes-prev-list">${rows}</div>
+    </div>`;
 }
 function changeMonth(dir) { monthOffset+=dir; renderMes(); }
 
@@ -3346,6 +3370,134 @@ function _debtState(debt) {
 function _debtsForPatrimonio(patId) { return (D.debts || []).filter(d => d.patrimonioId && d.patrimonioId === patId); }
 function _debtsForVehicle(vehId) { return (D.debts || []).filter(d => d.vehicleId && d.vehicleId === vehId); }
 
+// ══════════════════════════════════════════
+// RESOLVEDOR GLOBAL DE VENCIMENTOS (Fase 3) — projeção DERIVADA de D.debts.
+// Nunca materializa nada: não cria despesas, pendências nem cópias de parcelas.
+// Central, Home, Semana e Mês consultam ESTE resolvedor (fonte única da projeção).
+// Item projetado: identidade estável (debtId+parcelNo, ou debtId+data), valor
+// restante ciente de pagamento parcial, status/atraso, referência à dívida real.
+// ══════════════════════════════════════════
+function _mkVenc(debt, parcelNo, dueISO, nominalC, restanteC, today) {
+  const atrasada = !!(dueISO && dueISO < today);
+  return {
+    id: debt.id + ':' + (parcelNo != null ? 'p' + parcelNo : 'd' + (dueISO || '')),
+    debtId: debt.id, parcelNo: parcelNo != null ? parcelNo : null,
+    titulo: debt.titulo, tipo: debt.tipo,
+    patrimonioId: debt.patrimonioId || null, vehicleId: debt.vehicleId || null, bemNome: _debtBemNome(debt),
+    dueDate: dueISO || '', valorNominal: _r(nominalC), valorRestante: _r(Math.max(0, restanteC)),
+    parcelasTotal: debt.parcelasTotal || 0,
+    atrasada, status: atrasada ? 'atrasada' : (dueISO && dueISO === today ? 'hoje' : 'previsto'),
+    origem: 'debt-projection',
+    debt,
+  };
+}
+// Projeta os vencimentos PENDENTES de UMA dívida (só ativas/atrasadas).
+// opts: { fromISO, toISO, maxItems }. O 1º pendente é ciente de pagamento parcial.
+function _debtProjectVencimentos(debt, opts) {
+  if (!debt || !_debtIsAtiva(debt)) return [];
+  const o = opts || {};
+  const today = todayStr();
+  const items = [];
+  const N = debt.parcelasTotal || 0;
+  if (N > 0) {
+    const start = _debtProximaParcelaNo(debt);
+    if (!start) return [];
+    const pagoCents = _debtPagoCents(debt);
+    let cumCents = 0;
+    for (let k = 1; k < start; k++) cumCents += _debtParcelaCents(debt, k); // já cobertas
+    for (let k = start; k <= N; k++) {
+      const nominalC = _debtParcelaCents(debt, k);
+      const restanteC = k === start ? (cumCents + nominalC - pagoCents) : nominalC;
+      const due = _debtDueDate(debt, k);
+      cumCents += nominalC;
+      if (o.toISO && due && due > o.toISO) break;        // além da janela: para
+      if (o.fromISO && due && due < o.fromISO) continue;  // antes da janela: pula
+      items.push(_mkVenc(debt, k, due, nominalC, restanteC, today));
+      if (o.maxItems && items.length >= o.maxItems) break;
+    }
+  } else {
+    // Sem parcelas: só projeta se houver data e saldo pendente (nunca inventa vencimento).
+    const saldoC = _debtSaldoCents(debt);
+    if (debt.dataInicio && saldoC > 0) {
+      const due = debt.dataInicio;
+      if ((!o.fromISO || due >= o.fromISO) && (!o.toISO || due <= o.toISO)) {
+        items.push(_mkVenc(debt, null, due, saldoC, saldoC, today));
+      }
+    }
+  }
+  return items;
+}
+// Todas as projeções (todas as dívidas ativas/atrasadas), ordenadas por data.
+function _debtVencimentosNoPeriodo(fromISO, toISO) {
+  const out = [];
+  (D.debts || []).forEach(d => { _debtProjectVencimentos(d, { fromISO, toISO }).forEach(v => out.push(v)); });
+  out.sort((a, b) => String(a.dueDate || '~').localeCompare(String(b.dueDate || '~')) || String(a.titulo || '').localeCompare(String(b.titulo || ''), 'pt-BR', { sensitivity: 'base' }));
+  return out;
+}
+// O próximo vencimento pendente de CADA dívida (um por dívida) — usado por Central/Home.
+function _debtProximosPorDivida() {
+  const out = [];
+  (D.debts || []).forEach(d => { const v = _debtProjectVencimentos(d, { maxItems: 1 })[0]; if (v) out.push(v); });
+  out.sort((a, b) => String(a.dueDate || '~').localeCompare(String(b.dueDate || '~')));
+  return out;
+}
+// Soma o restante das projeções de dívida com vencimento num mês (YYYY-MM). Só previsão.
+function _debtPrevistoDoMes(ym) {
+  const from = ym + '-01';
+  const m = /^(\d{4})-(\d{2})$/.exec(ym); if (!m) return { total: 0, itens: [] };
+  const last = new Date(+m[1], +m[2], 0).getDate();
+  const to = `${ym}-${String(last).padStart(2, '0')}`;
+  const itens = _debtVencimentosNoPeriodo(null, to).filter(v => v.dueDate && v.dueDate <= to);
+  return { total: itens.reduce((s, v) => s + v.valorRestante, 0), itens };
+}
+// Data civil local + N dias (ISO), sem timezone UTC.
+function _addDaysISO(iso, n) {
+  const dt = parseDate(iso); if (isNaN(dt)) return iso;
+  dt.setDate(dt.getDate() + n);
+  return dateStr(dt);
+}
+
+// ── Vencimentos na Home: atrasados + hoje + próximos (projeção; nunca despesa) ──
+const VENC_STATUS_META = { atrasada: { lbl: 'Em atraso', cls: 'atraso' }, hoje: { lbl: 'Hoje', cls: 'hoje' }, previsto: { lbl: 'A vencer', cls: 'previsto' } };
+function _vencRowHtml(v) {
+  const sm = VENC_STATUS_META[v.status] || VENC_STATUS_META.previsto;
+  const ctx = [(DEBT_TIPO_META[v.tipo] || {}).lbl, v.bemNome].filter(Boolean).join(' · ');
+  const parc = v.parcelNo ? ` · ${v.parcelNo}/${v.parcelasTotal}` : '';
+  const aria = `${v.titulo}, ${sm.lbl}, ${R(v.valorRestante)}, ${_fmtDataBR(v.dueDate)}`;
+  return `<button class="home-venc-item" onclick="openDebtDetail('${v.debtId}')" aria-label="${escHtml(aria)}">
+    <div class="home-venc-main">
+      <div class="home-venc-title" title="${escHtml(v.titulo)}">${escHtml(v.titulo)}</div>
+      <div class="home-venc-sub">${escHtml(ctx)}${parc}</div>
+    </div>
+    <div class="home-venc-end">
+      <div class="home-venc-val">${R(v.valorRestante)}</div>
+      <div class="home-venc-meta"><span class="venc-chip venc-${sm.cls}">${sm.lbl}</span><span class="home-venc-date">${_fmtDataBR(v.dueDate)}</span></div>
+    </div>
+  </button>`;
+}
+// Atualiza a projeção em TODAS as telas ativas após pagar/desfazer/editar uma dívida.
+function _afterDebtChange() {
+  const active = id => document.getElementById(id)?.classList.contains('active');
+  if (active('page-dividas')) renderDividas();
+  if (active('page-inicio')) renderHomeVencimentos();
+  if (active('page-semana')) renderDayAccordion();
+  if (active('page-mes')) renderMes();
+}
+function renderHomeVencimentos() {
+  const el = document.getElementById('home-dividas-venc'); if (!el) return;
+  const today = todayStr();
+  const horizon = _addDaysISO(today, 15); // atrasados (sem piso) + próximos 15 dias
+  const all = _debtVencimentosNoPeriodo(null, horizon).filter(v => v.dueDate);
+  const ord = { atrasada: 0, hoje: 1, previsto: 2 };
+  all.sort((a, b) => (ord[a.status] - ord[b.status]) || String(a.dueDate).localeCompare(String(b.dueDate)));
+  const items = all.slice(0, 4);
+  if (!items.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="hc-section home-venc-sec">
+    <div class="hc-sec-hd"><span class="hc-tri-sm"></span><span class="hc-sec-title">Próximos compromissos</span><button class="hc-sec-link" onclick="switchTab('dividas','inicio')">Ver dívidas</button></div>
+    <div class="home-venc-list">${items.map(_vencRowHtml).join('')}</div>
+  </div>`;
+}
+
 // Registra UM pagamento: cria a despesa real e o marcador de pagamento (uma única vez).
 // valor livre (aceita parcial, antecipado ou diferente da parcela). Retorna expenseId.
 function _debtRegistrarPagamento(debtId, opts) {
@@ -3601,10 +3753,11 @@ function renderDividasResumo() {
   const saldoTot = ativas.reduce((s, d) => s + _debtSaldo(d), 0);
   const pagoTot = ativas.reduce((s, d) => s + _debtPago(d), 0);
   const nAtraso = debts.filter(d => _debtStatus(d) === 'atrasada').length;
-  const comVenc = ativas.map(d => _debtState(d)).filter(st => st.proximaNo && st.proximaVenc)
-    .sort((a, b) => String(a.proximaVenc).localeCompare(String(b.proximaVenc)));
-  const prox = comVenc[0] || null;
-  const previsto = comVenc.reduce((s, st) => s + st.proximaValor, 0);
+  // Próximo vencimento e total previsto vêm do RESOLVEDOR canônico (mesma projeção
+  // usada por Home/Semana/Mês) — sem cálculo local duplicado.
+  const proxPorDivida = _debtProximosPorDivida();
+  const prox = proxPorDivida.find(v => v.dueDate) || null;
+  const previsto = proxPorDivida.reduce((s, v) => s + v.valorRestante, 0);
   el.innerHTML = `
     <div class="card av-card div-resumo">
       <div class="div-resumo-top">
@@ -3615,7 +3768,7 @@ function renderDividasResumo() {
         <div class="div-rc"><span class="div-rc-lbl">Já pago</span><span class="div-rc-val div-rc-pos">${R(pagoTot)}</span></div>
         <div class="div-rc"><span class="div-rc-lbl">Ativas</span><span class="div-rc-val">${ativas.length}</span></div>
         <div class="div-rc"><span class="div-rc-lbl">Em atraso</span><span class="div-rc-val ${nAtraso > 0 ? 'div-rc-warn' : ''}">${nAtraso}</span></div>
-        <div class="div-rc"><span class="div-rc-lbl">Próximo venc.</span><span class="div-rc-val">${prox ? _fmtDataBR(prox.proximaVenc) : '—'}</span></div>
+        <div class="div-rc"><span class="div-rc-lbl">Próximo venc.</span><span class="div-rc-val">${prox ? _fmtDataBR(prox.dueDate) : '—'}</span></div>
       </div>
       ${previsto > 0 ? `<div class="div-resumo-foot">Próximos pagamentos previstos <b>${R(previsto)}</b></div>` : ''}
     </div>`;
@@ -3944,7 +4097,7 @@ function salvarPagamentoDivida() {
   _debtRegistrarPagamento(d.id, { valor, data, categoria: cat, descricao: desc, parcelNo: st.proximaNo || null });
   _debtPayTarget = null; haptic(10); save();
   closeOverlay('debt-pay-sheet');
-  renderDividas();
+  _afterDebtChange();
   if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(d.id);
   refreshAfterDayEdit();
   gdToast(_debtQuitada(d) ? 'Pagamento registrado. Dívida quitada!' : 'Pagamento registrado. Lançamento criado em Despesas.', { type: 'success' });
@@ -3957,7 +4110,7 @@ function desfazerPagamentoDivida(debtId, payId) {
     onConfirm: () => {
       if (p.expenseId) D.expenses = (D.expenses || []).filter(e => e.id !== p.expenseId);
       D.debtPayments = (D.debtPayments || []).filter(x => x.id !== payId);
-      save(); renderDividas();
+      save(); _afterDebtChange();
       if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(debtId);
       refreshAfterDayEdit(); gdToast('Pagamento desfeito.', { type: 'success' });
     },
@@ -5706,9 +5859,22 @@ function renderDayAccordion() {
         <button class="dacc-tx-del" title="Remover" aria-label="Remover lançamento" onclick="deleteExpense('${e.id}');renderDayAccordion();refreshAfterDayEdit()">✕</button>
       </div>`).join('');
 
+    // Compromissos PREVISTOS do dia (projeção derivada de D.debts; nunca despesa).
+    // Não entram no líquido realizado do dia; apenas exibição, com indicação visual.
+    const dayVencs = _debtVencimentosNoPeriodo(d, d);
+    const vencItems = dayVencs.map(v => {
+      const sm = VENC_STATUS_META[v.status] || VENC_STATUS_META.previsto;
+      return `<div class="dacc-tx dacc-venc" role="button" tabindex="0" onclick="event.stopPropagation();openDebtDetail('${v.debtId}')" aria-label="${escHtml(v.titulo + ', ' + sm.lbl + ', ' + R(v.valorRestante))}">
+        <div class="dacc-tx-ico dacc-venc-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg></div>
+        <div class="dacc-tx-info"><div class="dacc-tx-lbl">${escHtml(v.titulo)} <span class="venc-chip venc-${sm.cls}">${sm.lbl}</span></div><div class="dacc-tx-cat">Previsto${v.parcelNo ? ` · parcela ${v.parcelNo}/${v.parcelasTotal}` : ''}</div></div>
+        <div class="dacc-tx-amt dacc-venc-amt">${R(v.valorRestante)}</div>
+      </div>`;
+    }).join('');
+
     const hasData = dayInc > 0 || exps.length > 0;
+    const hasContent = hasData || dayVencs.length > 0;
     const txCount = (D.platforms.filter(p=>getDayPlatIncome(d,p.id)>0).length) + exps.length;
-    const subLabel = isOff ? 'Folga' : hasData ? txCount + (txCount===1?' lançamento':' lançamentos') : 'Nenhum lançamento';
+    const subLabel = isOff ? 'Folga' : hasData ? txCount + (txCount===1?' lançamento':' lançamentos') : (dayVencs.length ? dayVencs.length + (dayVencs.length===1?' previsto':' previstos') : 'Nenhum lançamento');
     const liqColor = dayLiq > 0 ? 'var(--gn)' : dayLiq < 0 ? 'var(--rd)' : 'var(--tx3)';
     const liqSign = dayLiq > 0 ? '+' : '';
     const isToday = d === todayStr();
@@ -5725,7 +5891,7 @@ function renderDayAccordion() {
 
     return `<div class="dacc${isToday?' open':''}" id="dacc-${i}">
       <div class="dacc-head" onclick="toggleDacc(${i})">
-        <div class="dacc-dot ${hasData?'dacc-dot-active':'dacc-dot-empty'}"></div>
+        <div class="dacc-dot ${hasData?'dacc-dot-active':dayVencs.length?'dacc-dot-venc':'dacc-dot-empty'}"></div>
         <div class="dacc-info">
           <div class="dacc-name">${dayLabel}${isToday?' <span style="font-size:9px;background:var(--ac-t);color:var(--ac);border-radius:6px;padding:2px 6px;font-weight:700">HOJE</span>':''}</div>
           <div class="dacc-sub">${subLabel}</div>
@@ -5735,7 +5901,7 @@ function renderDayAccordion() {
           <div class="dacc-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
         </div>
       </div>
-      <div class="dacc-body"><div class="dacc-body-in">${hasData ? platItems + expItems : emptyMsg}${editFooter}</div></div>
+      <div class="dacc-body"><div class="dacc-body-in">${hasContent ? platItems + expItems + vencItems : emptyMsg}${editFooter}</div></div>
     </div>`;
   }).join('');
 }

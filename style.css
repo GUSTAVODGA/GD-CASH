@@ -3977,6 +3977,37 @@ button:focus-visible, [role="button"]:focus-visible {
 .div-pay-undo { flex-shrink: 0; margin-left: 8px; width: 30px; height: 30px; display: inline-flex; align-items: center; justify-content: center; border-radius: 8px; color: var(--tx3); background: transparent; border: none; cursor: pointer; }
 .div-pay-undo:active { background: var(--surface2); }
 .div-prox-val { color: var(--tx3) !important; }
+/* ── Vencimentos projetados (Home / Semana / Mês) ── */
+.venc-chip { flex-shrink: 0; font-size: 9.5px; font-weight: 800; padding: 1px 7px; border-radius: 999px; letter-spacing: .01em; }
+.venc-atraso   { color: var(--red, #e5484d); background: rgba(229,72,77,.14); }
+.venc-hoje     { color: var(--ac); background: color-mix(in srgb, var(--ac) 15%, transparent); }
+.venc-previsto { color: var(--tx3); background: var(--donut-track, rgba(120,130,160,.14)); }
+.home-venc-sec { margin-top: 4px; }
+.home-venc-list { display: flex; flex-direction: column; gap: 8px; }
+.home-venc-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 11px 13px; border-radius: 12px; background: var(--card, var(--surface)); border: 1px solid var(--border); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.home-venc-main { min-width: 0; flex: 1; }
+.home-venc-title { font-size: 13.5px; font-weight: 800; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.home-venc-sub { font-size: 11px; color: var(--tx3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.home-venc-end { flex-shrink: 0; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+.home-venc-val { font-size: 13.5px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; }
+.home-venc-meta { display: flex; align-items: center; gap: 6px; }
+.home-venc-date { font-size: 10.5px; color: var(--tx3); font-variant-numeric: tabular-nums; }
+:root[data-theme="dark"] .home-venc-sub, :root[data-theme="dark"] .home-venc-date { color: rgba(232,237,255,.58); }
+/* Mês — bloco "Previsto" (separado do realizado) */
+.mes-prev-card { padding: 14px; }
+.mes-prev-hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.mes-prev-lbl { font-size: 13px; font-weight: 800; color: var(--tx); display: flex; align-items: center; gap: 7px; }
+.mes-prev-tag { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--ac); background: color-mix(in srgb, var(--ac) 14%, transparent); padding: 1px 7px; border-radius: 999px; }
+.mes-prev-sub { font-size: 11px; color: var(--tx3); margin-top: 3px; }
+.mes-prev-total { flex-shrink: 0; font-size: 18px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; }
+.mes-prev-list .home-venc-item { background: var(--surface2); }
+:root[data-theme="dark"] .mes-prev-sub { color: rgba(232,237,255,.58); }
+/* Semana — linha de compromisso PREVISTO (distinta de despesa realizada) */
+.dacc-venc { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.dacc-venc-ico { background: transparent !important; border: 1px dashed var(--border-strong, var(--border)); color: var(--tx3); }
+.dacc-venc-ico svg { stroke: currentColor; width: 15px; height: 15px; }
+.dacc-venc-amt { color: var(--tx2, var(--tx)) !important; font-variant-numeric: tabular-nums; }
+.dacc-dot-venc { background: transparent; border: 1.5px dashed var(--ac); }
 /* Formulário: seletor de tipo */
 .df-tipos { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 14px; }
 .df-tipo { flex: 0 0 auto; padding: 8px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 700; color: var(--tx2, var(--tx)); background: var(--surface2); border: 1px solid var(--border); cursor: pointer; }
