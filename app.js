@@ -56,7 +56,7 @@ function initFirebase() {
       currentUser = user;
       loginScreen.style.display = 'none';
       avatarBtn.style.display   = '';
-      avatarImg.src = user.photoURL || '';
+      _setUserAvatar(user);
       // Render immediately with localStorage data (first paint — no cloud wait)
       initTheme();
       document.getElementById('curr-chip').textContent = currSym;
@@ -1123,6 +1123,44 @@ function importData(event) {
 function uid()  { return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
 function haptic(ms=8) { try { navigator.vibrate?.(ms); } catch(e) {} }
 
+// ── Avatar do usuário: nunca mostra o ícone nativo de imagem quebrada ──
+// Usa a foto quando válida; senão, mostra iniciais (ou um ícone SVG do Avenco).
+// O fallback vale no carregamento, reload, troca de tema e erro real de imagem.
+const _USER_AVATAR_SVG = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>';
+function _userInitials(user) {
+  const n = String((user && (user.displayName || user.email)) || '').trim();
+  if (!n) return '';
+  const parts = n.split(/\s+/).filter(Boolean);
+  const ini = (parts[0]?.[0] || '') + (parts.length > 1 ? (parts[parts.length - 1][0] || '') : '');
+  return ini.toUpperCase().slice(0, 2);
+}
+function _setUserAvatar(user) {
+  const btn = document.getElementById('user-avatar-btn');
+  const img = document.getElementById('user-avatar-img');
+  if (!btn || !img) return;
+  let fb = document.getElementById('user-avatar-fallback');
+  if (!fb) {
+    fb = document.createElement('span');
+    fb.id = 'user-avatar-fallback';
+    fb.className = 'user-avatar-fallback';
+    btn.appendChild(fb);
+  }
+  const initials = _userInitials(user);
+  fb.innerHTML = initials || _USER_AVATAR_SVG;
+  const url = (user && user.photoURL) ? String(user.photoURL).trim() : '';
+  const showFallback = () => { img.style.display = 'none'; fb.style.display = 'flex'; };
+  const showImg = () => { img.style.display = ''; fb.style.display = 'none'; };
+  if (url) {
+    img.onerror = showFallback;
+    img.onload = showImg;
+    img.src = url;
+    // Se já carregou com falha (cache) ou é inválida, cai no fallback.
+    if (img.complete && !img.naturalWidth) showFallback(); else showImg();
+  } else {
+    img.onerror = null; img.removeAttribute('src'); showFallback();
+  }
+}
+
 // ══════════════════════════════════════════
 // DATE UTILS
 // ══════════════════════════════════════════
@@ -1134,6 +1172,26 @@ function dateStr(d)    { const y=d.getFullYear(),m=String(d.getMonth()+1).padSta
 function todayStr()    { return dateStr(new Date()); }
 function parseDate(s)  { return new Date(s+'T12:00:00'); }
 function fmtShort(d)   { return parseDate(d).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); }
+// Data completa no padrão brasileiro dd/mm/aaaa (armazenamento continua ISO YYYY-MM-DD).
+function _fmtDataBR(d) { if(!d) return ''; const dt = parseDate(d); return isNaN(dt) ? '' : dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
+// Campo de data em dd/mm/aaaa (independe do locale do dispositivo). Converte de/para
+// ISO YYYY-MM-DD para o armazenamento — nunca há inversão silenciosa dia/mês.
+function _isoToBr(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '')); return m ? `${m[3]}/${m[2]}/${m[1]}` : ''; }
+function _brToIso(s) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(s || '').trim());
+  if (!m) return '';
+  const d = +m[1], mo = +m[2], y = +m[3];
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return ''; // rejeita 31/02 etc.
+  return `${m[3]}-${m[2]}-${m[1]}`;
+}
+function _maskDateBR(el) {
+  const v = el.value.replace(/\D/g, '').slice(0, 8);
+  let out = v.slice(0, 2);
+  if (v.length >= 3) out += '/' + v.slice(2, 4);
+  if (v.length >= 5) out += '/' + v.slice(4, 8);
+  el.value = out;
+}
 function fmtDate(d)    { return parseDate(d).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'numeric'}); }
 function fmtMonthYear(off) {
   const d = new Date(); d.setMonth(d.getMonth()+off,1);
@@ -3552,7 +3610,7 @@ function renderDividasResumo() {
         <div class="div-rc"><span class="div-rc-lbl">Já pago</span><span class="div-rc-val div-rc-pos">${R(pagoTot)}</span></div>
         <div class="div-rc"><span class="div-rc-lbl">Ativas</span><span class="div-rc-val">${ativas.length}</span></div>
         <div class="div-rc"><span class="div-rc-lbl">Em atraso</span><span class="div-rc-val ${nAtraso > 0 ? 'div-rc-warn' : ''}">${nAtraso}</span></div>
-        <div class="div-rc"><span class="div-rc-lbl">Próximo venc.</span><span class="div-rc-val">${prox ? fmtShort(prox.proximaVenc) : '—'}</span></div>
+        <div class="div-rc"><span class="div-rc-lbl">Próximo venc.</span><span class="div-rc-val">${prox ? _fmtDataBR(prox.proximaVenc) : '—'}</span></div>
       </div>
       ${previsto > 0 ? `<div class="div-resumo-foot">Próximos pagamentos previstos <b>${R(previsto)}</b></div>` : ''}
     </div>`;
@@ -3595,7 +3653,7 @@ function _debtCardHtml(d, st) {
   const sub = [d.credor, bem].filter(Boolean).join(' · ');
   const temParcelas = st.parcelasTotal > 0;
   const progLine = `${st.progress}% pago${temParcelas ? ` · ${st.parcelasPagas} de ${st.parcelasTotal} parcelas` : ''}`;
-  const venc = st.proximaNo ? `<div class="div-card-next">Próxima: ${R(st.proximaValor)} · ${fmtShort(st.proximaVenc)}</div>` : '';
+  const venc = st.proximaNo ? `<div class="div-card-next">Próxima: ${R(st.proximaValor)} · ${_fmtDataBR(st.proximaVenc)}</div>` : '';
   const muted = st.status === 'cancelada' || st.status === 'quitada' || st.status === 'pausada';
   return `
     <div class="div-card${muted ? ' div-card-muted' : ''}" onclick="openDebtDetail('${d.id}')">
@@ -3646,7 +3704,7 @@ function openDebtDetail(id) {
     ['Tipo', tm.lbl],
     d.credor ? ['Credor', escHtml(d.credor)] : null,
     bem ? [(d.vehicleId ? 'Veículo' : 'Patrimônio'), escHtml(bem)] : null,
-    d.dataInicio ? ['Início', fmtShort(d.dataInicio)] : null,
+    d.dataInicio ? ['Início', _fmtDataBR(d.dataInicio)] : null,
   ].filter(Boolean);
   const valRows = [
     ['Valor original', R(d.valorOriginal)],
@@ -3658,7 +3716,7 @@ function openDebtDetail(id) {
     d.juros != null ? ['Juros', `${d.juros}%`] : null,
   ].filter(Boolean);
   const vencRows = (st.proximaNo && st.status !== 'cancelada' && st.status !== 'pausada') ? [
-    ['Próximo vencimento', fmtShort(st.proximaVenc)],
+    ['Próximo vencimento', _fmtDataBR(st.proximaVenc)],
     ['Falta p/ a parcela atual', R(st.proximaValor)],
     temParcelas ? ['Parcelas restantes', String(st.parcelasTotal - st.parcelasPagas)] : null,
   ].filter(Boolean) : [];
@@ -3672,7 +3730,7 @@ function openDebtDetail(id) {
         <div class="pagfin-row">
           <div class="pagfin-row-body">
             <span class="pagfin-row-desc">${p.parcelNo ? `Parcela ${p.parcelNo}${temParcelas ? '/' + st.parcelasTotal : ''}` : 'Amortização extra'}</span>
-            <span class="pagfin-row-date">${fmtShort(p.data)}</span>
+            <span class="pagfin-row-date">${_fmtDataBR(p.data)}</span>
           </div>
           <span class="pagfin-row-val">−${R(p.valor || 0)}</span>
           <button class="div-pay-undo" onclick="event.stopPropagation();desfazerPagamentoDivida('${d.id}','${p.id}')" aria-label="Desfazer pagamento">${_patTrashSvg()}</button>
@@ -3683,7 +3741,7 @@ function openDebtDetail(id) {
     const linhas = [];
     for (let k = st.proximaNo; k <= Math.min(st.parcelasTotal, st.proximaNo + 2); k++) {
       const val = k === st.proximaNo ? st.proximaValor : _r(_debtParcelaCents(d, k));
-      linhas.push(`<div class="pagfin-row"><div class="pagfin-row-body"><span class="pagfin-row-desc">Parcela ${k}/${st.parcelasTotal}</span><span class="pagfin-row-date">${fmtShort(_debtDueDate(d, k))}</span></div><span class="pagfin-row-val div-prox-val">${R(val)}</span></div>`);
+      linhas.push(`<div class="pagfin-row"><div class="pagfin-row-body"><span class="pagfin-row-desc">Parcela ${k}/${st.parcelasTotal}</span><span class="pagfin-row-date">${_fmtDataBR(_debtDueDate(d, k))}</span></div><span class="pagfin-row-val div-prox-val">${R(val)}</span></div>`);
     }
     proxHtml = `<div class="parcel-det-hist-lbl">Próximos pagamentos</div><div class="pagfin-hist">${linhas.join('')}</div>`;
   }
@@ -3801,20 +3859,33 @@ function _doExcluirDivida(id) {
   save(); closeOverlay('debt-menu-sheet'); closeOverlay('debt-detail-sheet'); renderDividas();
   gdToast('Dívida excluída.', { type: 'success' });
 }
+// Política de exclusão (Opção A): dívida COM qualquer pagamento/despesa vinculada
+// NÃO pode ser excluída pela interface comum — para preservar a rastreabilidade,
+// o usuário deve Cancelar (mantém o registro) em vez de apagar. Só dívidas sem
+// nenhum pagamento podem ser excluídas.
 function excluirDivida(id) {
   const d = getDebt(id); if (!d) return;
   const nPag = _debtPaymentsOf(id).length;
-  if (nPag === 0) {
+  const temDespesa = (D.expenses || []).some(e => e.meta && e.meta.source === 'debt' && e.meta.debtId === id);
+  if (nPag === 0 && !temDespesa) {
     gdConfirm({
       title: 'Excluir dívida', variant: 'danger', confirmText: 'Excluir',
       msg: `Excluir "${d.titulo}"? Não há pagamentos registrados — a exclusão é limpa.`,
       onConfirm: () => _doExcluirDivida(id),
     });
   } else {
+    // Não excluir: oferecer Cancelar (preserva dívida, saldo histórico e despesas).
+    // Confirmação única: ao confirmar, cancela diretamente (sem segundo diálogo).
     gdConfirm({
-      title: 'Excluir dívida com histórico', variant: 'danger', confirmText: 'Excluir mesmo assim',
-      msg: `"${d.titulo}" tem ${nPag} pagamento(s) registrado(s). Excluir remove o controle da dívida; as ${nPag} despesa(s) permanecem no histórico financeiro (perdem apenas o vínculo). Para manter o registro, prefira Cancelar. Deseja mesmo excluir?`,
-      onConfirm: () => _doExcluirDivida(id),
+      title: 'Não é possível excluir', variant: 'warning', confirmText: 'Cancelar dívida', cancelText: 'Voltar',
+      msg: `"${d.titulo}" tem ${nPag} pagamento(s) registrado(s) e não pode ser excluída, para não deixar despesas sem origem no histórico. Você pode Cancelar a dívida — ela sai dos totais ativos, mas o registro e os pagamentos são preservados.`,
+      onConfirm: () => {
+        const dd = getDebt(id); if (!dd) return;
+        dd.status = 'cancelada'; dd.atualizadoEm = Date.now(); save();
+        closeOverlay('debt-menu-sheet'); renderDividas();
+        if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(id);
+        gdToast('Dívida cancelada.', { type: 'info' });
+      },
     });
   }
 }
@@ -3843,7 +3914,7 @@ function openDebtPay(id) {
     `<div class="pagfin-sum-row"><span>${escHtml(d.titulo)}</span><span>Saldo <b>${R(st.saldo)}</b></span></div>` +
     (st.proximaNo ? `<div class="pagfin-sum-row"><span>Parcela ${st.proximaNo}${st.parcelasTotal ? '/' + st.parcelasTotal : ''}</span><span>${R(st.proximaValor)}</span></div>` : '');
   document.getElementById('debt-pay-valor').value = st.proximaValor > 0 ? st.proximaValor : '';
-  document.getElementById('debt-pay-data').value = st.proximaVenc || todayStr();
+  document.getElementById('debt-pay-data').value = _isoToBr(st.proximaVenc || todayStr());
   const cat = document.getElementById('debt-pay-cat');
   if (cat) cat.innerHTML = (D.expCats || []).map(c => `<option value="${escHtml(c)}"${c === d.categoria ? ' selected' : ''}>${escHtml(c)}</option>`).join('');
   document.getElementById('debt-pay-desc').value = '';
@@ -3859,7 +3930,7 @@ function salvarPagamentoDivida() {
   let valor = Number(document.getElementById('debt-pay-valor').value) || 0;
   if (valor <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   valor = Math.min(valor, _debtSaldo(d)); // nunca além do saldo
-  const data = localDateKey(document.getElementById('debt-pay-data').value) || todayStr();
+  const data = _brToIso(document.getElementById('debt-pay-data').value) || todayStr();
   const cat = document.getElementById('debt-pay-cat')?.value || d.categoria || (D.expCats[0] || 'Outros');
   const desc = (document.getElementById('debt-pay-desc')?.value || '').trim();
   const st = _debtState(d);
@@ -3949,10 +4020,10 @@ function _renderDebtForm(d) {
       <div class="form-group"><label class="form-label" for="df-valorparcela">Valor da parcela</label><input class="form-input" id="df-valorparcela" type="number" min="0" step="0.01" inputmode="decimal" value="${g('valorParcela')}"></div>
     </div>
     <div class="veh-form-row">
-      <div class="form-group"><label class="form-label" for="df-data">Primeiro vencimento</label><input class="form-input" id="df-data" type="date" value="${g('dataInicio')}"></div>
+      <div class="form-group"><label class="form-label" for="df-data">Primeiro vencimento</label><input class="form-input" id="df-data" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" value="${_isoToBr(g('dataInicio'))}" oninput="_maskDateBR(this)"></div>
       <div class="form-group"><label class="form-label" for="df-freq">Periodicidade</label><select class="form-input" id="df-freq">${['mensal', 'quinzenal', 'semanal', 'anual'].map(f => `<option value="${f}"${g('periodicidade', 'mensal') === f ? ' selected' : ''}>${({ mensal: 'Mensal', quinzenal: 'Quinzenal', semanal: 'Semanal', anual: 'Anual' })[f]}</option>`).join('')}</select></div>
     </div>` : `
-    <div class="form-group"><label class="form-label" for="df-data">Vencimento (opcional)</label><input class="form-input" id="df-data" type="date" value="${g('dataInicio')}"></div>
+    <div class="form-group"><label class="form-label" for="df-data">Vencimento (opcional)</label><input class="form-input" id="df-data" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" value="${_isoToBr(g('dataInicio'))}" oninput="_maskDateBR(this)"></div>
     <input type="hidden" id="df-parcelas" value="${g('parcelasTotal', 0)}"><input type="hidden" id="df-valorparcela" value="${g('valorParcela', 0)}"><input type="hidden" id="df-freq" value="mensal">`;
   const jurosBlock = (t === 'financiamento' || t === 'emprestimo') ? `<div class="form-group"><label class="form-label" for="df-juros">Juros % (opcional)</label><input class="form-input" id="df-juros" type="number" min="0" step="0.01" inputmode="decimal" value="${d && d.juros != null ? d.juros : ''}"></div>` : `<input type="hidden" id="df-juros" value="${d && d.juros != null ? d.juros : ''}">`;
   const catBlock = (t === 'parcelamento') ? `<div class="form-group"><label class="form-label" for="df-cat">Categoria</label><select class="form-input" id="df-cat">${(D.expCats || []).map(c => `<option value="${escHtml(c)}"${g('categoria') === c ? ' selected' : ''}>${escHtml(c)}</option>`).join('')}</select></div>` : `<input type="hidden" id="df-cat" value="${escHtml(g('categoria'))}">`;
@@ -3968,7 +4039,7 @@ function _renderDebtForm(d) {
     <div class="form-group"><label class="form-label" for="df-bem">Bem relacionado (opcional)</label><select class="form-input" id="df-bem">${_debtBemOptions(selBem)}</select></div>
     ${statusBlock}
     <div class="form-group"><label class="form-label" for="df-obs">Observações (opcional)</label><input class="form-input" id="df-obs" type="text" value="${escHtml(g('observacoes'))}"></div>
-    <button class="btn btn-primary" onclick="salvarDivida()">Salvar</button>
+    <button class="btn btn-primary" id="debt-save-btn" onclick="salvarDivida()">${editing ? 'Salvar alterações' : 'Criar dívida'}</button>
     <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="closeOverlay('modal-debt')">Cancelar</button>`;
 }
 function salvarDivida() {
@@ -3979,7 +4050,7 @@ function salvarDivida() {
   if (!titulo) { gdToast('Informe um título.', { type: 'error' }); return; }
   const credor = (g('df-credor')?.value || '').trim();
   const obs = (g('df-obs')?.value || '').trim();
-  const dataInicio = localDateKey(g('df-data')?.value) || '';
+  const dataInicio = _brToIso(g('df-data')?.value) || '';
   const parcelasTotal = Math.max(0, Math.round(Number(g('df-parcelas')?.value) || 0));
   const valorParcela = Math.max(0, Number(g('df-valorparcela')?.value) || 0);
   const periodicidade = g('df-freq')?.value || 'mensal';
