@@ -879,52 +879,57 @@ try { if (migrateDebtsV1()) localStorage.setItem('gdcash_v1', JSON.stringify(D))
 // MODAL SYSTEM
 // ══════════════════════════════════════════
 
-/* ── Toast ── */
+/* ── Toast (gerenciador único: no máximo 1 host + 1 toast visível por vez) ── */
 (function() {
-  let _wrap = null;
-  let _lastMsg = '', _lastTime = 0;
-  function _wrap_el() {
-    if (!_wrap || !_wrap.isConnected) {
-      _wrap = document.createElement('div');
-      _wrap.className = 'av-toast-wrap';
-      document.body.appendChild(_wrap);
-    }
-    return _wrap;
-  }
+  let _wrap = null, _el = null, _timer = 0, _removeTimer = 0, _lastMsg = '', _lastType = '';
   const ICONS = {
     success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>',
     error:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
     warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
     info:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
   };
+  // Host único e global (fora de qualquer sheet/modal). Remove hosts órfãos.
+  function _hostEl() {
+    const all = document.querySelectorAll('.av-toast-wrap');
+    all.forEach(w => { if (w !== _wrap) w.remove(); });
+    if (!_wrap || !_wrap.isConnected) {
+      _wrap = document.createElement('div');
+      _wrap.className = 'av-toast-wrap';
+      _wrap.setAttribute('aria-live', 'polite');
+      document.body.appendChild(_wrap);
+    }
+    return _wrap;
+  }
+  function _clearTimers() { if (_timer) { clearTimeout(_timer); _timer = 0; } if (_removeTimer) { clearTimeout(_removeTimer); _removeTimer = 0; } }
+  function _remove() {
+    _clearTimers();
+    const el = _el; _el = null; _lastMsg = ''; _lastType = '';
+    if (el) { el.classList.add('hiding'); _removeTimer = setTimeout(() => { el.parentNode && el.parentNode.removeChild(el); _removeTimer = 0; }, 240); }
+  }
   window.gdToast = function(msg, opts) {
     if (typeof opts === 'number') opts = { duration: opts };
     const { type, duration = 3800 } = opts || {};
-    // Deduplication: mesma mensagem em menos de 600ms não acumula
-    const now = Date.now();
-    if (msg === _lastMsg && now - _lastTime < 600) return;
-    _lastMsg = msg; _lastTime = now;
-    const wrap = _wrap_el();
-    const el = document.createElement('div');
-    el.className = 'av-toast' + (type ? ' av-toast--' + type : '');
-    if (type && ICONS[type]) {
-      const ic = document.createElement('span');
-      ic.className = 'av-toast-icon';
-      ic.innerHTML = ICONS[type];
-      el.appendChild(ic);
+    const tp = type || '';
+    // Deduplicação: mesma mensagem+variante já visível → apenas reinicia o tempo.
+    if (_el && _el.isConnected && msg === _lastMsg && tp === _lastType) {
+      if (_timer) clearTimeout(_timer);
+      _timer = setTimeout(_remove, duration);
+      return;
     }
-    const ms = document.createElement('span');
-    ms.className = 'av-toast-msg';
-    ms.textContent = msg;
-    el.appendChild(ms);
-    wrap.appendChild(el);
-    function dismiss() {
-      el.classList.add('hiding');
-      setTimeout(() => el.parentNode && el.parentNode.removeChild(el), 240);
-    }
-    const t = setTimeout(dismiss, duration);
-    el.addEventListener('click', () => { clearTimeout(t); dismiss(); });
+    // Substitui (nunca empilha): remove qualquer toast atual e mantém 1 host/1 toast.
+    _clearTimers();
+    const wrap = _hostEl();
+    wrap.innerHTML = '';
+    _el = document.createElement('div');
+    _el.className = 'av-toast' + (tp ? ' av-toast--' + tp : '');
+    _el.innerHTML = (tp && ICONS[tp] ? `<span class="av-toast-icon">${ICONS[tp]}</span>` : '') + '<span class="av-toast-msg"></span>';
+    _el.querySelector('.av-toast-msg').textContent = msg;
+    wrap.appendChild(_el);
+    _lastMsg = msg; _lastType = tp;
+    _timer = setTimeout(_remove, duration);
   };
+  // Limpeza explícita (usada ao navegar/fechar overlays, se necessário).
+  window._gdToastClear = function() { _remove(); };
 })();
 
 /* ── Dialog helpers ── */
@@ -3655,11 +3660,12 @@ function _debtCardHtml(d, st) {
   const progLine = `${st.progress}% pago${temParcelas ? ` · ${st.parcelasPagas} de ${st.parcelasTotal} parcelas` : ''}`;
   const venc = st.proximaNo ? `<div class="div-card-next">Próxima: ${R(st.proximaValor)} · ${_fmtDataBR(st.proximaVenc)}</div>` : '';
   const muted = st.status === 'cancelada' || st.status === 'quitada' || st.status === 'pausada';
+  const ariaFull = `${d.titulo}, ${tm.lbl}${sub ? ', ' + sub : ''}, saldo ${R(st.saldo)}, ${sm.lbl}`;
   return `
-    <div class="div-card${muted ? ' div-card-muted' : ''}" onclick="openDebtDetail('${d.id}')">
+    <div class="div-card${muted ? ' div-card-muted' : ''}" role="button" tabindex="0" aria-label="${escHtml(ariaFull)}" onclick="openDebtDetail('${d.id}')">
       <div class="div-card-head">
         <div class="div-card-info">
-          <div class="div-card-title">${escHtml(d.titulo)}</div>
+          <div class="div-card-title" title="${escHtml(d.titulo)}">${escHtml(d.titulo)}</div>
           <div class="div-card-meta"><span class="div-tipo-chip div-tipo-${tm.chip}">${tm.lbl}</span>${sub ? `<span class="div-card-sub">${escHtml(sub)}</span>` : ''}</div>
         </div>
         <div class="div-card-end">
@@ -4043,6 +4049,8 @@ function _renderDebtForm(d) {
     <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="closeOverlay('modal-debt')">Cancelar</button>`;
 }
 function salvarDivida() {
+  const _saveBtn = document.getElementById('debt-save-btn');
+  if (_saveBtn && _saveBtn.disabled) return; // proteção contra toque duplo
   const id = document.getElementById('debt-edit-id').value;
   const tipo = _debtFormTipo;
   const g = k => document.getElementById(k);
@@ -4073,6 +4081,7 @@ function salvarDivida() {
   if (bemVal.startsWith('pat:')) patrimonioId = bemVal.slice(4);
   else if (bemVal.startsWith('veh:')) vehicleId = bemVal.slice(4);
   const fields = { tipo, titulo, credor, valorOriginal, amortizadoInicial, parcelasTotal, valorParcela, periodicidade, dataInicio, juros, categoria, valorBem, patrimonioId, vehicleId, observacoes: obs };
+  if (_saveBtn) _saveBtn.disabled = true; // validações passaram → trava o botão
   D.debts = D.debts || [];
   if (id) {
     const d = getDebt(id); if (!d) { closeOverlay('modal-debt'); return; }
