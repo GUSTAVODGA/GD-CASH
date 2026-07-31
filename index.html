@@ -495,22 +495,21 @@
 </section>
 
 <!-- ════ PARCELAMENTOS (Compras Parceladas) ════ -->
-<section class="page" id="page-parcelamentos">
+<section class="page" id="page-dividas">
   <div class="page-header-row">
     <div class="phr-left">
       <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
-      <span class="page-header-title">Parcelamentos</span>
+      <span class="page-header-title">Dívidas</span>
     </div>
-    <button class="tab-help-btn" onclick="showTabHelp('parcelamentos')">?</button>
-  </div>
-  <div class="card av-card fixed-total-card">
-    <div class="fixed-total-lbl">Total em aberto</div>
-    <div class="fixed-total-val" id="parcel-total">$ 0,00</div>
+    <div class="phr-actions">
+      <button class="btn-pill" onclick="openDebtForm()" aria-label="Adicionar dívida">+ Adicionar</button>
+      <button class="tab-help-btn" onclick="showTabHelp('dividas')">?</button>
+    </div>
   </div>
 
-  <div id="parcel-list"></div>
-
-  <button class="btn btn-secondary fixed-add-btn" onclick="openParcelForm()">+ Nova compra parcelada</button>
+  <div id="dividas-resumo"></div>
+  <div class="dividas-filtros" id="dividas-filtros" role="tablist" aria-label="Filtrar dívidas"></div>
+  <div id="dividas-list"></div>
   <div class="fixed-bottom-spacer"></div>
 </section>
 
@@ -909,24 +908,46 @@
     </div>
   </div>
 
-  <!-- Bottom sheet: confirmação de uma parcela (lançamento real) -->
-  <div class="overlay" id="parcel-confirm-sheet" onclick="if(event.target===this)closeOverlay('parcel-confirm-sheet')">
+  <!-- Bottom sheet: registrar pagamento de uma dívida (fonte única) -->
+  <div class="overlay" id="debt-pay-sheet" onclick="if(event.target===this)closeOverlay('debt-pay-sheet')">
     <div class="sheet">
       <div class="sheet-handle"></div>
-      <div class="sheet-title">Confirmar parcela</div>
-      <div class="pagfin-summary" id="parcel-confirm-summary"></div>
-      <div class="fg"><label class="fl" for="parcel-confirm-date">Data do lançamento</label><input class="fi" type="date" id="parcel-confirm-date"></div>
-      <button class="btn btn-primary" id="parcel-confirm-save" onclick="salvarConfirmarParcela()">Confirmar parcela</button>
-      <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="closeOverlay('parcel-confirm-sheet')">Cancelar</button>
+      <div class="sheet-title" id="debt-pay-title">Registrar pagamento</div>
+      <div class="pagfin-summary" id="debt-pay-summary"></div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label" for="debt-pay-valor">Valor *</label><input class="form-input" id="debt-pay-valor" type="number" min="0" step="any" inputmode="decimal"></div>
+        <div class="form-group"><label class="form-label" for="debt-pay-data">Data</label><input class="form-input" id="debt-pay-data" type="date"></div>
+      </div>
+      <div class="form-group" id="debt-pay-cat-wrap">
+        <label class="form-label" for="debt-pay-cat">Categoria da despesa</label>
+        <select class="form-input" id="debt-pay-cat"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="debt-pay-desc">Descrição (opcional)</label>
+        <input class="form-input" id="debt-pay-desc" placeholder="Ex: parcela de agosto">
+      </div>
+      <div class="veh-form-btns" style="margin-top:4px">
+        <button class="btn btn-secondary" onclick="closeOverlay('debt-pay-sheet')">Cancelar</button>
+        <button class="btn btn-primary" id="debt-pay-save" onclick="salvarPagamentoDivida()">Registrar</button>
+      </div>
     </div>
   </div>
 
-  <!-- Bottom sheet: detalhe do parcelamento -->
-  <div class="overlay" id="parcel-detail-sheet" onclick="if(event.target===this)closeOverlay('parcel-detail-sheet')">
+  <!-- Bottom sheet: detalhe da dívida (mesmo registro de D.debts) -->
+  <div class="overlay" id="debt-detail-sheet" onclick="if(event.target===this)closeOverlay('debt-detail-sheet')">
+    <div class="sheet sheet-tall">
+      <div class="sheet-handle"></div>
+      <div id="debt-detail-body"></div>
+    </div>
+  </div>
+
+  <!-- Bottom sheet: ações secundárias da dívida -->
+  <div class="overlay" id="debt-menu-sheet" onclick="if(event.target===this)closeOverlay('debt-menu-sheet')">
     <div class="sheet">
       <div class="sheet-handle"></div>
-      <div id="parcel-detail-body"></div>
-      <button class="btn btn-secondary" style="width:100%;margin-top:12px" onclick="closeOverlay('parcel-detail-sheet')">Fechar</button>
+      <div class="sheet-title" id="debt-menu-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Dívida</div>
+      <div id="debt-menu-opts" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px"></div>
+      <button class="btn btn-secondary" style="width:100%" onclick="closeOverlay('debt-menu-sheet')">Cancelar</button>
     </div>
   </div>
 
@@ -1158,28 +1179,13 @@
   </div>
 </div>
 
-<!-- Formulário: nova/editar compra parcelada -->
-<div class="overlay" id="modal-parcel">
-  <div class="sheet">
+<!-- Formulário: nova/editar dívida (multi-tipo; campos adaptados por JS) -->
+<div class="overlay" id="modal-debt">
+  <div class="sheet sheet-tall">
     <div class="sheet-handle"></div>
-    <div class="sheet-title" id="parcel-modal-title">Nova compra parcelada</div>
-    <input type="hidden" id="parcel-edit-id">
-    <div class="fg"><label class="fl" for="pc-desc">Descrição da compra</label><input class="fi" type="text" id="pc-desc" placeholder="Ex: iPhone, Sofá..."></div>
-    <div class="fg"><label class="fl" for="pc-total">Valor total ($)</label><input class="fi" type="number" id="pc-total" min="0" step="0.01" oninput="_parcelSuggestValor()"></div>
-    <div class="veh-form-row">
-      <div class="form-group"><label class="form-label" for="pc-n">Nº de parcelas</label><input class="form-input" type="number" id="pc-n" min="1" step="1" oninput="_parcelSuggestValor()"></div>
-      <div class="form-group"><label class="form-label" for="pc-valor">Valor da parcela ($)</label><input class="form-input" type="number" id="pc-valor" min="0" step="0.01" oninput="this.dataset.touched='1'"></div>
-    </div>
-    <div class="parcel-form-hint" id="pc-n-hint" style="display:none">Já há parcelas confirmadas — o número de parcelas fica travado.</div>
-    <div class="veh-form-row">
-      <div class="form-group"><label class="form-label" for="pc-data">Primeira parcela</label><input class="form-input" type="date" id="pc-data"></div>
-      <div class="form-group"><label class="form-label" for="pc-freq">Frequência</label><select class="form-input" id="pc-freq"><option value="mensal">Mensal</option></select></div>
-    </div>
-    <div class="fg"><label class="fl" for="pc-cat">Categoria</label><select class="fi" id="pc-cat"></select></div>
-    <div class="fg"><label class="fl" for="pc-conta">Conta / cartão</label><input class="fi" type="text" id="pc-conta" placeholder="Ex: Cartão Nubank"></div>
-    <div class="fg"><label class="fl" for="pc-obs">Observações (opcional)</label><input class="fi" type="text" id="pc-obs" placeholder="Notas da compra"></div>
-    <button class="btn btn-primary" onclick="salvarParcelamento()">Salvar</button>
-    <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="closeOverlay('modal-parcel')">Cancelar</button>
+    <div class="sheet-title" id="debt-modal-title">Nova dívida</div>
+    <input type="hidden" id="debt-edit-id">
+    <div id="debt-form-body"></div>
   </div>
 </div>
 

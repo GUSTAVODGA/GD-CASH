@@ -205,10 +205,10 @@ const TAB_HELP = {
     title: 'Pendências',
     text: 'Registre tudo que precisa resolver — compra, documento, manutenção, conta. Defina prioridade e prazo. Ao concluir, você pode registrar como gasto real se quiser.',
   },
-  parcelamentos: {
+  dividas: {
     icon: '🧾',
-    title: 'Parcelamentos',
-    text: 'Cadastre compras parceladas (ex: iPhone em 12x). As parcelas futuras ficam previstas — a cada mês você toca em "Confirmar parcela" e só aquela vira despesa. Acompanhe pagas, restantes e o quanto falta.',
+    title: 'Dívidas',
+    text: 'Central de todas as suas dívidas — financiamentos, compras parceladas, empréstimos e dívidas pessoais. Acompanhe saldo, parcelas pagas, próximos vencimentos e registre pagamentos. Cada dívida é um único registro, também acessível pelo bem relacionado no Patrimônio.',
   },
 };
 
@@ -497,8 +497,8 @@ function renderMais() {
   const resTgt = (D.emergency && D.emergency.target) || 0;
   const resPct = resTgt > 0 ? Math.min(100, Math.round(resCur / resTgt * 100)) : 0;
   const net = _patNetTotals(_patUnifiedItems()).net;
-  const parcAtivos = (D.debts || []).filter(d => d.tipo === 'parcelamento' && !_debtQuitada(d)).length;
-  const parcAberto = (D.debts || []).filter(d => d.tipo === 'parcelamento').reduce((s, d) => s + _debtSaldo(d), 0);
+  const dividasAtivas = (D.debts || []).filter(d => { const s = _debtStatus(d); return s === 'ativa' || s === 'atrasada'; });
+  const dividasSaldo = dividasAtivas.reduce((s, d) => s + _debtSaldo(d), 0);
   const themeLbls = { light:'Claro', dark:'Escuro', auto:'Automático' };
   const theme = themeLbls[localStorage.getItem('gdcash_theme') || 'auto'] || 'Automático';
 
@@ -517,7 +517,7 @@ function renderMais() {
     fix:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',
     res:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
     pat:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="4" height="8" rx="1"/><rect x="9" y="8" width="4" height="14" rx="1"/><rect x="16" y="4" width="4" height="18" rx="1"/></svg>',
-    parc: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',
+    debt: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="14.5" r="1"/></svg>',
     conv: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>',
     srch: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
     adj:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>',
@@ -530,7 +530,7 @@ function renderMais() {
       ${item('fixos', ICO.fix, 'Gastos Fixos', `${R(fixTotal)} / mês`)}
       ${item('reserva', ICO.res, 'Reserva de Emergência', resTgt > 0 ? `${R(resCur)} · ${resPct}% da meta` : R(resCur))}
       ${item('patrimonio', ICO.pat, 'Patrimônio', `Líquido ${R(net)}`)}
-      ${item('parcelamentos', ICO.parc, 'Parcelamentos', parcAtivos > 0 ? `${parcAtivos} ativo(s) · ${R(parcAberto)} em aberto` : 'Nenhum ativo')}
+      ${item('dividas', ICO.debt, 'Dívidas', dividasAtivas.length > 0 ? `${dividasAtivas.length} ativa(s) · ${R(dividasSaldo)} devedor` : 'Nenhuma ativa')}
     </div>
     <div class="sec-label mais-sec">Ferramentas</div>
     <div class="mais-group">
@@ -3489,254 +3489,541 @@ function reconcileInstallmentPayments() {
   return D.installmentPayments.length !== before;
 }
 
-// A tela de Parcelamentos agora é uma CAMADA de leitura/escrita sobre D.debts
-// (tipo 'parcelamento'). Não há mais D.installments ativo — apenas backup pós-migração.
-function _parcelDebts() { return (D.debts || []).filter(d => d.tipo === 'parcelamento'); }
+// ══════════════════════════════════════════
+// CENTRAL DE DÍVIDAS (Fase 2) — interface visual de D.debts / D.debtPayments
+// ══════════════════════════════════════════
+// Não cria estrutura nova, não copia registros, não materializa vencimentos nem
+// reativa D.installments. Todas as operações leem/escrevem a fonte canônica (Fase 1).
+const DEBT_TIPO_META = {
+  financiamento: { lbl: 'Financiamento', chip: 'fin' },
+  parcelamento:  { lbl: 'Parcelamento',  chip: 'parc' },
+  emprestimo:    { lbl: 'Empréstimo',    chip: 'emp' },
+  pessoal:       { lbl: 'Dívida pessoal', chip: 'pess' },
+  outro:         { lbl: 'Outro',         chip: 'outro' },
+};
+const DEBT_STATUS_META = {
+  ativa:     { lbl: 'Ativa',     cls: 'ativa' },
+  atrasada:  { lbl: 'Em atraso', cls: 'atraso' },
+  quitada:   { lbl: 'Quitada',   cls: 'quitada' },
+  pausada:   { lbl: 'Pausada',   cls: 'pausada' },
+  cancelada: { lbl: 'Cancelada', cls: 'cancelada' },
+};
+const DIV_FILTROS = [
+  ['todas', 'Todas'], ['financiamento', 'Financiamentos'], ['parcelamento', 'Parcelamentos'],
+  ['emprestimo', 'Empréstimos'], ['pessoal', 'Pessoais'], ['outro', 'Outros'],
+  ['atraso', 'Em atraso'], ['quitada', 'Quitadas'],
+];
+let _dividasFiltro = 'todas';
 
-function renderParcelamentos() {
-  const totalEl = document.getElementById('parcel-total');
-  const list = document.getElementById('parcel-list');
-  const debts = _parcelDebts();
-  const emAbertoTotal = debts.reduce((s, d) => s + _debtSaldo(d), 0);
-  if (totalEl) totalEl.textContent = R(emAbertoTotal);
-  if (!list) return;
-  if (!debts.length) { list.innerHTML = '<div class="empty-state">Nenhuma compra parcelada cadastrada</div>'; return; }
-  // Ordenação visual: ativos primeiro (por próxima parcela), concluídos ao fim.
-  const ordered = [...debts].map(d => ({ d, st: _debtState(d) })).sort((a, b) => {
-    if (a.st.quitada !== b.st.quitada) return a.st.quitada ? 1 : -1;
-    return String(a.st.proximaVenc || '').localeCompare(String(b.st.proximaVenc || '')) ||
+// Resolve o nome do bem vinculado (sem alterar vínculos na renderização).
+function _debtBemNome(d) {
+  if (d.patrimonioId) { const p = getPatrimonio(d.patrimonioId); if (p) return p.nome; }
+  if (d.vehicleId) {
+    const v = (D.vehicles || []).find(x => x.id === d.vehicleId); if (v) return v.name;
+    const pv = (D.patrimonios || []).find(x => x.tipo === 'veiculo' && (x._idOriginal === d.vehicleId || x.id === d.vehicleId));
+    if (pv) return pv.nome;
+  }
+  return '';
+}
+function _debtHasBem(d) { return !!(d.patrimonioId || d.vehicleId); }
+// Ativa para os totais: apenas ativa/atrasada (exclui quitada, cancelada, pausada).
+function _debtIsAtiva(d) { const s = _debtStatus(d); return s === 'ativa' || s === 'atrasada'; }
+
+function renderDividas() { renderDividasResumo(); renderDividasFiltros(); renderDividasList(); }
+
+function renderDividasResumo() {
+  const el = document.getElementById('dividas-resumo'); if (!el) return;
+  const debts = D.debts || [];
+  const ativas = debts.filter(_debtIsAtiva);
+  const saldoTot = ativas.reduce((s, d) => s + _debtSaldo(d), 0);
+  const pagoTot = ativas.reduce((s, d) => s + _debtPago(d), 0);
+  const nAtraso = debts.filter(d => _debtStatus(d) === 'atrasada').length;
+  const comVenc = ativas.map(d => _debtState(d)).filter(st => st.proximaNo && st.proximaVenc)
+    .sort((a, b) => String(a.proximaVenc).localeCompare(String(b.proximaVenc)));
+  const prox = comVenc[0] || null;
+  const previsto = comVenc.reduce((s, st) => s + st.proximaValor, 0);
+  el.innerHTML = `
+    <div class="card av-card div-resumo">
+      <div class="div-resumo-top">
+        <div class="div-resumo-lbl">Saldo devedor</div>
+        <div class="div-resumo-val">${R(saldoTot)}</div>
+      </div>
+      <div class="div-resumo-grid">
+        <div class="div-rc"><span class="div-rc-lbl">Já pago</span><span class="div-rc-val div-rc-pos">${R(pagoTot)}</span></div>
+        <div class="div-rc"><span class="div-rc-lbl">Ativas</span><span class="div-rc-val">${ativas.length}</span></div>
+        <div class="div-rc"><span class="div-rc-lbl">Em atraso</span><span class="div-rc-val ${nAtraso > 0 ? 'div-rc-warn' : ''}">${nAtraso}</span></div>
+        <div class="div-rc"><span class="div-rc-lbl">Próximo venc.</span><span class="div-rc-val">${prox ? fmtShort(prox.proximaVenc) : '—'}</span></div>
+      </div>
+      ${previsto > 0 ? `<div class="div-resumo-foot">Próximos pagamentos previstos <b>${R(previsto)}</b></div>` : ''}
+    </div>`;
+}
+
+function renderDividasFiltros() {
+  const el = document.getElementById('dividas-filtros'); if (!el) return;
+  el.innerHTML = DIV_FILTROS.map(([k, lbl]) =>
+    `<button class="div-chip${_dividasFiltro === k ? ' div-chip-on' : ''}" role="tab" aria-selected="${_dividasFiltro === k}" onclick="setDividasFiltro('${k}')">${lbl}</button>`).join('');
+}
+function setDividasFiltro(k) { _dividasFiltro = k; renderDividasFiltros(); renderDividasList(); }
+
+function _debtMatchFiltro(d, f) {
+  if (f === 'todas') return true;
+  if (f === 'atraso') return _debtStatus(d) === 'atrasada';
+  if (f === 'quitada') return _debtStatus(d) === 'quitada';
+  return d.tipo === f;
+}
+
+function renderDividasList() {
+  const list = document.getElementById('dividas-list'); if (!list) return;
+  const all = D.debts || [];
+  if (!all.length) { list.innerHTML = _dividasEmptyAll(); return; }
+  const filtered = all.filter(d => _debtMatchFiltro(d, _dividasFiltro));
+  if (!filtered.length) { list.innerHTML = _dividasEmptyFiltro(); return; }
+  const rank = { atrasada: 0, ativa: 1, pausada: 2, quitada: 3, cancelada: 4 };
+  const ordered = filtered.map(d => ({ d, st: _debtState(d) })).sort((a, b) => {
+    const ra = rank[a.st.status] ?? 9, rb = rank[b.st.status] ?? 9;
+    if (ra !== rb) return ra - rb;
+    return String(a.st.proximaVenc || '~').localeCompare(String(b.st.proximaVenc || '~')) ||
       String(a.d.titulo || '').localeCompare(String(b.d.titulo || ''), 'pt-BR', { sensitivity: 'base' });
   });
-  list.innerHTML = ordered.map(({ d, st }) => {
-    const metaBits = [d.categoria, d.credor].filter(Boolean).join(' · ');
-    const chip = st.quitada
-      ? '<span class="parcel-chip parcel-chip-done">Concluído</span>'
-      : `<span class="parcel-chip parcel-chip-open">${st.parcelasPagas}/${st.parcelasTotal}</span>`;
-    // Foco do card: a próxima parcela, com o VALOR em destaque.
-    const venc = st.proximaNo
-      ? `<div class="parcel-next">
-           <span class="parcel-next-cap">Próxima parcela</span>
-           <span class="parcel-next-line">${fmtShort(st.proximaVenc)} · <span class="parcel-next-amt">${R(st.proximaValor)}</span></span>
-         </div>`
-      : '';
-    const action = st.quitada
-      ? '<div class="parcel-done-selo">✓ Parcelamento concluído</div>'
-      : `<button class="btn btn-secondary parcel-confirm-btn" onclick="event.stopPropagation();confirmarParcela('${d.id}')">Confirmar parcela</button>`;
-    return `
-      <div class="parcel-item" onclick="openParcelDetail('${d.id}')">
-        <div class="parcel-main">
-          <div class="parcel-info">
-            <div class="parcel-name">${escHtml(d.titulo)}</div>
-            <div class="parcel-meta">${metaBits ? `<span class="parcel-cat">${escHtml(metaBits)}</span>` : ''}${chip}</div>
-          </div>
-          <div class="parcel-end">
-            <span class="parcel-amt-lbl">Valor total</span>
-            <span class="parcel-amt">${R(d.valorOriginal)}</span>
-          </div>
+  list.innerHTML = ordered.map(({ d, st }) => _debtCardHtml(d, st)).join('');
+}
+
+function _debtCardHtml(d, st) {
+  const tm = DEBT_TIPO_META[d.tipo] || DEBT_TIPO_META.outro;
+  const sm = DEBT_STATUS_META[st.status] || DEBT_STATUS_META.ativa;
+  const bem = _debtBemNome(d);
+  const sub = [d.credor, bem].filter(Boolean).join(' · ');
+  const temParcelas = st.parcelasTotal > 0;
+  const progLine = `${st.progress}% pago${temParcelas ? ` · ${st.parcelasPagas} de ${st.parcelasTotal} parcelas` : ''}`;
+  const venc = st.proximaNo ? `<div class="div-card-next">Próxima: ${R(st.proximaValor)} · ${fmtShort(st.proximaVenc)}</div>` : '';
+  const muted = st.status === 'cancelada' || st.status === 'quitada' || st.status === 'pausada';
+  return `
+    <div class="div-card${muted ? ' div-card-muted' : ''}" onclick="openDebtDetail('${d.id}')">
+      <div class="div-card-head">
+        <div class="div-card-info">
+          <div class="div-card-title">${escHtml(d.titulo)}</div>
+          <div class="div-card-meta"><span class="div-tipo-chip div-tipo-${tm.chip}">${tm.lbl}</span>${sub ? `<span class="div-card-sub">${escHtml(sub)}</span>` : ''}</div>
         </div>
-        ${venc}
-        <div class="parcel-progress"><span class="parcel-progress-fill" style="width:${st.progress}%"></span></div>
-        <div class="parcel-action-row">${action}</div>
-      </div>`;
-  }).join('');
+        <div class="div-card-end">
+          <span class="div-card-saldo-lbl">Saldo</span>
+          <span class="div-card-saldo">${R(st.saldo)}</span>
+        </div>
+      </div>
+      <div class="div-card-prog"><span class="div-card-prog-fill" style="width:${st.progress}%"></span></div>
+      <div class="div-card-foot">
+        <span class="div-card-prog-txt">${progLine}</span>
+        <span class="div-status s-${sm.cls}">${sm.lbl}</span>
+      </div>
+      ${venc}
+    </div>`;
 }
 
-function _parcelFillCatSelect(sel, current) {
-  if (!sel) return;
-  const cats = D.expCats || [];
-  sel.innerHTML = cats.map(c => `<option value="${escHtml(c)}"${c === current ? ' selected' : ''}>${escHtml(c)}</option>`).join('');
+function _dividasEmptyAll() {
+  return `<div class="div-empty">
+    <div class="div-empty-title">Nenhuma dívida cadastrada</div>
+    <div class="div-empty-txt">Cadastre financiamentos, compras parceladas, empréstimos, dívidas pessoais ou outras obrigações para acompanhar saldo, parcelas e vencimentos num só lugar.</div>
+    <button class="btn btn-primary" style="width:auto;padding:11px 20px" onclick="openDebtForm()">+ Adicionar dívida</button>
+  </div>`;
 }
-// Sugere valor da parcela = total ÷ nº enquanto o usuário não editar o campo à mão.
-function _parcelSuggestValor() {
-  const total = Number(document.getElementById('pc-total').value) || 0;
-  const n = Math.max(1, Math.round(Number(document.getElementById('pc-n').value) || 0));
-  const vpEl = document.getElementById('pc-valor');
-  if (!vpEl || vpEl.dataset.touched === '1') return;
-  if (total > 0 && n >= 1) vpEl.value = _round2(total / n);
-}
-function openParcelForm(id) {
-  const d = id ? getDebt(id) : null;
-  document.getElementById('parcel-modal-title').textContent = d ? 'Editar parcelamento' : 'Nova compra parcelada';
-  document.getElementById('parcel-edit-id').value = d ? d.id : '';
-  document.getElementById('pc-desc').value = d ? d.titulo : '';
-  document.getElementById('pc-total').value = d ? d.valorOriginal : '';
-  document.getElementById('pc-n').value = d ? d.parcelasTotal : '';
-  const vpEl = document.getElementById('pc-valor');
-  vpEl.value = d ? d.valorParcela : '';
-  vpEl.dataset.touched = d ? '1' : '';
-  document.getElementById('pc-data').value = d ? d.dataInicio : dateStr(new Date());
-  document.getElementById('pc-freq').value = d ? d.periodicidade : 'mensal';
-  _parcelFillCatSelect(document.getElementById('pc-cat'), d ? d.categoria : ((D.expCats || [])[0] || ''));
-  document.getElementById('pc-conta').value = d ? d.credor : '';
-  document.getElementById('pc-obs').value = d ? d.observacoes : '';
-  // Com parcelas já pagas, o nº de parcelas fica travado (evita inconsistência).
-  const paid = d ? _debtParcelasPagas(d) : 0;
-  const nInput = document.getElementById('pc-n');
-  nInput.disabled = paid > 0;
-  const hint = document.getElementById('pc-n-hint');
-  if (hint) hint.style.display = paid > 0 ? '' : 'none';
-  openOverlay('modal-parcel');
-}
-function salvarParcelamento() {
-  const id = document.getElementById('parcel-edit-id').value;
-  const descricao = document.getElementById('pc-desc').value.trim();
-  const valorTotal = _round2(Number(document.getElementById('pc-total').value) || 0);
-  const parcelas = Math.round(Number(document.getElementById('pc-n').value) || 0);
-  let valorParcela = _round2(Number(document.getElementById('pc-valor').value) || 0);
-  const dataPrimeira = localDateKey(document.getElementById('pc-data').value) || '';
-  const frequencia = document.getElementById('pc-freq').value || 'mensal';
-  const categoria = document.getElementById('pc-cat').value || (D.expCats || [])[0] || 'Outros';
-  const conta = document.getElementById('pc-conta').value.trim();
-  const observacoes = document.getElementById('pc-obs').value.trim();
-  if (!descricao) { gdToast('Informe a descrição da compra.', { type: 'error' }); return; }
-  if (!(valorTotal > 0)) { gdToast('Informe o valor total.', { type: 'error' }); return; }
-  if (!(parcelas >= 1)) { gdToast('Informe a quantidade de parcelas.', { type: 'error' }); return; }
-  if (!dataPrimeira) { gdToast('Informe a data da primeira parcela.', { type: 'error' }); return; }
-  if (!(valorParcela > 0)) valorParcela = _round2(valorTotal / parcelas);
-  D.debts = D.debts || [];
-  if (id) {
-    const idx = D.debts.findIndex(x => x.id === id);
-    if (idx < 0) { closeOverlay('modal-parcel'); return; }
-    // Nº de parcelas não pode ficar abaixo do já pago (mantém o travamento do form).
-    const paid = _debtParcelasPagas(D.debts[idx]);
-    const N = paid > 0 ? D.debts[idx].parcelasTotal : parcelas;
-    D.debts[idx] = _normDebt(Object.assign({}, D.debts[idx], {
-      titulo: descricao, valorOriginal: valorTotal, parcelasTotal: N, valorParcela,
-      dataInicio: dataPrimeira, periodicidade: frequencia, categoria, credor: conta,
-      observacoes, tipo: 'parcelamento', atualizadoEm: Date.now(),
-    }));
-  } else {
-    D.debts.push(_normDebt({
-      tipo: 'parcelamento', titulo: descricao, valorOriginal: valorTotal, amortizadoInicial: 0,
-      parcelasTotal: parcelas, valorParcela, dataInicio: dataPrimeira, periodicidade: frequencia,
-      categoria, credor: conta, observacoes,
-    }));
-  }
-  haptic(10); save();
-  closeOverlay('modal-parcel');
-  renderParcelamentos();
-  if (id && document.getElementById('parcel-detail-sheet')?.classList.contains('open')) openParcelDetail(id);
-  gdToast(id ? 'Parcelamento atualizado.' : 'Compra parcelada cadastrada.', { type: 'success' });
+function _dividasEmptyFiltro() {
+  return `<div class="div-empty">
+    <div class="div-empty-title">Nenhuma dívida neste filtro</div>
+    <div class="div-empty-txt">Não há registros para o filtro selecionado.</div>
+    <button class="btn btn-secondary" style="width:auto;padding:11px 20px" onclick="setDividasFiltro('todas')">Ver todas</button>
+  </div>`;
 }
 
-// ── Confirmar parcela: registra o pagamento da próxima parcela (sequencial) ──
-var _parcelConfirmTarget = null;
-function confirmarParcela(id) {
-  const d = getDebt(id);
-  if (!d) return;
+// ── Detalhe da dívida ──
+function openDebtDetail(id) {
+  const d = getDebt(id); if (!d) return;
+  const body = document.getElementById('debt-detail-body'); if (!body) return;
   const st = _debtState(d);
-  // Bloqueio: nada a confirmar quando já concluído (nunca além da última parcela).
-  if (st.quitada || !st.proximaNo) { gdToast('Parcelamento já concluído.', { type: 'info' }); return; }
-  _parcelConfirmTarget = { id: id, parcelNo: st.proximaNo };
-  const sum = document.getElementById('parcel-confirm-summary');
-  if (sum) sum.innerHTML =
-    `<div class="pagfin-sum-row"><span>${escHtml(d.titulo)}</span><span>Parcela ${st.proximaNo}/${st.parcelasTotal}</span></div>` +
-    `<div class="pagfin-sum-row"><span>Valor</span><span>${R(st.proximaValor)}</span></div>`;
-  const dateEl = document.getElementById('parcel-confirm-date');
-  if (dateEl) dateEl.value = st.proximaVenc || dateStr(new Date());
-  const btn = document.getElementById('parcel-confirm-save');
-  if (btn) btn.disabled = false;
-  openOverlay('parcel-confirm-sheet');
-}
-function salvarConfirmarParcela() {
-  const t = _parcelConfirmTarget;
-  if (!t) return;
-  const d = getDebt(t.id);
-  if (!d) { closeOverlay('parcel-confirm-sheet'); return; }
-  const btn = document.getElementById('parcel-confirm-save');
-  if (btn && btn.disabled) return; // impede duplo toque
-  const st = _debtState(d);
-  // Revalida: só a PRÓXIMA parcela sequencial, nunca além da última (protege duplo toque).
-  if (st.quitada || t.parcelNo !== st.proximaNo) {
-    closeOverlay('parcel-confirm-sheet');
-    gdToast('Esta parcela não pode ser confirmada.', { type: 'info' });
-    renderParcelamentos();
-    return;
-  }
-  if (btn) btn.disabled = true;
-  const date = localDateKey(document.getElementById('parcel-confirm-date').value) || dateStr(new Date());
-  // Registra o pagamento (valor = quanto falta para cobrir a parcela) — uma única despesa.
-  _debtRegistrarPagamento(d.id, { valor: st.proximaValor, data: date, parcelNo: st.proximaNo, categoria: d.categoria });
-  _parcelConfirmTarget = null;
-  haptic(10); save();
-  closeOverlay('parcel-confirm-sheet');
-  renderParcelamentos();
-  if (document.getElementById('parcel-detail-sheet')?.classList.contains('open')) openParcelDetail(d.id);
-  refreshAfterDayEdit();
-  const done = _debtQuitada(d);
-  gdToast(done ? 'Parcela confirmada. Parcelamento concluído! 🎉' : 'Parcela confirmada. Lançamento criado em Despesas.', { type: 'success' });
-}
-
-function openParcelDetail(id) {
-  const d = getDebt(id);
-  if (!d) return;
-  const body = document.getElementById('parcel-detail-body');
-  if (!body) return;
-  const st = _debtState(d);
-  const restantes = Math.max(0, st.parcelasTotal - st.parcelasPagas);
-  const metaBits = [d.categoria, d.credor].filter(Boolean).join(' · ');
+  const tm = DEBT_TIPO_META[d.tipo] || DEBT_TIPO_META.outro;
+  const sm = DEBT_STATUS_META[st.status] || DEBT_STATUS_META.ativa;
+  const bem = _debtBemNome(d);
+  const temParcelas = st.parcelasTotal > 0;
+  const idRow = [
+    ['Tipo', tm.lbl],
+    d.credor ? ['Credor', escHtml(d.credor)] : null,
+    bem ? [(d.vehicleId ? 'Veículo' : 'Patrimônio'), escHtml(bem)] : null,
+    d.dataInicio ? ['Início', fmtShort(d.dataInicio)] : null,
+  ].filter(Boolean);
+  const valRows = [
+    ['Valor original', R(d.valorOriginal)],
+    d.amortizadoInicial > 0 ? ['Valor pago anteriormente', R(d.amortizadoInicial)] : null,
+    ['Total pago', R(st.pago)],
+    ['Saldo devedor', R(st.saldo)],
+    temParcelas ? ['Parcelas pagas', `${st.parcelasPagas} de ${st.parcelasTotal}`] : null,
+    d.valorParcela > 0 ? ['Valor da parcela', R(d.valorParcela)] : null,
+    d.juros != null ? ['Juros', `${d.juros}%`] : null,
+  ].filter(Boolean);
+  const vencRows = (st.proximaNo && st.status !== 'cancelada' && st.status !== 'pausada') ? [
+    ['Próximo vencimento', fmtShort(st.proximaVenc)],
+    ['Falta p/ a parcela atual', R(st.proximaValor)],
+    temParcelas ? ['Parcelas restantes', String(st.parcelasTotal - st.parcelasPagas)] : null,
+  ].filter(Boolean) : [];
+  const rowsHtml = arr => arr.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${r[0]}</span><span class="pat-det-row-val">${r[1]}</span></div>`).join('');
+  // Histórico de pagamentos (identidade por debtPaymentId; cada um desfazível).
   const pays = _debtPaymentsOf(d.id).slice()
-    .sort((a, b) => (b.parcelNo || 0) - (a.parcelNo || 0) || String(b.data || '').localeCompare(String(a.data || '')));
+    .sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')) || (b.parcelNo || 0) - (a.parcelNo || 0));
   const histHtml = pays.length === 0
-    ? '<div class="pagfin-empty">Nenhuma parcela confirmada ainda.</div>'
+    ? '<div class="pagfin-empty">Nenhum pagamento registrado ainda.</div>'
     : pays.map(p => `
         <div class="pagfin-row">
           <div class="pagfin-row-body">
-            <span class="pagfin-row-desc"><span class="parcel-paid-chip">✓ Paga</span>${p.parcelNo ? `Parcela ${p.parcelNo}/${st.parcelasTotal}` : 'Pagamento'}</span>
+            <span class="pagfin-row-desc">${p.parcelNo ? `Parcela ${p.parcelNo}${temParcelas ? '/' + st.parcelasTotal : ''}` : 'Amortização extra'}</span>
             <span class="pagfin-row-date">${fmtShort(p.data)}</span>
           </div>
           <span class="pagfin-row-val">−${R(p.valor || 0)}</span>
+          <button class="div-pay-undo" onclick="event.stopPropagation();desfazerPagamentoDivida('${d.id}','${p.id}')" aria-label="Desfazer pagamento">${_patTrashSvg()}</button>
         </div>`).join('');
-  const proxima = st.proximaNo
-    ? `<div class="parcel-next-row"><span class="parcel-next-lbl">Próxima parcela</span><span class="parcel-next-val">${st.proximaNo}ª · ${fmtShort(st.proximaVenc)} · ${R(st.proximaValor)}</span></div>`
-    : '';
-  const action = st.quitada
-    ? '<div class="parcel-done-selo">✓ Parcelamento concluído</div>'
-    : `<button class="btn btn-primary parcel-confirm-primary" onclick="confirmarParcela('${d.id}')">Confirmar parcela</button>`;
+  // Próximos pagamentos (projeção local, somente leitura — não materializa nada).
+  let proxHtml = '';
+  if (temParcelas && st.proximaNo && st.status !== 'cancelada' && st.status !== 'pausada') {
+    const linhas = [];
+    for (let k = st.proximaNo; k <= Math.min(st.parcelasTotal, st.proximaNo + 2); k++) {
+      const val = k === st.proximaNo ? st.proximaValor : _r(_debtParcelaCents(d, k));
+      linhas.push(`<div class="pagfin-row"><div class="pagfin-row-body"><span class="pagfin-row-desc">Parcela ${k}/${st.parcelasTotal}</span><span class="pagfin-row-date">${fmtShort(_debtDueDate(d, k))}</span></div><span class="pagfin-row-val div-prox-val">${R(val)}</span></div>`);
+    }
+    proxHtml = `<div class="parcel-det-hist-lbl">Próximos pagamentos</div><div class="pagfin-hist">${linhas.join('')}</div>`;
+  }
+  const podePagar = !st.quitada && st.status !== 'cancelada' && st.status !== 'pausada';
+  const acaoPrimaria = st.quitada
+    ? '<div class="pagfin-quitado">✓ Dívida quitada</div>'
+    : st.status === 'cancelada'
+      ? '<div class="div-selo-cancel">Dívida cancelada</div>'
+      : st.status === 'pausada'
+        ? `<button class="btn btn-secondary" style="width:100%" onclick="retomarDivida('${d.id}')">Retomar dívida</button>`
+        : `<button class="btn btn-primary" style="width:100%" onclick="openDebtPay('${d.id}')">Registrar pagamento</button>`;
   body.innerHTML = `
-    <div class="parcel-det-head">
-      <div class="parcel-det-name">${escHtml(d.titulo)}</div>
-      ${metaBits ? `<div class="parcel-det-sub">${escHtml(metaBits)}</div>` : ''}
+    <div class="div-det-head">
+      <div class="div-det-title">${escHtml(d.titulo)}</div>
+      <div class="div-det-badges"><span class="div-tipo-chip div-tipo-${tm.chip}">${tm.lbl}</span><span class="div-status s-${sm.cls}">${sm.lbl}</span></div>
     </div>
-    <div class="parcel-progress"><span class="parcel-progress-fill" style="width:${st.progress}%"></span></div>
-    <div class="pagfin-grid">
-      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Total</span><span class="pagfin-cell-val">${R(d.valorOriginal)}</span></div>
-      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Pagas</span><span class="pagfin-cell-val pagfin-pos">${st.parcelasPagas}/${st.parcelasTotal}</span></div>
-      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Restantes</span><span class="pagfin-cell-val">${restantes}</span></div>
-      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Pago</span><span class="pagfin-cell-val">${st.progress}%</span></div>
+    <div class="div-det-progress"><span class="div-det-progress-fill" style="width:${st.progress}%"></span></div>
+    <div class="div-det-progtxt">${st.progress}% pago${temParcelas ? ` · ${st.parcelasPagas} de ${st.parcelasTotal} parcelas` : ''}</div>
+    <div class="sec-label" style="margin:16px 0 8px">Valores</div>
+    <div class="pat-list-group" style="margin-bottom:0">${rowsHtml(valRows)}</div>
+    ${vencRows.length ? `<div class="sec-label" style="margin:16px 0 8px">Vencimentos</div><div class="pat-list-group" style="margin-bottom:0">${rowsHtml(vencRows)}</div>` : ''}
+    ${idRow.length ? `<div class="sec-label" style="margin:16px 0 8px">Informações</div><div class="pat-list-group" style="margin-bottom:0">${rowsHtml(idRow)}</div>` : ''}
+    ${d.observacoes ? `<div class="div-det-obs">${escHtml(d.observacoes)}</div>` : ''}
+    <div class="div-det-actions">
+      ${acaoPrimaria}
+      <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="openDebtMenu('${d.id}')">Mais ações</button>
     </div>
-    ${proxima}
-    <div class="parcel-det-action">${action}</div>
-    <div class="parcel-det-hist-lbl">Histórico das parcelas</div>
+    <div class="parcel-det-hist-lbl" style="margin-top:16px">Histórico de pagamentos</div>
     <div class="pagfin-hist">${histHtml}</div>
-    <div class="parcel-det-btns">
-      <button class="btn btn-secondary" onclick="closeOverlay('parcel-detail-sheet');openParcelForm('${d.id}')">Editar</button>
-      <button class="btn btn-secondary parcel-del-btn" onclick="excluirParcelamento('${d.id}')">Excluir</button>
-    </div>`;
-  openOverlay('parcel-detail-sheet');
+    ${proxHtml}
+    ${_debtHasBem(d) ? `<button class="div-bem-link" onclick="abrirBemDaDivida('${d.id}')">Abrir ${d.vehicleId ? 'veículo' : 'patrimônio'} relacionado →</button>` : ''}
+    <button class="btn btn-secondary" style="width:100%;margin-top:14px" onclick="closeOverlay('debt-detail-sheet')">Fechar</button>`;
+  openOverlay('debt-detail-sheet');
 }
 
-function excluirParcelamento(id) {
-  const d = getDebt(id);
-  if (!d) return;
-  const paid = _debtPaymentsOf(id).length;
-  const desp = paid === 1 ? '1 despesa já registrada permanece' : `${paid} despesas já registradas permanecem`;
+// ── Menu de ações secundárias ──
+function _debtMenuOpt(lbl, ico, onclick, danger) {
+  const color = danger ? 'var(--rd)' : 'var(--text)';
+  const ICO = {
+    edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+    quit: '<path d="M20 6L9 17l-5-5"/>',
+    pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+    cancel: '<circle cx="12" cy="12" r="10"/><line x1="4.9" y1="4.9" x2="19.1" y2="19.1"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    open: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+  };
+  return `<button class="av-sheet-opt" onclick="${onclick}">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="${danger ? 'var(--rd)' : 'currentColor'}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[ico] || ''}</svg>
+    <span style="flex:1;text-align:left;font-size:14px;font-weight:700;color:${color}">${lbl}</span>
+  </button>`;
+}
+function openDebtMenu(id) {
+  const d = getDebt(id); if (!d) return;
+  const st = _debtState(d);
+  document.getElementById('debt-menu-title').textContent = d.titulo;
+  const opts = [];
+  opts.push(_debtMenuOpt('Editar', 'edit', `closeOverlay('debt-menu-sheet');openDebtForm('${id}')`));
+  if (!st.quitada && st.status !== 'cancelada') opts.push(_debtMenuOpt('Quitar', 'quit', `quitarDivida('${id}')`));
+  if (st.status === 'pausada') opts.push(_debtMenuOpt('Retomar', 'play', `retomarDivida('${id}')`));
+  else if (st.status !== 'cancelada' && !st.quitada) opts.push(_debtMenuOpt('Pausar', 'pause', `pausarDivida('${id}')`));
+  if (st.status !== 'cancelada') opts.push(_debtMenuOpt('Cancelar', 'cancel', `cancelarDivida('${id}')`));
+  if (_debtHasBem(d)) opts.push(_debtMenuOpt(d.vehicleId ? 'Abrir veículo' : 'Abrir patrimônio', 'open', `abrirBemDaDivida('${id}')`));
+  opts.push(_debtMenuOpt('Excluir', 'trash', `excluirDivida('${id}')`, true));
+  document.getElementById('debt-menu-opts').innerHTML = opts.join('');
+  openOverlay('debt-menu-sheet');
+}
+
+// ── Ações: quitar, pausar, retomar, cancelar, excluir (semânticas distintas) ──
+function quitarDivida(id) {
+  const d = getDebt(id); if (!d) return;
+  const saldo = _debtSaldo(d);
+  if (saldo <= 0) { gdToast('Esta dívida já está quitada.', { type: 'info' }); return; }
   gdConfirm({
-    title: 'Excluir parcelamento',
-    msg: `O controle do parcelamento e seus marcadores serão removidos. ${paid > 0 ? desp : 'Nenhuma despesa foi gerada ainda'} no histórico financeiro — as despesas apenas perdem o vínculo ativo com o parcelamento, sem deixar referências órfãs.`,
-    confirmText: 'Excluir parcelamento',
-    variant: 'danger',
-    onConfirm: () => {
-      // Remove o vínculo ativo (marcadores) e a dívida; as despesas ficam no histórico.
-      D.debtPayments = (D.debtPayments || []).filter(p => p.debtId !== id);
-      D.debts = (D.debts || []).filter(x => x.id !== id);
-      haptic(10); save();
-      closeOverlay('parcel-detail-sheet');
-      renderParcelamentos();
-      gdToast('Parcelamento excluído. Despesas mantidas no histórico.', { type: 'success' });
+    title: 'Quitar dívida',
+    msg: `Registrar o pagamento final de ${R(saldo)} para liquidar "${d.titulo}"? O saldo ficará zero, o progresso 100% e a dívida será marcada como quitada.`,
+    confirmText: 'Quitar', onConfirm: () => {
+      _debtRegistrarPagamento(id, { valor: saldo, data: todayStr(), descricao: 'Quitação' });
+      save(); closeOverlay('debt-menu-sheet'); renderDividas();
+      if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(id);
+      refreshAfterDayEdit(); gdToast('Dívida quitada.', { type: 'success' });
     },
   });
 }
+function pausarDivida(id) {
+  const d = getDebt(id); if (!d) return;
+  d.status = 'pausada'; d.atualizadoEm = Date.now(); save();
+  closeOverlay('debt-menu-sheet'); renderDividas();
+  if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(id);
+  gdToast('Dívida pausada. Fora dos compromissos ativos até retomar.', { type: 'info' });
+}
+function retomarDivida(id) {
+  const d = getDebt(id); if (!d) return;
+  d.status = 'ativa'; d.atualizadoEm = Date.now(); save();
+  closeOverlay('debt-menu-sheet'); renderDividas();
+  if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(id);
+  gdToast('Dívida retomada.', { type: 'success' });
+}
+function cancelarDivida(id) {
+  const d = getDebt(id); if (!d) return;
+  gdConfirm({
+    title: 'Cancelar dívida', variant: 'danger', confirmText: 'Cancelar dívida',
+    msg: `Marcar "${d.titulo}" como cancelada? O saldo histórico é preservado (ela NÃO é considerada quitada), sai dos totais ativos e das projeções, e os pagamentos anteriores continuam no histórico.`,
+    onConfirm: () => {
+      d.status = 'cancelada'; d.atualizadoEm = Date.now(); save();
+      closeOverlay('debt-menu-sheet'); renderDividas();
+      if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(id);
+      gdToast('Dívida cancelada.', { type: 'info' });
+    },
+  });
+}
+function _doExcluirDivida(id) {
+  D.debtPayments = (D.debtPayments || []).filter(p => p.debtId !== id);
+  D.debts = (D.debts || []).filter(x => x.id !== id);
+  save(); closeOverlay('debt-menu-sheet'); closeOverlay('debt-detail-sheet'); renderDividas();
+  gdToast('Dívida excluída.', { type: 'success' });
+}
+function excluirDivida(id) {
+  const d = getDebt(id); if (!d) return;
+  const nPag = _debtPaymentsOf(id).length;
+  if (nPag === 0) {
+    gdConfirm({
+      title: 'Excluir dívida', variant: 'danger', confirmText: 'Excluir',
+      msg: `Excluir "${d.titulo}"? Não há pagamentos registrados — a exclusão é limpa.`,
+      onConfirm: () => _doExcluirDivida(id),
+    });
+  } else {
+    gdConfirm({
+      title: 'Excluir dívida com histórico', variant: 'danger', confirmText: 'Excluir mesmo assim',
+      msg: `"${d.titulo}" tem ${nPag} pagamento(s) registrado(s). Excluir remove o controle da dívida; as ${nPag} despesa(s) permanecem no histórico financeiro (perdem apenas o vínculo). Para manter o registro, prefira Cancelar. Deseja mesmo excluir?`,
+      onConfirm: () => _doExcluirDivida(id),
+    });
+  }
+}
+function abrirBemDaDivida(id) {
+  const d = getDebt(id); if (!d) return;
+  closeOverlay('debt-menu-sheet'); closeOverlay('debt-detail-sheet');
+  switchTab('patrimonio', 'mais');
+  if (d.patrimonioId && getPatrimonio(d.patrimonioId)) { renderPatDetail(d.patrimonioId); return; }
+  if (d.vehicleId) {
+    const v = (D.vehicles || []).find(x => x.id === d.vehicleId);
+    if (v) { _vehDetailMode = 'integrated'; renderVehPatDetail(v.id); return; }
+  }
+  renderPatrimonioHome();
+}
+
+// ── Registrar pagamento (usa exclusivamente a camada canônica da Fase 1) ──
+var _debtPayTarget = null;
+function openDebtPay(id) {
+  const d = getDebt(id); if (!d) return;
+  if (_debtSaldoCents(d) <= 0) { gdToast('Esta dívida já está quitada.', { type: 'info' }); return; }
+  if (_debtStatus(d) === 'cancelada') { gdToast('Dívida cancelada.', { type: 'info' }); return; }
+  if (_debtStatus(d) === 'pausada') { gdToast('Retome a dívida antes de pagar.', { type: 'info' }); return; }
+  _debtPayTarget = { id };
+  const st = _debtState(d);
+  document.getElementById('debt-pay-summary').innerHTML =
+    `<div class="pagfin-sum-row"><span>${escHtml(d.titulo)}</span><span>Saldo <b>${R(st.saldo)}</b></span></div>` +
+    (st.proximaNo ? `<div class="pagfin-sum-row"><span>Parcela ${st.proximaNo}${st.parcelasTotal ? '/' + st.parcelasTotal : ''}</span><span>${R(st.proximaValor)}</span></div>` : '');
+  document.getElementById('debt-pay-valor').value = st.proximaValor > 0 ? st.proximaValor : '';
+  document.getElementById('debt-pay-data').value = st.proximaVenc || todayStr();
+  const cat = document.getElementById('debt-pay-cat');
+  if (cat) cat.innerHTML = (D.expCats || []).map(c => `<option value="${escHtml(c)}"${c === d.categoria ? ' selected' : ''}>${escHtml(c)}</option>`).join('');
+  document.getElementById('debt-pay-desc').value = '';
+  const btn = document.getElementById('debt-pay-save'); if (btn) btn.disabled = false;
+  openOverlay('debt-pay-sheet');
+}
+function salvarPagamentoDivida() {
+  const t = _debtPayTarget; if (!t) return;
+  const d = getDebt(t.id); if (!d) { closeOverlay('debt-pay-sheet'); return; }
+  const btn = document.getElementById('debt-pay-save');
+  if (btn && btn.disabled) return; // impede toque duplo
+  if (_debtSaldoCents(d) <= 0) { closeOverlay('debt-pay-sheet'); gdToast('Dívida já quitada.', { type: 'info' }); return; }
+  let valor = Number(document.getElementById('debt-pay-valor').value) || 0;
+  if (valor <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
+  valor = Math.min(valor, _debtSaldo(d)); // nunca além do saldo
+  const data = localDateKey(document.getElementById('debt-pay-data').value) || todayStr();
+  const cat = document.getElementById('debt-pay-cat')?.value || d.categoria || (D.expCats[0] || 'Outros');
+  const desc = (document.getElementById('debt-pay-desc')?.value || '').trim();
+  const st = _debtState(d);
+  if (btn) btn.disabled = true;
+  _debtRegistrarPagamento(d.id, { valor, data, categoria: cat, descricao: desc, parcelNo: st.proximaNo || null });
+  _debtPayTarget = null; haptic(10); save();
+  closeOverlay('debt-pay-sheet');
+  renderDividas();
+  if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(d.id);
+  refreshAfterDayEdit();
+  gdToast(_debtQuitada(d) ? 'Pagamento registrado. Dívida quitada!' : 'Pagamento registrado. Lançamento criado em Despesas.', { type: 'success' });
+}
+function desfazerPagamentoDivida(debtId, payId) {
+  const p = (D.debtPayments || []).find(x => x.id === payId); if (!p) return;
+  gdConfirm({
+    title: 'Desfazer pagamento', variant: 'danger', confirmText: 'Desfazer',
+    msg: `Remover este pagamento de ${R(p.valor)}? A despesa vinculada também será removida e o saldo recalculado.`,
+    onConfirm: () => {
+      if (p.expenseId) D.expenses = (D.expenses || []).filter(e => e.id !== p.expenseId);
+      D.debtPayments = (D.debtPayments || []).filter(x => x.id !== payId);
+      save(); renderDividas();
+      if (document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(debtId);
+      refreshAfterDayEdit(); gdToast('Pagamento desfeito.', { type: 'success' });
+    },
+  });
+}
+
+// ── Formulário multi-tipo (campos adaptados; componentes reaproveitados) ──
+let _debtFormTipo = 'parcelamento';
+function openDebtForm(id) {
+  const d = id ? getDebt(id) : null;
+  document.getElementById('debt-edit-id').value = d ? d.id : '';
+  document.getElementById('debt-modal-title').textContent = d ? 'Editar dívida' : 'Nova dívida';
+  _debtFormTipo = d ? d.tipo : 'parcelamento';
+  _renderDebtForm(d);
+  openOverlay('modal-debt');
+}
+function _selectDebtTipo(t) {
+  _debtFormTipo = t;
+  const id = document.getElementById('debt-edit-id').value;
+  _renderDebtForm(id ? getDebt(id) : null);
+}
+function _debtBemOptions(sel) {
+  let html = `<option value="">Nenhum (dívida independente)</option>`;
+  (D.patrimonios || []).filter(p => p.tipo !== 'veiculo').forEach(p => {
+    html += `<option value="pat:${p.id}"${sel === 'pat:' + p.id ? ' selected' : ''}>${escHtml(p.nome)}</option>`;
+  });
+  (D.vehicles || []).forEach(v => {
+    html += `<option value="veh:${v.id}"${sel === 'veh:' + v.id ? ' selected' : ''}>${escHtml(v.name)} (veículo)</option>`;
+  });
+  return html;
+}
+function _renderDebtForm(d) {
+  const body = document.getElementById('debt-form-body'); if (!body) return;
+  const t = _debtFormTipo;
+  const editing = !!d;
+  const g = (k, def) => d && d[k] != null && d[k] !== '' ? d[k] : (def == null ? '' : def);
+  const selBem = d ? (d.patrimonioId ? 'pat:' + d.patrimonioId : (d.vehicleId ? 'veh:' + d.vehicleId : '')) : '';
+  const saldoAtual = d ? _debtSaldo(d) : '';
+  const tipoChips = editing ? '' : `
+    <div class="df-tipos">
+      ${Object.entries(DEBT_TIPO_META).map(([k, m]) => `<button type="button" class="df-tipo${t === k ? ' df-tipo-on' : ''}" onclick="_selectDebtTipo('${k}')">${m.lbl}</button>`).join('')}
+    </div>`;
+  const credorLbl = (t === 'financiamento' || t === 'emprestimo') ? 'Instituição / credor' : (t === 'pessoal' ? 'Pessoa' : 'Credor (opcional)');
+  // Bloco de valores (financiamento usa financiado + saldo; demais usam valor + já pago)
+  let valorBlock;
+  if (t === 'financiamento') {
+    valorBlock = `
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label" for="df-valor">Valor financiado *</label><input class="form-input" id="df-valor" type="number" min="0" step="0.01" inputmode="decimal" value="${g('valorOriginal')}"></div>
+        <div class="form-group"><label class="form-label" for="df-saldo">Saldo devedor atual *</label><input class="form-input" id="df-saldo" type="number" min="0" step="0.01" inputmode="decimal" value="${saldoAtual}"></div>
+      </div>
+      <div class="form-group"><label class="form-label" for="df-bemvalor">Valor do bem (opcional)</label><input class="form-input" id="df-bemvalor" type="number" min="0" step="0.01" inputmode="decimal" value="${g('valorBem')}"></div>`;
+  } else {
+    const jaPago = d ? d.amortizadoInicial : '';
+    valorBlock = `
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label" for="df-valor">${t === 'parcelamento' ? 'Valor total *' : 'Valor *'}</label><input class="form-input" id="df-valor" type="number" min="0" step="0.01" inputmode="decimal" value="${g('valorOriginal')}"></div>
+        <div class="form-group"><label class="form-label" for="df-pago">Valor já pago antes (opc.)</label><input class="form-input" id="df-pago" type="number" min="0" step="0.01" inputmode="decimal" value="${jaPago}"></div>
+      </div>`;
+  }
+  // Parcelas: financiamento/parcelamento/emprestimo têm; pessoal/outro opcionais
+  const showParcelas = t !== 'pessoal';
+  const parcelasBlock = showParcelas ? `
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label" for="df-parcelas">Nº de parcelas${t === 'parcelamento' || t === 'financiamento' ? '' : ' (opc.)'}</label><input class="form-input" id="df-parcelas" type="number" min="0" step="1" inputmode="numeric" value="${g('parcelasTotal')}"></div>
+      <div class="form-group"><label class="form-label" for="df-valorparcela">Valor da parcela</label><input class="form-input" id="df-valorparcela" type="number" min="0" step="0.01" inputmode="decimal" value="${g('valorParcela')}"></div>
+    </div>
+    <div class="veh-form-row">
+      <div class="form-group"><label class="form-label" for="df-data">Primeiro vencimento</label><input class="form-input" id="df-data" type="date" value="${g('dataInicio')}"></div>
+      <div class="form-group"><label class="form-label" for="df-freq">Periodicidade</label><select class="form-input" id="df-freq">${['mensal', 'quinzenal', 'semanal', 'anual'].map(f => `<option value="${f}"${g('periodicidade', 'mensal') === f ? ' selected' : ''}>${({ mensal: 'Mensal', quinzenal: 'Quinzenal', semanal: 'Semanal', anual: 'Anual' })[f]}</option>`).join('')}</select></div>
+    </div>` : `
+    <div class="form-group"><label class="form-label" for="df-data">Vencimento (opcional)</label><input class="form-input" id="df-data" type="date" value="${g('dataInicio')}"></div>
+    <input type="hidden" id="df-parcelas" value="${g('parcelasTotal', 0)}"><input type="hidden" id="df-valorparcela" value="${g('valorParcela', 0)}"><input type="hidden" id="df-freq" value="mensal">`;
+  const jurosBlock = (t === 'financiamento' || t === 'emprestimo') ? `<div class="form-group"><label class="form-label" for="df-juros">Juros % (opcional)</label><input class="form-input" id="df-juros" type="number" min="0" step="0.01" inputmode="decimal" value="${d && d.juros != null ? d.juros : ''}"></div>` : `<input type="hidden" id="df-juros" value="${d && d.juros != null ? d.juros : ''}">`;
+  const catBlock = (t === 'parcelamento') ? `<div class="form-group"><label class="form-label" for="df-cat">Categoria</label><select class="form-input" id="df-cat">${(D.expCats || []).map(c => `<option value="${escHtml(c)}"${g('categoria') === c ? ' selected' : ''}>${escHtml(c)}</option>`).join('')}</select></div>` : `<input type="hidden" id="df-cat" value="${escHtml(g('categoria'))}">`;
+  const statusBlock = editing ? `<div class="form-group"><label class="form-label" for="df-status">Status</label><select class="form-input" id="df-status">${['ativa', 'pausada', 'cancelada'].map(s => `<option value="${s}"${(d.status || 'ativa') === s ? ' selected' : ''}>${DEBT_STATUS_META[s].lbl}</option>`).join('')}</select></div>` : '';
+  body.innerHTML = `
+    ${tipoChips}
+    <div class="form-group"><label class="form-label" for="df-titulo">Título *</label><input class="form-input" id="df-titulo" type="text" value="${escHtml(g('titulo'))}" placeholder="${t === 'parcelamento' ? 'Ex: iPhone' : t === 'financiamento' ? 'Ex: Financiamento do carro' : 'Ex: Empréstimo pessoal'}"></div>
+    <div class="form-group"><label class="form-label" for="df-credor">${credorLbl}</label><input class="form-input" id="df-credor" type="text" value="${escHtml(g('credor'))}" placeholder="${t === 'pessoal' ? 'Nome da pessoa' : 'Ex: Caixa, Nubank'}"></div>
+    ${valorBlock}
+    ${parcelasBlock}
+    ${jurosBlock}
+    ${catBlock}
+    <div class="form-group"><label class="form-label" for="df-bem">Bem relacionado (opcional)</label><select class="form-input" id="df-bem">${_debtBemOptions(selBem)}</select></div>
+    ${statusBlock}
+    <div class="form-group"><label class="form-label" for="df-obs">Observações (opcional)</label><input class="form-input" id="df-obs" type="text" value="${escHtml(g('observacoes'))}"></div>
+    <button class="btn btn-primary" onclick="salvarDivida()">Salvar</button>
+    <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="closeOverlay('modal-debt')">Cancelar</button>`;
+}
+function salvarDivida() {
+  const id = document.getElementById('debt-edit-id').value;
+  const tipo = _debtFormTipo;
+  const g = k => document.getElementById(k);
+  const titulo = (g('df-titulo')?.value || '').trim();
+  if (!titulo) { gdToast('Informe um título.', { type: 'error' }); return; }
+  const credor = (g('df-credor')?.value || '').trim();
+  const obs = (g('df-obs')?.value || '').trim();
+  const dataInicio = localDateKey(g('df-data')?.value) || '';
+  const parcelasTotal = Math.max(0, Math.round(Number(g('df-parcelas')?.value) || 0));
+  const valorParcela = Math.max(0, Number(g('df-valorparcela')?.value) || 0);
+  const periodicidade = g('df-freq')?.value || 'mensal';
+  const juros = (g('df-juros') && g('df-juros').value !== '') ? Number(g('df-juros').value) : null;
+  const categoria = g('df-cat')?.value || '';
+  const bemVal = g('df-bem')?.value || '';
+  let valorOriginal = 0, amortizadoInicial = 0, valorBem = null;
+  if (tipo === 'financiamento') {
+    valorOriginal = Number(g('df-valor')?.value) || 0;
+    valorBem = (g('df-bemvalor') && g('df-bemvalor').value !== '') ? Number(g('df-bemvalor').value) : null;
+    if (g('df-saldo') && g('df-saldo').value !== '') amortizadoInicial = _r(_c(valorOriginal) - _c(Number(g('df-saldo').value) || 0));
+  } else {
+    valorOriginal = Number(g('df-valor')?.value) || 0;
+    amortizadoInicial = (g('df-pago') && g('df-pago').value !== '') ? (Number(g('df-pago').value) || 0) : 0;
+  }
+  if (!(valorOriginal > 0)) { gdToast('Informe o valor.', { type: 'error' }); return; }
+  if (amortizadoInicial < 0) amortizadoInicial = 0;
+  if (_c(amortizadoInicial) > _c(valorOriginal)) { gdToast('O valor já pago não pode exceder o valor original.', { type: 'error' }); return; }
+  let patrimonioId = null, vehicleId = null;
+  if (bemVal.startsWith('pat:')) patrimonioId = bemVal.slice(4);
+  else if (bemVal.startsWith('veh:')) vehicleId = bemVal.slice(4);
+  const fields = { tipo, titulo, credor, valorOriginal, amortizadoInicial, parcelasTotal, valorParcela, periodicidade, dataInicio, juros, categoria, valorBem, patrimonioId, vehicleId, observacoes: obs };
+  D.debts = D.debts || [];
+  if (id) {
+    const d = getDebt(id); if (!d) { closeOverlay('modal-debt'); return; }
+    // Validação: valor original não pode ficar abaixo do já pago (inicial + pagamentos reais).
+    const pagosCents = _debtPaymentsOf(id).reduce((s, p) => s + _c(p.valor), 0);
+    if (_c(amortizadoInicial) + pagosCents > _c(valorOriginal)) { gdToast('Valor original menor que o total já pago. Ajuste os valores.', { type: 'error' }); return; }
+    const statusSel = g('df-status')?.value || d.status;
+    const idx = D.debts.indexOf(d);
+    // Preserva id, _migradoDe, criadoEm e pagamentos; não duplica.
+    D.debts[idx] = _normDebt(Object.assign({}, d, fields, { status: statusSel, atualizadoEm: Date.now() }));
+  } else {
+    D.debts.push(_normDebt(fields));
+  }
+  haptic(10); save();
+  closeOverlay('modal-debt'); renderDividas();
+  if (id && document.getElementById('debt-detail-sheet')?.classList.contains('open')) openDebtDetail(id);
+  gdToast(id ? 'Dívida atualizada.' : 'Dívida cadastrada.', { type: 'success' });
+}
+
+// Compat: rotas antigas de Parcelamentos redirecionam para a central de Dívidas.
+function renderParcelamentos() { renderDividas(); }
+function openParcelForm(id) { openDebtForm(id); }
 
 // ══════════════════════════════════════════
 // CATEGORY MANAGEMENT
@@ -3844,11 +4131,13 @@ new MutationObserver((mutations) => {
 // ══════════════════════════════════════════
 // Abas reais da navegação inferior e telas internas acessadas por "Mais".
 const MAIN_TABS = ['inicio','semana','mes','mais'];
-const INTERNAL_TABS = ['pendencias','fixos','reserva','patrimonio','parcelamentos','conversor','pesquisa','ajustes','metas','lembretes'];
+const INTERNAL_TABS = ['pendencias','fixos','reserva','patrimonio','dividas','conversor','pesquisa','ajustes','metas','lembretes'];
 var _currentMainTab = 'inicio';        // última aba principal ativa (p/ engrenagem)
 var _navOrigin      = 'mais';           // origem do Voltar de telas internas
 
 function switchTab(tab, origin) {
+  // Compat: a antiga aba "Parcelamentos" agora é a central de Dívidas.
+  if (tab === 'parcelamentos') tab = 'dividas';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   const page = document.getElementById('page-'+tab);
@@ -3878,7 +4167,7 @@ function switchTab(tab, origin) {
   if(tab==='lembretes')  renderLembretes();
   if(tab==='pendencias') renderPendencias();
   if(tab==='patrimonio') renderPatrimonio();
-  if(tab==='parcelamentos') renderParcelamentos();
+  if(tab==='dividas') renderDividas();
   // FAB "+" (novo lançamento): visível nas abas de conteúdo Início/Semana/Mês;
   // oculto em Mais e telas internas (que têm suas próprias ações).
   const fab = document.getElementById('global-fab');
