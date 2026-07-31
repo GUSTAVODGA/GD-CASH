@@ -281,10 +281,12 @@ async function loadFromCloud() {
       if (!D.fixedStart) { D.fixedStart = dateStr(new Date()); _fxNeedSave = true; }
       // Limpa marcadores de baixa órfãos vindos da nuvem; persiste pelo fluxo normal (save()).
       const _fxCleaned = reconcileFixedPayments();
-      const _finCleaned = reconcilePatFinPayments();
-      const _instCleaned = reconcileInstallmentPayments();
+      // Consolidação canônica de dívidas (idempotente) + reconciliação unificada.
+      // Roda após loadFromCloud para migrar dados antigos e limpar marcadores órfãos.
+      const _migrated = migrateDebtsV1();
+      const _debtCleaned = reconcileDebtPayments();
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
-      if (_fxCleaned || _finCleaned || _instCleaned || _fxNeedSave) save();
+      if (_fxCleaned || _migrated || _debtCleaned || _fxNeedSave) save();
     } else {
       // Primeiro login — oferece migrar dados locais existentes
       const local = localStorage.getItem('gdcash_v1');
@@ -495,8 +497,8 @@ function renderMais() {
   const resTgt = (D.emergency && D.emergency.target) || 0;
   const resPct = resTgt > 0 ? Math.min(100, Math.round(resCur / resTgt * 100)) : 0;
   const net = _patNetTotals(_patUnifiedItems()).net;
-  const parcAtivos = (D.installments || []).filter(i => !_instState(i).concluido).length;
-  const parcAberto = (D.installments || []).reduce((s, i) => s + Math.max(0, _instState(i).emAberto), 0);
+  const parcAtivos = (D.debts || []).filter(d => d.tipo === 'parcelamento' && !_debtQuitada(d)).length;
+  const parcAberto = (D.debts || []).filter(d => d.tipo === 'parcelamento').reduce((s, d) => s + _debtSaldo(d), 0);
   const themeLbls = { light:'Claro', dark:'Escuro', auto:'Automático' };
   const theme = themeLbls[localStorage.getItem('gdcash_theme') || 'auto'] || 'Automático';
 
@@ -835,6 +837,12 @@ function defaultData() {
     patrimonios: [],
     installments: [],
     installmentPayments: [],
+    // Fonte única canônica de dívidas (financiamentos, parcelamentos, empréstimos…).
+    // installments/installmentPayments e patrimonios[].financiamentos permanecem
+    // apenas como BACKUP pós-migração — não são lidos nos cálculos.
+    debts: [],
+    debtPayments: [],
+    _debtsSchema: 0,
   };
 }
 
@@ -853,6 +861,8 @@ let D = (() => {
       if(!p.patrimonios) p.patrimonios=[];
       if(!Array.isArray(p.installments)) p.installments=[];
       if(!Array.isArray(p.installmentPayments)) p.installmentPayments=[];
+      if(!Array.isArray(p.debts)) p.debts=[];
+      if(!Array.isArray(p.debtPayments)) p.debtPayments=[];
       if(!Array.isArray(p.fixedPayments)) p.fixedPayments=[];
       if(!p.fixedStart)  p.fixedStart=dateStr(new Date());
       return p;
@@ -860,6 +870,10 @@ let D = (() => {
   } catch(e){}
   return defaultData();
 })();
+
+// Migração canônica de dívidas no boot local (offline / antes do loadFromCloud).
+// Idempotente: flag global + identidade por origem. loadFromCloud roda de novo sem duplicar.
+try { if (migrateDebtsV1()) localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch (e) {}
 
 // ══════════════════════════════════════════
 // MODAL SYSTEM
@@ -1804,10 +1818,9 @@ function deleteExpense(id) {
   D.expenses=D.expenses.filter(e=>e.id!==id);
   // Se era uma despesa de baixa, remove o marcador órfão (o fixo volta a pendente/vencido).
   reconcileFixedPayments();
-  // Se era um pagamento de financiamento, remove o pagamento e devolve o valor ao saldo.
-  reconcilePatFinPayments();
-  // Se era uma parcela de compra parcelada, remove o marcador (a parcela volta a prevista).
-  reconcileInstallmentPayments();
+  // Dívidas (financiamento/parcelamento/…): remove o marcador do pagamento, revertendo
+  // a amortização (saldo/progresso/parcela recalculados por derivação). Sem órfãos.
+  reconcileDebtPayments();
   save();
   refreshAfterDayEdit();
   refreshHomeFixosAlert();
@@ -3118,6 +3131,265 @@ function addPlatform() { D.platforms.push({id:uid(),name:'Nova Fonte',color:PALE
 function deletePlatform(i) { if(D.platforms.length<=1){gdToast('Mantenha ao menos 1 plataforma.', { type: 'error' });return;} D.platforms.splice(i,1); save(); openPlatSettings(); }
 
 // ══════════════════════════════════════════
+// DÍVIDAS — FONTE ÚNICA CANÔNICA (D.debts + D.debtPayments)
+// ══════════════════════════════════════════
+// Toda dívida (financiamento, parcelamento, empréstimo, pessoal, outro) é UM único
+// registro em D.debts. Patrimônio, central de Dívidas, pagamentos e projeções
+// consultam/editam o MESMO registro — não há cópias.
+//
+// Modelo:
+//   debt = { id, tipo, titulo, credor, valorOriginal, amortizadoInicial,
+//            parcelasTotal, valorParcela, periodicidade, dataInicio, juros,
+//            categoria, valorBem, patrimonioId, vehicleId, status,
+//            observacoes, criadoEm, atualizadoEm, _migradoDe }
+//   debtPayment = { id, debtId, parcelNo|null, expenseId, valor, data, criadoEm }
+//   despesa gerada: meta:{ source:'debt', debtId, parcelNo|null }
+//
+// Fórmula canônica (cálculos em CENTAVOS inteiros, sem ponto flutuante):
+//   valorPago    = amortizadoInicial + Σ(pagamentos.valor)
+//   saldoDevedor = max(0, valorOriginal − valorPago)              (nunca negativo)
+//   progresso(%) = clamp[0,100]( valorPago / valorOriginal )       (por VALOR)
+//   parcelasPagas: alocação por cobertura — parcela k está paga quando o valorPago
+//                  cobre a soma nominal das parcelas 1..k (pagamento parcial NÃO
+//                  conta a parcela até cobri-la integralmente).
+// Impede dupla subtração: amortizadoInicial e pagamentos são somados uma única vez.
+// ══════════════════════════════════════════
+function _c(v) { return Math.round((Number(v) || 0) * 100); }   // reais → centavos (inteiro)
+function _r(c) { return (Math.round(Number(c) || 0)) / 100; }   // centavos → reais
+
+const DEBT_TIPOS = ['financiamento', 'parcelamento', 'emprestimo', 'pessoal', 'outro'];
+const DEBT_STATUS_MANUAIS = ['pausada', 'cancelada']; // demais status são derivados
+
+function _normDebt(raw) {
+  const d = (raw && typeof raw === 'object') ? raw : {};
+  const tipo = DEBT_TIPOS.includes(d.tipo) ? d.tipo : 'outro';
+  const status = DEBT_STATUS_MANUAIS.includes(d.status) ? d.status : 'ativa';
+  return {
+    id: d.id || uid(),
+    tipo,
+    titulo: String(d.titulo || '').trim() || 'Dívida',
+    credor: String(d.credor || '').trim(),
+    valorOriginal: Math.max(0, _r(_c(d.valorOriginal))),
+    amortizadoInicial: _r(_c(d.amortizadoInicial)),           // já amortizado antes do app
+    parcelasTotal: Math.max(0, Math.round(Number(d.parcelasTotal) || 0)),
+    valorParcela: Math.max(0, _r(_c(d.valorParcela))),
+    periodicidade: d.periodicidade || 'mensal',
+    dataInicio: d.dataInicio || '',
+    juros: (d.juros === '' || d.juros == null) ? null : (Number(d.juros) || 0),
+    categoria: d.categoria || '',                              // categoria da despesa (parcelamento)
+    valorBem: (d.valorBem === '' || d.valorBem == null) ? null : Math.max(0, _r(_c(d.valorBem))),
+    patrimonioId: d.patrimonioId || null,
+    vehicleId: d.vehicleId || null,
+    status,
+    observacoes: String(d.observacoes || '').trim(),
+    criadoEm: d.criadoEm || Date.now(),
+    atualizadoEm: d.atualizadoEm || Date.now(),
+    _migradoDe: d._migradoDe || null,                          // { source, id, patrimonioId? }
+  };
+}
+
+function getDebt(id) { return (D.debts || []).find(d => d.id === id) || null; }
+function _debtPaymentsOf(debtId) { return (D.debtPayments || []).filter(p => p.debtId === debtId); }
+// valorPago em centavos = amortização inicial + soma dos pagamentos
+function _debtPagoCents(debt) {
+  const pays = _debtPaymentsOf(debt.id).reduce((s, p) => s + _c(p.valor), 0);
+  return _c(debt.amortizadoInicial) + pays;
+}
+function _debtSaldoCents(debt) { return Math.max(0, _c(debt.valorOriginal) - _debtPagoCents(debt)); }
+function _debtSaldo(debt) { return _r(_debtSaldoCents(debt)); }
+function _debtPago(debt) { return _r(Math.min(_c(debt.valorOriginal), Math.max(0, _debtPagoCents(debt)))); }
+function _debtProgress(debt) {
+  const base = _c(debt.valorOriginal);
+  if (base <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round(Math.max(0, _debtPagoCents(debt)) / base * 100)));
+}
+// Valor nominal da parcela k (1..N) em centavos; a última absorve o resíduo.
+function _debtParcelaCents(debt, k) {
+  const N = debt.parcelasTotal || 0;
+  if (N <= 0) return 0;
+  const vp = _c(debt.valorParcela);
+  if (k >= N) return _c(debt.valorOriginal) - vp * (N - 1);
+  return vp;
+}
+// Alocação de pagamentos: parcela k paga quando valorPago cobre a soma nominal 1..k.
+function _debtParcelasPagas(debt) {
+  const N = debt.parcelasTotal || 0;
+  if (N <= 0) return 0;
+  const pago = _debtPagoCents(debt);
+  let acc = 0, count = 0;
+  for (let k = 1; k <= N; k++) { acc += _debtParcelaCents(debt, k); if (pago >= acc) count++; else break; }
+  return count;
+}
+function _debtProximaParcelaNo(debt) {
+  const N = debt.parcelasTotal || 0;
+  if (N <= 0) return null;
+  const pagas = _debtParcelasPagas(debt);
+  return pagas >= N ? null : pagas + 1;
+}
+// Vencimento da parcela k: dataInicio + periodicidade·(k−1). Mensal clampa dia curto.
+function _debtDueDate(debt, k) {
+  const base = parseDate(debt.dataInicio);
+  if (!base || isNaN(base)) return '';
+  const i = Math.max(1, k) - 1;
+  const freq = debt.periodicidade || 'mensal';
+  let dt;
+  if (freq === 'semanal')        dt = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 7 * i);
+  else if (freq === 'quinzenal') dt = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 14 * i);
+  else if (freq === 'anual')     dt = new Date(base.getFullYear() + i, base.getMonth(), base.getDate());
+  else {
+    const y = base.getFullYear(), mo = base.getMonth() + i, day = base.getDate();
+    const last = new Date(y, mo + 1, 0).getDate();
+    dt = new Date(y, mo, Math.min(day, last));
+  }
+  return dateStr(dt);
+}
+// Quanto ainda falta para cobrir integralmente a próxima parcela (em reais).
+function _debtProximaValor(debt) {
+  const no = _debtProximaParcelaNo(debt);
+  if (!no) return 0;
+  let acc = 0;
+  for (let k = 1; k <= no; k++) acc += _debtParcelaCents(debt, k);
+  return _r(Math.max(0, acc - _debtPagoCents(debt)));
+}
+function _debtQuitada(debt) { return _c(debt.valorOriginal) > 0 && _debtSaldoCents(debt) <= 0; }
+// Status efetivo: manuais (pausada/cancelada) têm prioridade; demais são derivados.
+function _debtStatus(debt) {
+  if (DEBT_STATUS_MANUAIS.includes(debt.status)) return debt.status;
+  if (_debtQuitada(debt)) return 'quitada';
+  const no = _debtProximaParcelaNo(debt);
+  if (no) { const dd = _debtDueDate(debt, no); if (dd && dd < todayStr()) return 'atrasada'; }
+  return 'ativa';
+}
+function _debtAtrasada(debt) { return _debtStatus(debt) === 'atrasada'; }
+// Estado agregado — usado por TODAS as telas (fonte única).
+function _debtState(debt) {
+  const proximaNo = _debtProximaParcelaNo(debt);
+  return {
+    valorOriginal: debt.valorOriginal,
+    pago: _debtPago(debt),
+    saldo: _debtSaldo(debt),
+    progress: _debtProgress(debt),
+    parcelasTotal: debt.parcelasTotal || 0,
+    parcelasPagas: _debtParcelasPagas(debt),
+    proximaNo,
+    proximaVenc: proximaNo ? _debtDueDate(debt, proximaNo) : '',
+    proximaValor: proximaNo ? _debtProximaValor(debt) : 0,
+    status: _debtStatus(debt),
+    quitada: _debtQuitada(debt),
+    ativa: !['quitada', 'cancelada'].includes(_debtStatus(debt)),
+  };
+}
+// Dívidas vinculadas a um patrimônio (por id) ou a um veículo (por vehicleId).
+function _debtsForPatrimonio(patId) { return (D.debts || []).filter(d => d.patrimonioId && d.patrimonioId === patId); }
+function _debtsForVehicle(vehId) { return (D.debts || []).filter(d => d.vehicleId && d.vehicleId === vehId); }
+
+// Registra UM pagamento: cria a despesa real e o marcador de pagamento (uma única vez).
+// valor livre (aceita parcial, antecipado ou diferente da parcela). Retorna expenseId.
+function _debtRegistrarPagamento(debtId, opts) {
+  const d = getDebt(debtId);
+  if (!d) return null;
+  const valor = Math.max(0, _r(_c(opts.valor)));
+  if (valor <= 0) return null;
+  const data = opts.data || todayStr();
+  const parcelNo = opts.parcelNo || null;
+  const categoria = opts.categoria || d.categoria || (D.expCats && D.expCats[0]) || 'Outros';
+  const descBase = d.tipo === 'parcelamento' && d.parcelasTotal
+    ? `${d.titulo} (parcela ${parcelNo || (_debtParcelasPagas(d) + 1)}/${d.parcelasTotal})`
+    : `${d.titulo}${d.credor ? ' — ' + d.credor : ''}`;
+  const descricao = (opts.descricao && opts.descricao.trim()) || descBase;
+  const expId = uid();
+  D.expenses.push({ id: expId, date: data, category: categoria, amount: valor, description: descricao,
+    meta: { source: 'debt', debtId: d.id, parcelNo: parcelNo } });
+  D.debtPayments = D.debtPayments || [];
+  D.debtPayments.push({ id: uid(), debtId: d.id, parcelNo: parcelNo, expenseId: expId, valor: valor, data: data, criadoEm: Date.now() });
+  d.atualizadoEm = Date.now();
+  return expId;
+}
+
+// Reconciliação: remove marcadores órfãos (despesa OU dívida inexistente). Como o
+// saldo é derivado, remover o marcador reverte automaticamente a amortização.
+function reconcileDebtPayments() {
+  if (!Array.isArray(D.debtPayments)) { D.debtPayments = []; return false; }
+  const expIds = new Set((D.expenses || []).map(e => e.id));
+  const debtIds = new Set((D.debts || []).map(d => d.id));
+  const before = D.debtPayments.length;
+  D.debtPayments = D.debtPayments.filter(p => p && p.debtId && debtIds.has(p.debtId) && (!p.expenseId || expIds.has(p.expenseId)));
+  return D.debtPayments.length !== before;
+}
+
+// ── Migração idempotente V1: consolida installments + patrimonios.financiamentos ──
+// Idempotência dupla: flag global (_debtsSchema) E identidade por origem (_migradoDe).
+// IDs de origem preservados quando livres; em colisão, novo id estável + _migradoDe.
+function migrateDebtsV1() {
+  if (!Array.isArray(D.debts)) D.debts = [];
+  if (!Array.isArray(D.debtPayments)) D.debtPayments = [];
+  const usedIds = new Set(D.debts.map(d => d.id));
+  const sameOrigin = (a, b) => a && b && a.source === b.source && String(a.id) === String(b.id) &&
+    ((a.patrimonioId || null) === (b.patrimonioId || null));
+  const alreadyMigrated = (src) => D.debts.some(d => sameOrigin(d._migradoDe, src));
+  const stableId = (origId) => {
+    if (origId && !usedIds.has(origId)) { usedIds.add(origId); return origId; }
+    let nid = uid(); while (usedIds.has(nid)) nid = uid(); usedIds.add(nid); return nid;
+  };
+  let changed = false;
+
+  // 1) Parcelamentos → dívida do tipo 'parcelamento'
+  (D.installments || []).forEach(inst => {
+    if (!inst || !inst.id) return;
+    const src = { source: 'installment', id: inst.id };
+    if (alreadyMigrated(src)) return;
+    const id = stableId(inst.id);
+    D.debts.push(_normDebt({
+      id, tipo: 'parcelamento', titulo: inst.descricao, credor: inst.conta,
+      valorOriginal: inst.valorTotal, amortizadoInicial: 0,
+      parcelasTotal: inst.parcelas, valorParcela: inst.valorParcela,
+      periodicidade: inst.frequencia, dataInicio: inst.dataPrimeira,
+      categoria: inst.categoria, observacoes: inst.observacoes,
+      criadoEm: inst.criadoEm, _migradoDe: src,
+    }));
+    (D.installmentPayments || []).filter(p => p.installmentId === inst.id).forEach(p => {
+      D.debtPayments.push({ id: uid(), debtId: id, parcelNo: p.parcelNo || null, expenseId: p.expenseId, valor: p.valor, data: p.paidDate, criadoEm: p.criadoEm || Date.now() });
+    });
+    changed = true;
+  });
+
+  // 2) Financiamentos de patrimônio → dívida do tipo 'financiamento'
+  (D.patrimonios || []).forEach(p => {
+    (p.financiamentos || []).forEach(f => {
+      if (!f || !f.id) return;
+      const src = { source: 'patrimonio-financiamento', id: f.id, patrimonioId: p.id };
+      if (alreadyMigrated(src)) return;
+      const id = stableId(f.id);
+      const isVeic = p.tipo === 'veiculo';
+      // Fórmula que preserva o saldo EXATO (centavo a centavo) e evita dupla subtração:
+      //   saldo = valorOriginal − amortizadoInicial − Σpagamentos = f.saldoDevedor
+      // Defensivo: se valorFinanciado faltar (0), usa (saldo + pagamentos) como base,
+      // para NÃO descartar a dívida (recuperação em vez de perda).
+      const pagosCents = (f.pagamentos || []).reduce((s, pg) => s + _c(pg.valor), 0);
+      const saldoCents = _c(f.saldoDevedor);
+      const valFinCents = _c(f.valorFinanciado);
+      const baseCents = valFinCents > 0 ? valFinCents : (saldoCents + pagosCents);
+      D.debts.push(_normDebt({
+        id, tipo: 'financiamento', titulo: (p.nome || f.instituicao || 'Financiamento'),
+        credor: f.instituicao, valorOriginal: _r(baseCents),
+        amortizadoInicial: _r(baseCents - saldoCents - pagosCents), valorBem: f.valorBem,
+        periodicidade: f.frequencia, dataInicio: f.dataInicio, observacoes: f.observacoes,
+        patrimonioId: isVeic ? null : p.id,
+        vehicleId: isVeic ? (p._idOriginal || p.id) : null,
+        _migradoDe: src,
+      }));
+      (f.pagamentos || []).forEach(pg => {
+        D.debtPayments.push({ id: uid(), debtId: id, parcelNo: null, expenseId: pg.expenseId, valor: pg.valor, data: pg.data, criadoEm: pg.criadoEm || Date.now() });
+      });
+      changed = true;
+    });
+  });
+
+  if (D._debtsSchema !== 1) { D._debtsSchema = 1; changed = true; }
+  return changed;
+}
+
+// ══════════════════════════════════════════
 // PARCELAMENTOS (Compras Parceladas)
 // Módulo INDEPENDENTE de Patrimônio/Financiamento. Espelha o padrão dos Gastos
 // Fixos: o cadastro (D.installments) é o "plano" imutável; cada parcela confirmada
@@ -3217,27 +3489,29 @@ function reconcileInstallmentPayments() {
   return D.installmentPayments.length !== before;
 }
 
+// A tela de Parcelamentos agora é uma CAMADA de leitura/escrita sobre D.debts
+// (tipo 'parcelamento'). Não há mais D.installments ativo — apenas backup pós-migração.
+function _parcelDebts() { return (D.debts || []).filter(d => d.tipo === 'parcelamento'); }
+
 function renderParcelamentos() {
   const totalEl = document.getElementById('parcel-total');
   const list = document.getElementById('parcel-list');
-  const insts = D.installments || [];
-  const emAbertoTotal = insts.reduce((s, i) => s + Math.max(0, _instState(i).emAberto), 0);
+  const debts = _parcelDebts();
+  const emAbertoTotal = debts.reduce((s, d) => s + _debtSaldo(d), 0);
   if (totalEl) totalEl.textContent = R(emAbertoTotal);
   if (!list) return;
-  if (!insts.length) { list.innerHTML = '<div class="empty-state">Nenhuma compra parcelada cadastrada</div>'; return; }
+  if (!debts.length) { list.innerHTML = '<div class="empty-state">Nenhuma compra parcelada cadastrada</div>'; return; }
   // Ordenação visual: ativos primeiro (por próxima parcela), concluídos ao fim.
-  const ordered = [...insts].sort((a, b) => {
-    const sa = _instState(a), sb = _instState(b);
-    if (sa.concluido !== sb.concluido) return sa.concluido ? 1 : -1;
-    return String(sa.proximaVenc || '').localeCompare(String(sb.proximaVenc || '')) ||
-      String(a.descricao || '').localeCompare(String(b.descricao || ''), 'pt-BR', { sensitivity: 'base' });
+  const ordered = [...debts].map(d => ({ d, st: _debtState(d) })).sort((a, b) => {
+    if (a.st.quitada !== b.st.quitada) return a.st.quitada ? 1 : -1;
+    return String(a.st.proximaVenc || '').localeCompare(String(b.st.proximaVenc || '')) ||
+      String(a.d.titulo || '').localeCompare(String(b.d.titulo || ''), 'pt-BR', { sensitivity: 'base' });
   });
-  list.innerHTML = ordered.map(i => {
-    const st = _instState(i);
-    const metaBits = [i.categoria, i.conta].filter(Boolean).join(' · ');
-    const chip = st.concluido
+  list.innerHTML = ordered.map(({ d, st }) => {
+    const metaBits = [d.categoria, d.credor].filter(Boolean).join(' · ');
+    const chip = st.quitada
       ? '<span class="parcel-chip parcel-chip-done">Concluído</span>'
-      : `<span class="parcel-chip parcel-chip-open">${st.pagas}/${st.N}</span>`;
+      : `<span class="parcel-chip parcel-chip-open">${st.parcelasPagas}/${st.parcelasTotal}</span>`;
     // Foco do card: a próxima parcela, com o VALOR em destaque.
     const venc = st.proximaNo
       ? `<div class="parcel-next">
@@ -3245,23 +3519,23 @@ function renderParcelamentos() {
            <span class="parcel-next-line">${fmtShort(st.proximaVenc)} · <span class="parcel-next-amt">${R(st.proximaValor)}</span></span>
          </div>`
       : '';
-    const action = st.concluido
+    const action = st.quitada
       ? '<div class="parcel-done-selo">✓ Parcelamento concluído</div>'
-      : `<button class="btn btn-secondary parcel-confirm-btn" onclick="event.stopPropagation();confirmarParcela('${i.id}')">Confirmar parcela</button>`;
+      : `<button class="btn btn-secondary parcel-confirm-btn" onclick="event.stopPropagation();confirmarParcela('${d.id}')">Confirmar parcela</button>`;
     return `
-      <div class="parcel-item" onclick="openParcelDetail('${i.id}')">
+      <div class="parcel-item" onclick="openParcelDetail('${d.id}')">
         <div class="parcel-main">
           <div class="parcel-info">
-            <div class="parcel-name">${escHtml(i.descricao)}</div>
+            <div class="parcel-name">${escHtml(d.titulo)}</div>
             <div class="parcel-meta">${metaBits ? `<span class="parcel-cat">${escHtml(metaBits)}</span>` : ''}${chip}</div>
           </div>
           <div class="parcel-end">
             <span class="parcel-amt-lbl">Valor total</span>
-            <span class="parcel-amt">${R(i.valorTotal)}</span>
+            <span class="parcel-amt">${R(d.valorOriginal)}</span>
           </div>
         </div>
         ${venc}
-        <div class="parcel-progress"><span class="parcel-progress-fill" style="width:${st.pct}%"></span></div>
+        <div class="parcel-progress"><span class="parcel-progress-fill" style="width:${st.progress}%"></span></div>
         <div class="parcel-action-row">${action}</div>
       </div>`;
   }).join('');
@@ -3281,22 +3555,22 @@ function _parcelSuggestValor() {
   if (total > 0 && n >= 1) vpEl.value = _round2(total / n);
 }
 function openParcelForm(id) {
-  const inst = id ? (D.installments || []).find(x => x.id === id) : null;
-  document.getElementById('parcel-modal-title').textContent = inst ? 'Editar parcelamento' : 'Nova compra parcelada';
-  document.getElementById('parcel-edit-id').value = inst ? inst.id : '';
-  document.getElementById('pc-desc').value = inst ? inst.descricao : '';
-  document.getElementById('pc-total').value = inst ? inst.valorTotal : '';
-  document.getElementById('pc-n').value = inst ? inst.parcelas : '';
+  const d = id ? getDebt(id) : null;
+  document.getElementById('parcel-modal-title').textContent = d ? 'Editar parcelamento' : 'Nova compra parcelada';
+  document.getElementById('parcel-edit-id').value = d ? d.id : '';
+  document.getElementById('pc-desc').value = d ? d.titulo : '';
+  document.getElementById('pc-total').value = d ? d.valorOriginal : '';
+  document.getElementById('pc-n').value = d ? d.parcelasTotal : '';
   const vpEl = document.getElementById('pc-valor');
-  vpEl.value = inst ? inst.valorParcela : '';
-  vpEl.dataset.touched = inst ? '1' : '';
-  document.getElementById('pc-data').value = inst ? inst.dataPrimeira : dateStr(new Date());
-  document.getElementById('pc-freq').value = inst ? inst.frequencia : 'mensal';
-  _parcelFillCatSelect(document.getElementById('pc-cat'), inst ? inst.categoria : ((D.expCats || [])[0] || ''));
-  document.getElementById('pc-conta').value = inst ? inst.conta : '';
-  document.getElementById('pc-obs').value = inst ? inst.observacoes : '';
-  // Com parcelas já confirmadas, o nº de parcelas fica travado (evita inconsistência).
-  const paid = inst ? _instPaidCount(inst) : 0;
+  vpEl.value = d ? d.valorParcela : '';
+  vpEl.dataset.touched = d ? '1' : '';
+  document.getElementById('pc-data').value = d ? d.dataInicio : dateStr(new Date());
+  document.getElementById('pc-freq').value = d ? d.periodicidade : 'mensal';
+  _parcelFillCatSelect(document.getElementById('pc-cat'), d ? d.categoria : ((D.expCats || [])[0] || ''));
+  document.getElementById('pc-conta').value = d ? d.credor : '';
+  document.getElementById('pc-obs').value = d ? d.observacoes : '';
+  // Com parcelas já pagas, o nº de parcelas fica travado (evita inconsistência).
+  const paid = d ? _debtParcelasPagas(d) : 0;
   const nInput = document.getElementById('pc-n');
   nInput.disabled = paid > 0;
   const hint = document.getElementById('pc-n-hint');
@@ -3319,16 +3593,24 @@ function salvarParcelamento() {
   if (!(parcelas >= 1)) { gdToast('Informe a quantidade de parcelas.', { type: 'error' }); return; }
   if (!dataPrimeira) { gdToast('Informe a data da primeira parcela.', { type: 'error' }); return; }
   if (!(valorParcela > 0)) valorParcela = _round2(valorTotal / parcelas);
-  D.installments = D.installments || [];
+  D.debts = D.debts || [];
   if (id) {
-    const idx = D.installments.findIndex(x => x.id === id);
+    const idx = D.debts.findIndex(x => x.id === id);
     if (idx < 0) { closeOverlay('modal-parcel'); return; }
-    // Nº de parcelas não pode ficar abaixo do já confirmado (mantém o travamento do form).
-    const paid = _instPaidCount(D.installments[idx]);
-    const N = paid > 0 ? D.installments[idx].parcelas : parcelas;
-    D.installments[idx] = _normInstallment({ ...D.installments[idx], descricao, valorTotal, parcelas: N, valorParcela, dataPrimeira, frequencia, categoria, conta, observacoes });
+    // Nº de parcelas não pode ficar abaixo do já pago (mantém o travamento do form).
+    const paid = _debtParcelasPagas(D.debts[idx]);
+    const N = paid > 0 ? D.debts[idx].parcelasTotal : parcelas;
+    D.debts[idx] = _normDebt(Object.assign({}, D.debts[idx], {
+      titulo: descricao, valorOriginal: valorTotal, parcelasTotal: N, valorParcela,
+      dataInicio: dataPrimeira, periodicidade: frequencia, categoria, credor: conta,
+      observacoes, tipo: 'parcelamento', atualizadoEm: Date.now(),
+    }));
   } else {
-    D.installments.push(_normInstallment({ descricao, valorTotal, parcelas, valorParcela, dataPrimeira, frequencia, categoria, conta, observacoes }));
+    D.debts.push(_normDebt({
+      tipo: 'parcelamento', titulo: descricao, valorOriginal: valorTotal, amortizadoInicial: 0,
+      parcelasTotal: parcelas, valorParcela, dataInicio: dataPrimeira, periodicidade: frequencia,
+      categoria, credor: conta, observacoes,
+    }));
   }
   haptic(10); save();
   closeOverlay('modal-parcel');
@@ -3337,20 +3619,19 @@ function salvarParcelamento() {
   gdToast(id ? 'Parcelamento atualizado.' : 'Compra parcelada cadastrada.', { type: 'success' });
 }
 
-// ── Confirmar parcela: cria uma despesa real e marca a parcela como paga ──
+// ── Confirmar parcela: registra o pagamento da próxima parcela (sequencial) ──
 var _parcelConfirmTarget = null;
 function confirmarParcela(id) {
-  const inst = (D.installments || []).find(x => x.id === id);
-  if (!inst) return;
-  const st = _instState(inst);
+  const d = getDebt(id);
+  if (!d) return;
+  const st = _debtState(d);
   // Bloqueio: nada a confirmar quando já concluído (nunca além da última parcela).
-  if (st.concluido || !st.proximaNo) { gdToast('Parcelamento já concluído.', { type: 'info' }); return; }
+  if (st.quitada || !st.proximaNo) { gdToast('Parcelamento já concluído.', { type: 'info' }); return; }
   _parcelConfirmTarget = { id: id, parcelNo: st.proximaNo };
-  const valor = _instParcelaValor(inst, st.proximaNo);
   const sum = document.getElementById('parcel-confirm-summary');
   if (sum) sum.innerHTML =
-    `<div class="pagfin-sum-row"><span>${escHtml(inst.descricao)}</span><span>Parcela ${st.proximaNo}/${st.N}</span></div>` +
-    `<div class="pagfin-sum-row"><span>Valor</span><span>${R(valor)}</span></div>`;
+    `<div class="pagfin-sum-row"><span>${escHtml(d.titulo)}</span><span>Parcela ${st.proximaNo}/${st.parcelasTotal}</span></div>` +
+    `<div class="pagfin-sum-row"><span>Valor</span><span>${R(st.proximaValor)}</span></div>`;
   const dateEl = document.getElementById('parcel-confirm-date');
   if (dateEl) dateEl.value = st.proximaVenc || dateStr(new Date());
   const btn = document.getElementById('parcel-confirm-save');
@@ -3360,14 +3641,13 @@ function confirmarParcela(id) {
 function salvarConfirmarParcela() {
   const t = _parcelConfirmTarget;
   if (!t) return;
-  const inst = (D.installments || []).find(x => x.id === t.id);
-  if (!inst) { closeOverlay('parcel-confirm-sheet'); return; }
+  const d = getDebt(t.id);
+  if (!d) { closeOverlay('parcel-confirm-sheet'); return; }
   const btn = document.getElementById('parcel-confirm-save');
   if (btn && btn.disabled) return; // impede duplo toque
-  const st = _instState(inst);
-  // Revalida no momento da confirmação: só a PRÓXIMA parcela sequencial, nunca além
-  // da última, nunca duplicando (protege contra duplo toque e estado obsoleto).
-  if (st.concluido || t.parcelNo !== st.proximaNo || _instPayment(inst.id, t.parcelNo)) {
+  const st = _debtState(d);
+  // Revalida: só a PRÓXIMA parcela sequencial, nunca além da última (protege duplo toque).
+  if (st.quitada || t.parcelNo !== st.proximaNo) {
     closeOverlay('parcel-confirm-sheet');
     gdToast('Esta parcela não pode ser confirmada.', { type: 'info' });
     renderParcelamentos();
@@ -3375,78 +3655,71 @@ function salvarConfirmarParcela() {
   }
   if (btn) btn.disabled = true;
   const date = localDateKey(document.getElementById('parcel-confirm-date').value) || dateStr(new Date());
-  const valor = _instParcelaValor(inst, st.proximaNo);
-  const expId = uid();
-  // Metadados de auditoria/reconciliação na despesa gerada.
-  D.expenses.push({
-    id: expId, date, category: inst.categoria, amount: valor,
-    description: `${inst.descricao} (parcela ${st.proximaNo}/${st.N})`,
-    meta: { source: 'installment', installmentId: inst.id, parcelNo: st.proximaNo },
-  });
-  D.installmentPayments = D.installmentPayments || [];
-  D.installmentPayments.push({ installmentId: inst.id, parcelNo: st.proximaNo, expenseId: expId, valor: valor, paidDate: date });
+  // Registra o pagamento (valor = quanto falta para cobrir a parcela) — uma única despesa.
+  _debtRegistrarPagamento(d.id, { valor: st.proximaValor, data: date, parcelNo: st.proximaNo, categoria: d.categoria });
   _parcelConfirmTarget = null;
   haptic(10); save();
   closeOverlay('parcel-confirm-sheet');
   renderParcelamentos();
-  if (document.getElementById('parcel-detail-sheet')?.classList.contains('open')) openParcelDetail(inst.id);
+  if (document.getElementById('parcel-detail-sheet')?.classList.contains('open')) openParcelDetail(d.id);
   refreshAfterDayEdit();
-  const done = _instState(inst).concluido;
+  const done = _debtQuitada(d);
   gdToast(done ? 'Parcela confirmada. Parcelamento concluído! 🎉' : 'Parcela confirmada. Lançamento criado em Despesas.', { type: 'success' });
 }
 
 function openParcelDetail(id) {
-  const inst = (D.installments || []).find(x => x.id === id);
-  if (!inst) return;
+  const d = getDebt(id);
+  if (!d) return;
   const body = document.getElementById('parcel-detail-body');
   if (!body) return;
-  const st = _instState(inst);
-  const metaBits = [inst.categoria, inst.conta].filter(Boolean).join(' · ');
-  const pays = (D.installmentPayments || []).filter(p => p.installmentId === inst.id)
-    .slice().sort((a, b) => (b.parcelNo || 0) - (a.parcelNo || 0));
+  const st = _debtState(d);
+  const restantes = Math.max(0, st.parcelasTotal - st.parcelasPagas);
+  const metaBits = [d.categoria, d.credor].filter(Boolean).join(' · ');
+  const pays = _debtPaymentsOf(d.id).slice()
+    .sort((a, b) => (b.parcelNo || 0) - (a.parcelNo || 0) || String(b.data || '').localeCompare(String(a.data || '')));
   const histHtml = pays.length === 0
     ? '<div class="pagfin-empty">Nenhuma parcela confirmada ainda.</div>'
     : pays.map(p => `
         <div class="pagfin-row">
           <div class="pagfin-row-body">
-            <span class="pagfin-row-desc"><span class="parcel-paid-chip">✓ Paga</span>Parcela ${p.parcelNo}/${st.N}</span>
-            <span class="pagfin-row-date">${fmtShort(p.paidDate)}</span>
+            <span class="pagfin-row-desc"><span class="parcel-paid-chip">✓ Paga</span>${p.parcelNo ? `Parcela ${p.parcelNo}/${st.parcelasTotal}` : 'Pagamento'}</span>
+            <span class="pagfin-row-date">${fmtShort(p.data)}</span>
           </div>
           <span class="pagfin-row-val">−${R(p.valor || 0)}</span>
         </div>`).join('');
   const proxima = st.proximaNo
     ? `<div class="parcel-next-row"><span class="parcel-next-lbl">Próxima parcela</span><span class="parcel-next-val">${st.proximaNo}ª · ${fmtShort(st.proximaVenc)} · ${R(st.proximaValor)}</span></div>`
     : '';
-  const action = st.concluido
+  const action = st.quitada
     ? '<div class="parcel-done-selo">✓ Parcelamento concluído</div>'
-    : `<button class="btn btn-primary parcel-confirm-primary" onclick="confirmarParcela('${inst.id}')">Confirmar parcela</button>`;
+    : `<button class="btn btn-primary parcel-confirm-primary" onclick="confirmarParcela('${d.id}')">Confirmar parcela</button>`;
   body.innerHTML = `
     <div class="parcel-det-head">
-      <div class="parcel-det-name">${escHtml(inst.descricao)}</div>
+      <div class="parcel-det-name">${escHtml(d.titulo)}</div>
       ${metaBits ? `<div class="parcel-det-sub">${escHtml(metaBits)}</div>` : ''}
     </div>
-    <div class="parcel-progress"><span class="parcel-progress-fill" style="width:${st.pct}%"></span></div>
+    <div class="parcel-progress"><span class="parcel-progress-fill" style="width:${st.progress}%"></span></div>
     <div class="pagfin-grid">
-      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Total</span><span class="pagfin-cell-val">${R(inst.valorTotal)}</span></div>
-      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Pagas</span><span class="pagfin-cell-val pagfin-pos">${st.pagas}/${st.N}</span></div>
-      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Restantes</span><span class="pagfin-cell-val">${st.restantes}</span></div>
-      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Concluído</span><span class="pagfin-cell-val">${st.pct}%</span></div>
+      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Total</span><span class="pagfin-cell-val">${R(d.valorOriginal)}</span></div>
+      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Pagas</span><span class="pagfin-cell-val pagfin-pos">${st.parcelasPagas}/${st.parcelasTotal}</span></div>
+      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Restantes</span><span class="pagfin-cell-val">${restantes}</span></div>
+      <div class="pagfin-cell"><span class="pagfin-cell-lbl">Pago</span><span class="pagfin-cell-val">${st.progress}%</span></div>
     </div>
     ${proxima}
     <div class="parcel-det-action">${action}</div>
     <div class="parcel-det-hist-lbl">Histórico das parcelas</div>
     <div class="pagfin-hist">${histHtml}</div>
     <div class="parcel-det-btns">
-      <button class="btn btn-secondary" onclick="closeOverlay('parcel-detail-sheet');openParcelForm('${inst.id}')">Editar</button>
-      <button class="btn btn-secondary parcel-del-btn" onclick="excluirParcelamento('${inst.id}')">Excluir</button>
+      <button class="btn btn-secondary" onclick="closeOverlay('parcel-detail-sheet');openParcelForm('${d.id}')">Editar</button>
+      <button class="btn btn-secondary parcel-del-btn" onclick="excluirParcelamento('${d.id}')">Excluir</button>
     </div>`;
   openOverlay('parcel-detail-sheet');
 }
 
 function excluirParcelamento(id) {
-  const inst = (D.installments || []).find(x => x.id === id);
-  if (!inst) return;
-  const paid = _instPaidCount(inst);
+  const d = getDebt(id);
+  if (!d) return;
+  const paid = _debtPaymentsOf(id).length;
   const desp = paid === 1 ? '1 despesa já registrada permanece' : `${paid} despesas já registradas permanecem`;
   gdConfirm({
     title: 'Excluir parcelamento',
@@ -3454,9 +3727,9 @@ function excluirParcelamento(id) {
     confirmText: 'Excluir parcelamento',
     variant: 'danger',
     onConfirm: () => {
-      // Remove o vínculo ativo (marcadores) e o cadastro; as despesas ficam no histórico.
-      D.installmentPayments = (D.installmentPayments || []).filter(p => p.installmentId !== id);
-      D.installments = (D.installments || []).filter(x => x.id !== id);
+      // Remove o vínculo ativo (marcadores) e a dívida; as despesas ficam no histórico.
+      D.debtPayments = (D.debtPayments || []).filter(p => p.debtId !== id);
+      D.debts = (D.debts || []).filter(x => x.id !== id);
       haptic(10); save();
       closeOverlay('parcel-detail-sheet');
       renderParcelamentos();
@@ -4528,7 +4801,7 @@ function initLongPress() {
         confirmText: 'Excluir',
         variant: 'danger',
         onConfirm: () => {
-          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); reconcilePatFinPayments(); reconcileInstallmentPayments(); }
+          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); reconcileDebtPayments(); }
           else if (type === 'inc') { D.incomeItems = (D.incomeItems||[]).filter(it => it.id !== id); }
           save(); renderInicio();
         },
@@ -6928,8 +7201,11 @@ function _patNetTotals(items) {
   const list  = items || _patUnifiedItems();
   const gross = list.filter(i => i.status !== 'vendido' && i.status !== 'inativo')
                     .reduce((s, i) => s + (i.valorEstimado || 0), 0);
-  const debt  = list.reduce((s, i) =>
-    s + (i.financiamentos || []).reduce((sf, f) => sf + (f.saldoDevedor || 0), 0), 0);
+  // Saldo devedor vem da FONTE ÚNICA de dívidas: apenas dívidas vinculadas a um bem
+  // (patrimônio ou veículo) e não canceladas reduzem o patrimônio líquido.
+  const debt  = (D.debts || [])
+    .filter(d => (d.patrimonioId || d.vehicleId) && _debtStatus(d) !== 'cancelada')
+    .reduce((s, d) => s + _debtSaldo(d), 0);
   return { gross, debt, net: gross - debt };
 }
 
@@ -7144,7 +7420,13 @@ function openPatForm(tipo, id) {
   if (!cont) return;
   const tipoLbl = PAT_TIPO_LABELS[t] || 'Patrimônio';
   const d = p?.detalhes || {};
-  const fin0 = (p?.financiamentos || [])[0] || null; // financiamento principal (para o switch inline)
+  // Financiamento principal vem da FONTE ÚNICA de dívidas (D.debts), não mais embutido.
+  const _pDebt = p ? _patPrincipalDebt(p) : null;
+  const fin0 = _pDebt ? {
+    instituicao: _pDebt.credor, valorBem: _pDebt.valorBem, valorFinanciado: _pDebt.valorOriginal,
+    saldoDevedor: _debtSaldo(_pDebt), dataInicio: _pDebt.dataInicio, frequencia: _pDebt.periodicidade,
+    observacoes: _pDebt.observacoes,
+  } : null;
   const finOn = !!fin0;
   const freqSel = ['mensal','quinzenal','semanal','anual','irregular'].map(fr =>
     `<option value="${fr}" ${(fin0?.frequencia||'mensal')===fr?'selected':''}>${({mensal:'Mensal',quinzenal:'Quinzenal',semanal:'Semanal',anual:'Anual',irregular:'Irregular / sem periodicidade'})[fr]}</option>`).join('');
@@ -7286,6 +7568,41 @@ function onPatPhotoChange(input) {
   });
 }
 
+// ── Ponte Patrimônio ⇄ Dívidas (fonte única) ──────────────────────────────
+// Resolve a dívida de financiamento principal de um bem (imóvel/outro via
+// patrimonioId; veículo via vehicleId). Um bem tem no máximo um financiamento principal.
+function _patPrincipalDebt(p) {
+  if (!p) return null;
+  if (p.tipo === 'veiculo') { const vid = p._idOriginal || p.id; return (D.debts || []).find(d => d.tipo === 'financiamento' && d.vehicleId === vid) || null; }
+  return (D.debts || []).find(d => d.tipo === 'financiamento' && d.patrimonioId === p.id) || null;
+}
+// Cria/atualiza o financiamento de um bem como dívida canônica, SEM duplicar.
+// `link` = { patrimonioId } ou { vehicleId }. saldo informado vira amortizadoInicial
+// derivado (valorFinanciado − saldo − Σpagamentos), preservando o histórico de pagamentos.
+function _patUpsertFinDebt(link, f) {
+  D.debts = D.debts || [];
+  const finder = link.vehicleId
+    ? d => d.tipo === 'financiamento' && d.vehicleId === link.vehicleId
+    : d => d.tipo === 'financiamento' && d.patrimonioId === link.patrimonioId;
+  const existing = D.debts.find(finder) || null;
+  const pagosCents = existing ? _debtPaymentsOf(existing.id).reduce((s, p) => s + _c(p.valor), 0) : 0;
+  const amortInicial = _r(_c(f.valorFinanciado) - _c(f.saldo) - pagosCents);
+  const fields = {
+    tipo: 'financiamento', titulo: f.titulo || (existing && existing.titulo) || 'Financiamento',
+    credor: f.credor, valorBem: f.valorBem, valorOriginal: f.valorFinanciado,
+    amortizadoInicial: amortInicial, dataInicio: f.dataInicio, periodicidade: f.frequencia,
+    observacoes: f.observacoes, atualizadoEm: Date.now(),
+  };
+  if (existing) {
+    const idx = D.debts.indexOf(existing);
+    D.debts[idx] = _normDebt(Object.assign({}, existing, fields));
+    return D.debts[idx];
+  }
+  const nd = _normDebt(Object.assign({}, fields, link));
+  D.debts.push(nd);
+  return nd;
+}
+
 function savePatrimonioForm() {
   const nome = (document.getElementById('pf-nome')?.value || '').trim();
   if (!nome) { gdToast('Nome obrigatório.'); return; }
@@ -7360,15 +7677,15 @@ function savePatrimonioForm() {
       }]);
     }
     updatePatrimonio(id, fields);
-    // Switch ligado → cria/atualiza o financiamento principal (preserva pagamentos).
-    // Switch desligado → não mexe nos financiamentos existentes (sem perda de dados).
+    // Switch ligado → cria/atualiza a dívida de financiamento (fonte única, preserva pagamentos).
+    // Switch desligado → não mexe nas dívidas existentes (sem perda de dados).
     if (finToSave) {
-      const cur  = getPatrimonio(id);
-      const list = (cur?.financiamentos || []).slice();
-      const base = list[0] || { id: uid() };
-      const fin  = _normFinanciamento(Object.assign({}, base, finToSave));
-      if (list.length) list[0] = fin; else list.push(fin);
-      updatePatrimonio(id, { financiamentos: list });
+      _patUpsertFinDebt({ patrimonioId: id }, {
+        titulo: nome, credor: finToSave.instituicao, valorBem: finToSave.valorBem,
+        valorFinanciado: finToSave.valorFinanciado, saldo: finToSave.saldoDevedor,
+        dataInicio: finToSave.dataInicio, frequencia: finToSave.frequencia, observacoes: finToSave.observacoes,
+      });
+      save();
     }
     gdToast('Patrimônio atualizado.');
     renderPatDetail(id);
@@ -7376,7 +7693,12 @@ function savePatrimonioForm() {
     // Cadastro inicial: nenhum evento de reavaliação é criado
     const novo = createPatrimonio(Object.assign({ tipo }, fields));
     if (finToSave && novo) {
-      updatePatrimonio(novo.id, { financiamentos: [_normFinanciamento(finToSave)] });
+      _patUpsertFinDebt({ patrimonioId: novo.id }, {
+        titulo: nome, credor: finToSave.instituicao, valorBem: finToSave.valorBem,
+        valorFinanciado: finToSave.valorFinanciado, saldo: finToSave.saldoDevedor,
+        dataInicio: finToSave.dataInicio, frequencia: finToSave.frequencia, observacoes: finToSave.observacoes,
+      });
+      save();
       gdToast('Patrimônio e financiamento adicionados.');
       renderPatDetail(novo.id); // abre o detalhe já com o financiamento
     } else {
@@ -7425,6 +7747,53 @@ function _patTrashSvg() {
   return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
 }
 
+// Card de financiamento (compartilhado por imóvel/outro e veículo). ownerId =
+// patrimonioId (kind 'pat') ou vehicleId (kind 'veh'); as ações preservam o contexto.
+function _finCardHtml(f, ownerId, kind) {
+  const st = _debtState(f);
+  const pagos = st.pago, quitado = st.progress, quitadoTotal = st.quitada;
+  const freqLbl = { mensal:'Mensal', quinzenal:'Quinzenal', semanal:'Semanal', anual:'Anual', irregular:'Irregular' }[f.periodicidade] || '';
+  const metaBits = [freqLbl].filter(Boolean).join(' · ');
+  const pags = _debtPaymentsOf(f.id).slice()
+    .map((x, i) => ({ x, i }))
+    .sort((a, b) => String(b.x.data || '').localeCompare(String(a.x.data || '')) || b.i - a.i)
+    .map(o => o.x);
+  const pagsHtml = pags.length === 0
+    ? `<div class="pagfin-empty">Nenhum pagamento registrado ainda.</div>`
+    : pags.map(x => `
+        <div class="pagfin-row">
+          <div class="pagfin-row-body">
+            <span class="pagfin-row-desc">${escHtml('Pagamento')}</span>
+            <span class="pagfin-row-date">${fmtShort(x.data)}</span>
+          </div>
+          <span class="pagfin-row-val">−${R(x.valor || 0)}</span>
+        </div>`).join('');
+  return `
+    <div class="pat-fin-card">
+      <div class="pat-fin-head">
+        <div class="pat-fin-body">
+          <div class="pat-fin-name">${escHtml(f.credor || 'Financiamento')}</div>
+          ${metaBits ? `<div class="pat-fin-sub">${escHtml(metaBits)}</div>` : ''}
+        </div>
+        <div class="pat-fin-head-actions">
+          <button class="pat-mini-edit" onclick="openPatFinForm('${ownerId}','${f.id}','${kind}')" aria-label="Editar financiamento"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+          <button class="pat-mini-del" onclick="deletePatFin('${ownerId}','${f.id}','${kind}')" aria-label="Excluir financiamento">${_patTrashSvg()}</button>
+        </div>
+      </div>
+      <div class="pagfin-progress"><span class="pagfin-progress-fill" style="width:${quitado}%"></span></div>
+      <div class="pagfin-grid">
+        <div class="pagfin-cell"><span class="pagfin-cell-lbl">Valor do bem</span><span class="pagfin-cell-val">${R(f.valorBem || 0)}</span></div>
+        <div class="pagfin-cell"><span class="pagfin-cell-lbl">Já pago</span><span class="pagfin-cell-val pagfin-pos">${R(pagos)}</span></div>
+        <div class="pagfin-cell"><span class="pagfin-cell-lbl">Saldo devedor</span><span class="pagfin-cell-val pagfin-neg">${R(st.saldo)}</span></div>
+        <div class="pagfin-cell"><span class="pagfin-cell-lbl">% quitado</span><span class="pagfin-cell-val">${quitado}%</span></div>
+      </div>
+      ${quitadoTotal
+        ? `<div class="pagfin-quitado">✓ Financiamento quitado</div>`
+        : `<button class="btn btn-secondary pagfin-add-btn" onclick="openPagFinForm('${ownerId}','${f.id}','${kind}')">+ Registrar pagamento</button>`}
+      <div class="pagfin-hist">${pagsHtml}</div>
+    </div>`;
+}
+
 function renderPatDetail(id) {
   const p = getPatrimonio(id);
   if (!p) { renderPatrimonioHome(); return; }
@@ -7439,8 +7808,10 @@ function renderPatDetail(id) {
   const statusK  = p.status || 'ativo';
   const chipName = { veiculo:'Veículo', imovel:'Imóvel', outro:'Outro bem' }[typeKey];
   const d        = p.detalhes || {};
-  const fins     = p.financiamentos || [];
-  const saldoTot = fins.reduce((s, f) => s + (f.saldoDevedor || 0), 0);
+  // Financiamentos vêm da FONTE ÚNICA de dívidas (D.debts) vinculadas a este bem.
+  const _vidKey  = p._idOriginal || p.id;
+  const fins     = (D.debts || []).filter(x => x.tipo === 'financiamento' && (x.patrimonioId === p.id || (x.vehicleId && x.vehicleId === _vidKey)));
+  const saldoTot = fins.reduce((s, x) => s + _debtSaldo(x), 0);
 
   // ── Detalhes do imóvel (somente campos preenchidos) ──
   const detRows = [];
@@ -7462,53 +7833,7 @@ function renderPatDetail(id) {
   // ── Financiamentos ──
   const finHtml = fins.length === 0
     ? `<div class="pat-det-empty">Nenhum financiamento. Para adicionar, toque em "Editar" e ative "Este bem é financiado".</div>`
-    : fins.map(f => {
-        // Fonte única: já pago e % quitado derivam de (valorFinanciado, saldoDevedor).
-        const pagos = _finJaPago(f);
-        const quitado = _finQuitadoPct(f);
-        const quitadoTotal = (f.valorFinanciado || 0) > 0 && (f.saldoDevedor || 0) <= 0; // financiamento quitado
-        const freqLbl = { mensal:'Mensal', quinzenal:'Quinzenal', semanal:'Semanal', anual:'Anual', irregular:'Irregular' }[f.frequencia] || '';
-        const metaBits = [f.descricao, freqLbl].filter(Boolean).join(' · ');
-        // Histórico de pagamentos (mais recente primeiro).
-        const pags = (f.pagamentos || []).slice()
-          .map((x, i) => ({ x, i }))
-          .sort((a, b) => String(b.x.data || '').localeCompare(String(a.x.data || '')) || b.i - a.i)
-          .map(o => o.x);
-        const pagsHtml = pags.length === 0
-          ? `<div class="pagfin-empty">Nenhum pagamento registrado ainda.</div>`
-          : pags.map(x => `
-              <div class="pagfin-row">
-                <div class="pagfin-row-body">
-                  <span class="pagfin-row-desc">${escHtml(x.descricao || x.categoria || 'Pagamento')}</span>
-                  <span class="pagfin-row-date">${fmtShort(x.data)}</span>
-                </div>
-                <span class="pagfin-row-val">−${R(x.valor || 0)}</span>
-              </div>`).join('');
-        return `
-        <div class="pat-fin-card">
-          <div class="pat-fin-head">
-            <div class="pat-fin-body">
-              <div class="pat-fin-name">${escHtml(f.instituicao || 'Financiamento')}</div>
-              ${metaBits ? `<div class="pat-fin-sub">${escHtml(metaBits)}</div>` : ''}
-            </div>
-            <div class="pat-fin-head-actions">
-              <button class="pat-mini-edit" onclick="openPatFinForm('${p.id}','${f.id}')" aria-label="Editar financiamento"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-              <button class="pat-mini-del" onclick="deletePatFin('${p.id}','${f.id}')" aria-label="Excluir financiamento">${_patTrashSvg()}</button>
-            </div>
-          </div>
-          <div class="pagfin-progress"><span class="pagfin-progress-fill" style="width:${quitado}%"></span></div>
-          <div class="pagfin-grid">
-            <div class="pagfin-cell"><span class="pagfin-cell-lbl">Valor do bem</span><span class="pagfin-cell-val">${R(f.valorBem || 0)}</span></div>
-            <div class="pagfin-cell"><span class="pagfin-cell-lbl">Já pago</span><span class="pagfin-cell-val pagfin-pos">${R(pagos)}</span></div>
-            <div class="pagfin-cell"><span class="pagfin-cell-lbl">Saldo devedor</span><span class="pagfin-cell-val pagfin-neg">${R(f.saldoDevedor || 0)}</span></div>
-            <div class="pagfin-cell"><span class="pagfin-cell-lbl">% quitado</span><span class="pagfin-cell-val">${quitado}%</span></div>
-          </div>
-          ${quitadoTotal
-            ? `<div class="pagfin-quitado">✓ Financiamento quitado</div>`
-            : `<button class="btn btn-secondary pagfin-add-btn" onclick="openPagFinForm('${p.id}','${f.id}')">+ Registrar pagamento</button>`}
-          <div class="pagfin-hist">${pagsHtml}</div>
-        </div>`;
-      }).join('');
+    : fins.map(f => _finCardHtml(f, p.id, 'pat')).join('');
 
   // ── Histórico (mais recente primeiro; estável para datas iguais) ──
   const hist = (p.historico || []).slice()
@@ -7583,23 +7908,28 @@ function renderPatDetail(id) {
   `;
 }
 
-// ── CRUD de financiamentos ──
-function openPatFinForm(patId, finId) {
-  _patFinTarget = { patId: patId, finId: finId || null };
-  const p = getPatrimonio(patId);
-  if (!p) return;
-  const f = finId ? (p.financiamentos || []).find(x => x.id === finId) : null;
+// Re-renderiza o detalhe correto (imóvel/outro via renderPatDetail; veículo via
+// renderVehPatDetail) após uma ação de financiamento. kind: 'pat' | 'veh'.
+function _finRerender(kind, ownerId) {
+  if (kind === 'veh') renderVehPatDetail(ownerId); else renderPatDetail(ownerId);
+}
+
+// ── CRUD de financiamentos (opera sobre a dívida canônica; finId === debtId) ──
+// ownerId = patrimonioId (kind 'pat') ou vehicleId (kind 'veh'). Mesmo fluxo p/ ambos.
+function openPatFinForm(patId, finId, kind) {
+  _patFinTarget = { patId: patId, finId: finId || null, kind: kind || 'pat' };
+  const f = finId ? getDebt(finId) : null;
   document.getElementById('pfin-title').textContent = f ? 'Editar financiamento' : 'Novo financiamento';
   document.getElementById('pfin-bem-lbl').textContent        = `Valor do bem (${currSym})`;
   document.getElementById('pfin-financiado-lbl').textContent = `Valor financiado (${currSym}) *`;
   document.getElementById('pfin-saldo-lbl').textContent      = `Saldo devedor (${currSym}) *`;
-  document.getElementById('pfin-inst').value       = f?.instituicao || '';
-  document.getElementById('pfin-desc').value       = f?.descricao || '';
+  document.getElementById('pfin-inst').value       = f?.credor || '';
+  document.getElementById('pfin-desc').value       = '';
   document.getElementById('pfin-bem').value        = f?.valorBem || '';
-  document.getElementById('pfin-financiado').value = f?.valorFinanciado || '';
-  document.getElementById('pfin-saldo').value      = f?.saldoDevedor ?? '';
+  document.getElementById('pfin-financiado').value = f?.valorOriginal || '';
+  document.getElementById('pfin-saldo').value      = f ? _debtSaldo(f) : '';
   document.getElementById('pfin-inicio').value     = f?.dataInicio || '';
-  document.getElementById('pfin-freq').value       = f?.frequencia || 'mensal';
+  document.getElementById('pfin-freq').value       = f?.periodicidade || 'mensal';
   document.getElementById('pfin-obs').value        = f?.observacoes || '';
   document.getElementById('pfin-id').value         = f?.id || '';
   openOverlay('pat-fin-sheet');
@@ -7608,8 +7938,8 @@ function openPatFinForm(patId, finId) {
 function savePatFin() {
   const t = _patFinTarget;
   if (!t) return;
-  const p = getPatrimonio(t.patId);
-  if (!p) return;
+  const kind = t.kind || 'pat';
+  const p = kind === 'veh' ? (D.vehicles || []).find(x => x.id === t.patId) : getPatrimonio(t.patId);
   const inst = (document.getElementById('pfin-inst')?.value || '').trim();
   if (!inst) { gdToast('Informe a instituição.'); return; }
   const financiadoRaw = document.getElementById('pfin-financiado')?.value;
@@ -7620,40 +7950,48 @@ function savePatFin() {
     const raw = document.getElementById(elId)?.value;
     return raw === '' || raw == null ? 0 : Number(raw) || 0;
   };
-  const list = (p.financiamentos || []).slice();
-  const idx  = list.findIndex(x => x.id === (t.finId || null));
-  // Preserva o registro existente (pagamentos + campos legados) ao editar.
-  const base = idx >= 0 ? list[idx] : { id: uid() };
-  const fin = _normFinanciamento(Object.assign({}, base, {
-    instituicao:     inst,
-    descricao:       (document.getElementById('pfin-desc')?.value || '').trim(),
-    valorBem:        num('pfin-bem'),
-    valorFinanciado: num('pfin-financiado'),
-    saldoDevedor:    Number(saldoRaw) || 0,
-    dataInicio:      document.getElementById('pfin-inicio')?.value || '',
-    frequencia:      document.getElementById('pfin-freq')?.value || 'mensal',
-    observacoes:     (document.getElementById('pfin-obs')?.value || '').trim(),
-  }));
-  if (idx >= 0) list[idx] = fin; else list.push(fin);
-  updatePatrimonio(t.patId, { financiamentos: list });
+  const financiado = num('pfin-financiado');
+  const saldo = Number(saldoRaw) || 0;
+  const existing = t.finId ? getDebt(t.finId) : null;
+  const commonFields = {
+    credor: inst, valorBem: num('pfin-bem'),
+    dataInicio: document.getElementById('pfin-inicio')?.value || '',
+    frequencia: document.getElementById('pfin-freq')?.value || 'mensal',
+    observacoes: (document.getElementById('pfin-obs')?.value || '').trim(),
+    titulo: (p && (p.nome || p.name)) || inst,
+  };
+  if (existing) {
+    // Edição direta da dívida: saldo informado → amortizadoInicial derivado, preservando pagamentos.
+    const pagosCents = _debtPaymentsOf(existing.id).reduce((s, pp) => s + _c(pp.valor), 0);
+    const idx = D.debts.indexOf(existing);
+    D.debts[idx] = _normDebt(Object.assign({}, existing, {
+      credor: inst, valorBem: commonFields.valorBem, valorOriginal: financiado,
+      amortizadoInicial: _r(_c(financiado) - _c(saldo) - pagosCents),
+      dataInicio: commonFields.dataInicio, periodicidade: commonFields.frequencia,
+      observacoes: commonFields.observacoes, tipo: 'financiamento', atualizadoEm: Date.now(),
+    }));
+    save();
+  } else {
+    const link = kind === 'veh' ? { vehicleId: t.patId } : { patrimonioId: t.patId };
+    _patUpsertFinDebt(link, Object.assign({ valorFinanciado: financiado, saldo }, commonFields));
+    save();
+  }
   closeOverlay('pat-fin-sheet');
-  renderPatDetail(t.patId);
-  gdToast(idx >= 0 ? 'Financiamento atualizado.' : 'Financiamento adicionado.');
+  _finRerender(kind, t.patId);
+  gdToast(existing ? 'Financiamento atualizado.' : 'Financiamento adicionado.');
 }
 
-// ── Pagamento manual de financiamento: cria despesa normal + reduz saldo ──
-var _pagFinTarget = null; // { patId, finId }
-function openPagFinForm(patId, finId) {
-  const p = getPatrimonio(patId);
-  if (!p) return;
-  const f = (p.financiamentos || []).find(x => x.id === finId);
+// ── Pagamento de financiamento: registra um pagamento na dívida (uma despesa) ──
+var _pagFinTarget = null; // { patId, finId(=debtId) }
+function openPagFinForm(patId, finId, kind) {
+  const f = getDebt(finId);
   if (!f) return;
   // Bloqueio de pagamento após quitação: sem saldo, não há o que pagar.
-  if ((f.saldoDevedor || 0) <= 0) { gdToast('Este financiamento já está quitado.', { type: 'info' }); return; }
-  _pagFinTarget = { patId: patId, finId: finId };
+  if (_debtSaldoCents(f) <= 0) { gdToast('Este financiamento já está quitado.', { type: 'info' }); return; }
+  _pagFinTarget = { patId: patId, finId: finId, kind: kind || 'pat' };
   const sum = document.getElementById('pagfin-summary');
   if (sum) sum.innerHTML =
-    `<div class="pagfin-sum-row"><span>${escHtml(f.instituicao || 'Financiamento')}</span><span>Saldo <b>${R(f.saldoDevedor || 0)}</b></span></div>`;
+    `<div class="pagfin-sum-row"><span>${escHtml(f.credor || 'Financiamento')}</span><span>Saldo <b>${R(_debtSaldo(f))}</b></span></div>`;
   document.getElementById('pagfin-valor-lbl').textContent = `Valor (${currSym}) *`;
   document.getElementById('pagfin-valor').value = '';
   document.getElementById('pagfin-data').value = todayStr();
@@ -7667,53 +8005,46 @@ function openPagFinForm(patId, finId) {
 function salvarPagamentoFin() {
   const t = _pagFinTarget;
   if (!t) return;
-  const p = getPatrimonio(t.patId);
-  if (!p) return;
-  const list = (p.financiamentos || []).slice();
-  const idx  = list.findIndex(x => x.id === t.finId);
-  if (idx < 0) { closeOverlay('pat-pagfin-sheet'); return; }
+  const f = getDebt(t.finId);
+  if (!f) { closeOverlay('pat-pagfin-sheet'); return; }
   const btn = document.getElementById('pagfin-save-btn');
   if (btn && btn.disabled) return; // impede duplo toque
   // Bloqueio de pagamento após quitação (revalida no salvar).
-  if ((list[idx].saldoDevedor || 0) <= 0) { closeOverlay('pat-pagfin-sheet'); gdToast('Este financiamento já está quitado.', { type: 'info' }); return; }
+  if (_debtSaldoCents(f) <= 0) { closeOverlay('pat-pagfin-sheet'); gdToast('Este financiamento já está quitado.', { type: 'info' }); return; }
   const valor = Number(document.getElementById('pagfin-valor')?.value) || 0;
   if (valor <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
+  // Não permite pagar além do saldo (evita amortização a mais / saldo negativo).
+  const valorAplicado = Math.min(valor, _debtSaldo(f));
   const data = localDateKey(document.getElementById('pagfin-data')?.value) || dateStr(new Date());
   const cat = document.getElementById('pagfin-cat')?.value || (D.expCats[0] || 'Outros');
   const descIn = (document.getElementById('pagfin-desc')?.value || '').trim();
-  const f = _normFinanciamento(list[idx]);
   if (btn) btn.disabled = true;
-  const desc = descIn || `Financiamento — ${f.instituicao || 'pagamento'}`;
-  // 1) Cria uma despesa normal (aparece em Home/Semana/Mês/Pesquisa).
-  const expId = uid();
-  D.expenses.push({ id: expId, date: data, category: cat, amount: valor, description: desc,
-    meta: { source: 'financiamento', patId: t.patId, finId: t.finId } });
-  // 2) Reduz o saldo devedor (nunca abaixo de zero).
-  f.saldoDevedor = Math.max(0, (f.saldoDevedor || 0) - valor);
-  // 3) Registra no histórico do financiamento.
-  f.pagamentos = (f.pagamentos || []).concat([{ id: uid(), data, valor, descricao: descIn, categoria: cat, expenseId: expId, criadoEm: Date.now() }]);
-  list[idx] = f;
-  updatePatrimonio(t.patId, { financiamentos: list });
+  _debtRegistrarPagamento(f.id, { valor: valorAplicado, data, categoria: cat, descricao: descIn || `Financiamento — ${f.credor || 'pagamento'}` });
+  const _kind = t.kind || 'pat';
+  const _owner = t.patId;
   _pagFinTarget = null;
-  haptic(10);
+  haptic(10); save();
   closeOverlay('pat-pagfin-sheet');
-  renderPatDetail(t.patId);
+  _finRerender(_kind, _owner);
   refreshAfterDayEdit();
   gdToast('Pagamento registrado. Lançamento criado em Despesas.', { type: 'success' });
 }
 
-function deletePatFin(patId, finId) {
-  const p = getPatrimonio(patId);
-  if (!p) return;
-  const f = (p.financiamentos || []).find(x => x.id === finId);
+function deletePatFin(patId, finId, kind) {
+  const f = getDebt(finId);
+  if (!f) return;
+  const nPag = _debtPaymentsOf(finId).length;
   gdConfirm({
     title: 'Excluir financiamento',
-    msg: `Excluir o financiamento${f?.instituicao ? ` de "${f.instituicao}"` : ''}? Esta ação não pode ser desfeita.`,
+    msg: `Excluir o financiamento${f.credor ? ` de "${f.credor}"` : ''}? O saldo devedor deixa de reduzir o patrimônio líquido. ${nPag > 0 ? `As ${nPag} despesa(s) já registrada(s) permanecem no histórico.` : ''}`,
     confirmText: 'Excluir',
     variant: 'danger',
     onConfirm: () => {
-      updatePatrimonio(patId, { financiamentos: (p.financiamentos || []).filter(x => x.id !== finId) });
-      renderPatDetail(patId);
+      // Remove a dívida e seus marcadores (vínculo ativo); despesas ficam no histórico.
+      D.debtPayments = (D.debtPayments || []).filter(pp => pp.debtId !== finId);
+      D.debts = (D.debts || []).filter(x => x.id !== finId);
+      save();
+      _finRerender(kind || 'pat', patId);
       gdToast('Financiamento excluído.', { type: 'success' });
     },
   });
@@ -7937,6 +8268,14 @@ function renderVehPatDetail(id) {
         </div>`).join('')}
     </div>`;
 
+  // ── Financiamento do veículo (mesmo fluxo do imóvel; fonte única D.debts) ──
+  const vehDebts = _debtsForVehicle(v.id);
+  const finVehHtml = `
+    <div class="sec-label" style="margin:18px 0 10px">Financiamento</div>
+    ${vehDebts.length === 0
+      ? `<button class="btn btn-secondary" style="width:100%" onclick="openPatFinForm('${v.id}','','veh')">Este bem é financiado — adicionar</button>`
+      : vehDebts.map(f => _finCardHtml(f, v.id, 'veh')).join('')}`;
+
   const safePhoto = _vehSafePhoto(v.photo);
   const photoHtml = safePhoto
     ? `<img src="${escHtml(safePhoto)}" alt="${escHtml(v.name)}" onerror="_vehImgError(this)">`
@@ -7969,6 +8308,8 @@ function renderVehPatDetail(id) {
         ? `<div class="pat-det-val">${R(pat.valorEstimado)}</div>`
         : `<div class="pat-det-val-empty">Valor não informado</div>`}
     </div>
+
+    ${finVehHtml}
 
     ${hasInfo ? `
     <div class="sec-label" style="margin:18px 0 10px">Informações do veículo</div>
