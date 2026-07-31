@@ -3487,7 +3487,11 @@ function renderHomeVencimentos() {
   const el = document.getElementById('home-dividas-venc'); if (!el) return;
   const today = todayStr();
   const horizon = _addDaysISO(today, 15); // atrasados (sem piso) + próximos 15 dias
-  const all = _debtVencimentosNoPeriodo(null, horizon).filter(v => v.dueDate);
+  // UM compromisso por dívida: o 1º pendente já prioriza atrasada > hoje > 1ª futura
+  // (parcelas são sequenciais, então a atrasada É a primeira pendente). Assim uma única
+  // dívida não ocupa vários cartões enquanto outras ficam escondidas — as demais parcelas
+  // seguem disponíveis na Central, no detalhe, na Semana e no Mês.
+  const all = _debtProximosPorDivida().filter(v => v.dueDate && v.dueDate <= horizon);
   const ord = { atrasada: 0, hoje: 1, previsto: 2 };
   all.sort((a, b) => (ord[a.status] - ord[b.status]) || String(a.dueDate).localeCompare(String(b.dueDate)));
   const items = all.slice(0, 4);
@@ -5556,13 +5560,13 @@ function renderHomeNew() {
   const balEl = document.getElementById('home-balance');
   if (balEl) {
     balEl.className = 'hc-balance ' + (liq >= 0 ? 'pos' : 'neg');
-    if (inc === 0 && exp === 0) { balEl.textContent = '—'; }
-    else animCount(balEl, liq, 700);
+    // Zero é um valor válido: sempre exibir R$ 0,00 (nunca esconder com '—').
+    animCount(balEl, liq, 700);
   }
   const incEl = document.getElementById('home-inc');
   const expEl = document.getElementById('home-exp');
-  if (incEl) incEl.textContent = inc === 0 ? '—' : R(inc);
-  if (expEl) expEl.textContent = exp === 0 ? '—' : R(exp);
+  if (incEl) incEl.textContent = R(inc);
+  if (expEl) expEl.textContent = R(exp);
 
   // 2. Chart
   setTimeout(drawHomeChart, 40);

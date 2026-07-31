@@ -1614,11 +1614,11 @@
       var liq = inc - exp;
       var fmt = function(v){ var n=v||0, s=n<0?'−':''; return s+sym+' '+Math.abs(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); };
       var bEl = document.getElementById('home-balance');
-      if (bEl) { bEl.className='hc-balance '+(liq>=0?'pos':'neg'); bEl.textContent=(inc===0&&exp===0)?'—':fmt(liq); }
+      if (bEl) { bEl.className='hc-balance '+(liq>=0?'pos':'neg'); bEl.textContent=fmt(liq); }
       var iEl = document.getElementById('home-inc');
-      if (iEl) iEl.textContent = inc===0?'—':fmt(inc);
+      if (iEl) iEl.textContent = fmt(inc);
       var eEl = document.getElementById('home-exp');
-      if (eEl) eEl.textContent = exp===0?'—':fmt(exp);
+      if (eEl) eEl.textContent = fmt(exp);
     }
   } catch(e) {}
 })();
