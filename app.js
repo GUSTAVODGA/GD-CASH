@@ -4020,11 +4020,16 @@ function _renderDebtForm(d) {
   }
   // Parcelas: financiamento/parcelamento/emprestimo têm; pessoal/outro opcionais
   const showParcelas = t !== 'pessoal';
+  // "Parcelas já pagas antes": importa a posição por contagem (só cadastro em andamento,
+  // fora do financiamento — que importa via saldo). NÃO gera despesas nem debtPayments.
+  const pagasAntesRow = (showParcelas && t !== 'financiamento') ? `
+    <div class="form-group"><label class="form-label" for="df-pagas-antes">Parcelas já pagas antes (opc.)</label><input class="form-input" id="df-pagas-antes" type="number" min="0" step="1" inputmode="numeric" placeholder="0"><div class="parcel-form-hint">Se a compra já está em andamento, informe quantas parcelas já foram pagas. Isso vira saldo inicial importado — não cria despesas nem afeta Início/Semana/Mês.</div></div>` : '';
   const parcelasBlock = showParcelas ? `
     <div class="veh-form-row">
       <div class="form-group"><label class="form-label" for="df-parcelas">Nº de parcelas${t === 'parcelamento' || t === 'financiamento' ? '' : ' (opc.)'}</label><input class="form-input" id="df-parcelas" type="number" min="0" step="1" inputmode="numeric" value="${g('parcelasTotal')}"></div>
       <div class="form-group"><label class="form-label" for="df-valorparcela">Valor da parcela</label><input class="form-input" id="df-valorparcela" type="number" min="0" step="0.01" inputmode="decimal" value="${g('valorParcela')}"></div>
     </div>
+    ${pagasAntesRow}
     <div class="veh-form-row">
       <div class="form-group"><label class="form-label" for="df-data">Primeiro vencimento</label><input class="form-input" id="df-data" type="text" inputmode="numeric" placeholder="dd/mm/aaaa" maxlength="10" value="${_isoToBr(g('dataInicio'))}" oninput="_maskDateBR(this)"></div>
       <div class="form-group"><label class="form-label" for="df-freq">Periodicidade</label><select class="form-input" id="df-freq">${['mensal', 'quinzenal', 'semanal', 'anual'].map(f => `<option value="${f}"${g('periodicidade', 'mensal') === f ? ' selected' : ''}>${({ mensal: 'Mensal', quinzenal: 'Quinzenal', semanal: 'Semanal', anual: 'Anual' })[f]}</option>`).join('')}</select></div>
@@ -4072,7 +4077,15 @@ function salvarDivida() {
     if (g('df-saldo') && g('df-saldo').value !== '') amortizadoInicial = _r(_c(valorOriginal) - _c(Number(g('df-saldo').value) || 0));
   } else {
     valorOriginal = Number(g('df-valor')?.value) || 0;
-    amortizadoInicial = (g('df-pago') && g('df-pago').value !== '') ? (Number(g('df-pago').value) || 0) : 0;
+    // Importação de dívida em andamento: "parcelas já pagas antes" tem precedência e vira
+    // saldo inicial (amortizadoInicial) — SEM criar despesas/debtPayments. Senão, usa o valor.
+    const pagasAntes = Math.max(0, Math.round(Number(g('df-pagas-antes')?.value) || 0));
+    if (pagasAntes > 0 && parcelasTotal > 0) {
+      const vpc = valorParcela > 0 ? _c(valorParcela) : Math.round(_c(valorOriginal) / parcelasTotal);
+      amortizadoInicial = pagasAntes >= parcelasTotal ? valorOriginal : _r(vpc * pagasAntes);
+    } else {
+      amortizadoInicial = (g('df-pago') && g('df-pago').value !== '') ? (Number(g('df-pago').value) || 0) : 0;
+    }
   }
   if (!(valorOriginal > 0)) { gdToast('Informe o valor.', { type: 'error' }); return; }
   if (amortizadoInicial < 0) amortizadoInicial = 0;
