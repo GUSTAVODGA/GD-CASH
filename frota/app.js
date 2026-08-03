@@ -1010,8 +1010,9 @@ function computeAlerts() {
     });
     const intervalo = Number(v.oleoIntervalo) || 0;
     const ultima = Number(v.oleoUltimaKm) || 0;
-    if (intervalo > 0 && ultima > 0 && v.km > 0) {
-      const rodou = v.km - ultima;
+    const kmV = kmAtual(v);
+    if (intervalo > 0 && ultima > 0 && kmV > 0) {
+      const rodou = kmV - ultima;
       if (rodou >= intervalo) alerts.push({ crit: true, ico: 'droplet', txt: `Troca de óleo da ${v.nome} atrasada`, sub: `rodou ${fmtKm(rodou)} desde a última troca (limite ${fmtKm(intervalo)})`, veh: v.id });
       else if (rodou >= intervalo - 1000) alerts.push({ crit: false, ico: 'droplet', txt: `Troca de óleo da ${v.nome} se aproximando`, sub: `faltam ${fmtKm(intervalo - rodou)}`, veh: v.id });
     }
@@ -1328,7 +1329,7 @@ function updateFuelHint() {
   const litros = parseValor($('tx-litros').value);
   const valor = parseValor($('tx-valor').value);
   const partes = [];
-  if (v && v.km) partes.push(`Km atual da ${v.nome}: ${fmtKm(v.km)}`);
+  if (v && kmAtual(v)) partes.push(`Km atual da ${v.nome}: ${fmtKm(kmAtual(v))}`);
   if (litros > 0 && valor > 0) partes.push(`≈ ${R(valor / litros)}/litro`);
   $('tx-fuel-hint').textContent = partes.join(' · ');
 }
@@ -1375,12 +1376,10 @@ async function saveTx() {
       try { await addAnexoRecord('tx', id, { ...pendingAnexo, veiculoId: veiculo || '' }); } catch (e) { console.error(e); }
       pendingAnexo = null;
     }
-    // abastecimento com km informado atualiza o odômetro do veículo
+    // abastecimento com km informado entra como leitura; espelha no cadastro como base
     if (t.km > 0 && veiculo) {
       const v = vehById(veiculo);
-      if (v && t.km > (Number(v.km) || 0)) {
-        await dataSet('vehicles', v.id, { ...stripId(v), km: t.km });
-      }
+      if (v) await dataSet('vehicles', v.id, { ...stripId(v), km: t.km });
     }
     toast(eraEdicao ? 'Lançamento atualizado ✓' : (txTipo === 'despesa' ? 'Despesa registrada ✓' : 'Receita registrada ✓'));
   } catch (e) {
@@ -1441,10 +1440,22 @@ function deleteTxFromDetail() {
 // Leituras de km de um veículo: registros manuais (kmlog) + abastecimentos com km
 function kmReadings(vid) {
   const manuais = S.kmlog.filter(l => l.veiculo === vid && l.km > 0)
-    .map(l => ({ data: l.data, km: l.km }));
+    .map(l => ({ data: l.data, km: l.km, ts: l.ts || 0 }));
   const abastecidas = S.tx.filter(t => !t.deleted && t.veiculo === vid && t.cat === 'combustivel' && t.km > 0)
-    .map(t => ({ data: t.data, km: t.km }));
-  return [...manuais, ...abastecidas].sort((a, b) => a.data.localeCompare(b.data) || a.km - b.km);
+    .map(t => ({ data: t.data, km: t.km, ts: t.ts || 0 }));
+  // ordena por data e, no mesmo dia, pela ordem em que foi registrado (ts) e depois km
+  return [...manuais, ...abastecidas].sort((a, b) => a.data.localeCompare(b.data) || (a.ts - b.ts) || (a.km - b.km));
+}
+
+// FONTE ÚNICA da quilometragem atual: a leitura MAIS RECENTE do veículo
+// (registros manuais em kmlog + abastecimentos com km). Se não houver nenhuma
+// leitura, cai no valor de cadastro (v.km) como base. Isto garante que toda
+// tela mostre o mesmo número e que uma leitura nova — inclusive uma correção
+// para menos — passe a valer imediatamente.
+function kmAtual(v) {
+  if (!v) return 0;
+  const reads = kmReadings(v.id);
+  return reads.length ? reads[reads.length - 1].km : (Number(v.km) || 0);
 }
 
 // Km rodado no mês = última leitura do mês − última leitura anterior ao mês
@@ -1468,7 +1479,7 @@ function openKmForm(vid) {
     // veio da ficha do veículo: já sabemos qual é
     kmVehId = vid;
     $('km-veh-fld').style.display = 'none';
-    $('km-veh-info').textContent = v.nome + (v.km ? ' — última leitura: ' + fmtKm(v.km) : '');
+    $('km-veh-info').textContent = v.nome + (kmAtual(v) ? ' — última leitura: ' + fmtKm(kmAtual(v)) : '');
   } else {
     // veio do atalho do Início: escolher o veículo
     if (!S.vehicles.length) { toast('Cadastre um veículo primeiro (módulo Operação).'); return; }
@@ -1489,7 +1500,7 @@ function openKmForm(vid) {
 function kmVehChanged() {
   const v = vehById($('km-veiculo').value);
   kmVehId = v ? v.id : null;
-  $('km-veh-info').textContent = v ? (v.nome + (v.km ? ' — última leitura: ' + fmtKm(v.km) : '')) : '';
+  $('km-veh-info').textContent = v ? (v.nome + (kmAtual(v) ? ' — última leitura: ' + fmtKm(kmAtual(v)) : '')) : '';
 }
 
 async function saveKmLog() {
@@ -1504,7 +1515,8 @@ async function saveKmLog() {
       veiculo: kmVehId, km, data,
       autorNome: me.nome || me.email, autorUid: me.uid, ts: Date.now(),
     });
-    if (km > (Number(v.km) || 0)) await dataSet('vehicles', v.id, { ...stripId(v), km });
+    // o kmlog é a fonte da quilometragem atual; espelha no cadastro só como base/fallback
+    await dataSet('vehicles', v.id, { ...stripId(v), km });
     toast('Km registrado ✓');
   } catch (e) { toast('Erro ao salvar.'); }
 }
@@ -1545,8 +1557,9 @@ function vehAlertChips(v) {
     else if (dias <= 30) chips.push({ crit: false, txt: `${label} vence em ${dias}d` });
   });
   const intervalo = Number(v.oleoIntervalo) || 0, ultima = Number(v.oleoUltimaKm) || 0;
-  if (intervalo > 0 && ultima > 0 && v.km > 0) {
-    const rodou = v.km - ultima;
+  const kmV = kmAtual(v);
+  if (intervalo > 0 && ultima > 0 && kmV > 0) {
+    const rodou = kmV - ultima;
     if (rodou >= intervalo) chips.push({ crit: true, txt: 'Troca de óleo atrasada' });
     else if (rodou >= intervalo - 1000) chips.push({ crit: false, txt: `Óleo: faltam ${fmtKm(intervalo - rodou)}` });
   }
@@ -1621,7 +1634,7 @@ function renderFrota() {
             <span class="veh-status st-${v.status || 'ativo'}">${stLabel[v.status] || stLabel.ativo}</span>
           </div>
           <div class="veh-stats">
-            <div class="veh-stat"><small>Km atual</small><b>${v.km ? fmtKm(v.km) : '—'}</b></div>
+            <div class="veh-stat"><small>Km atual</small><b>${kmAtual(v) ? fmtKm(kmAtual(v)) : '—'}</b></div>
             <div class="veh-stat"><small>Rodou no mês</small><b>${rodou ? fmtKm(rodou) : '—'}</b></div>
             <div class="veh-stat"><small>Gasto no mês</small><b>${R(gasto)}</b></div>
             <div class="veh-stat"><small>Consumo</small><b>${cons ? cons.toFixed(1).replace('.', ',') + ' km/L' : '—'}</b></div>
@@ -1640,7 +1653,7 @@ function openVehicleForm(v) {
   $('veh-ano').value = v ? (v.ano || '') : '';
   $('veh-modelo').value = v ? (v.modelo || '') : '';
   $('veh-setor').value = v ? (v.setor || '') : '';
-  $('veh-km').value = v && v.km ? v.km : '';
+  $('veh-km').value = v && kmAtual(v) ? kmAtual(v) : '';
   $('veh-oleo-km').value = v && v.oleoUltimaKm ? v.oleoUltimaKm : '';
   $('veh-oleo-int').value = v && v.oleoIntervalo ? v.oleoIntervalo : '';
   $('veh-licenc').value = v ? (v.licenciamento || '') : '';
@@ -1674,9 +1687,18 @@ async function saveVehicle() {
     atualizadoEm: Date.now(),
   };
   const id = editingVehId || newId();
+  // quando a quilometragem é informada/corrigida no cadastro, registra também
+  // uma leitura (kmlog) para que ela entre na fonte única e valha em todas as telas
+  const kmInformado = v.km > 0 && v.km !== (origV ? kmAtual(origV) : 0);
   closeOverlay('modal-veh');
   try {
     await dataSet('vehicles', id, v);
+    if (kmInformado) {
+      await dataSet('kmlog', newId(), {
+        veiculo: id, km: v.km, data: todayStr(),
+        autorNome: me.nome || me.email, autorUid: me.uid, ts: Date.now(),
+      });
+    }
     if (!origV) logEvento('vehicle', id, 'truck', 'Veículo cadastrado', v.nome + (v.placa ? ' · ' + v.placa : ''));
     toast(editingVehId ? 'Veículo atualizado ✓' : 'Veículo adicionado ✓');
   } catch (e) { toast('Erro ao salvar.'); }
@@ -1751,7 +1773,7 @@ function openVehDetail(id) {
       <span class="vd-km-ic">${icon('road', 22)}</span>
       <span class="vd-km-body">
         <small>Quilometragem atual</small>
-        <span class="vd-km-val">${v.km ? fmtKm(v.km) : '—'}</span>
+        <span class="vd-km-val">${kmAtual(v) ? fmtKm(kmAtual(v)) : '—'}</span>
       </span>
       <span class="vd-km-cta">Estatísticas →</span>
     </button>
@@ -3135,7 +3157,7 @@ async function confirmarNotaAbast() {
   if (_salvandoNota) return;
   _salvandoNota = true;
   const v = vehById(veiculo);
-  const kmAntes = Number(v?.km) || 0;
+  const kmAntes = v ? kmAtual(v) : 0;
   const t = {
     tipo: 'despesa', cat: 'combustivel', origem: 'frota',
     valor, data, veiculo, litros, km,
@@ -3153,8 +3175,8 @@ async function confirmarNotaAbast() {
       try { await addAnexoRecord('tx', id, { ...anexo, veiculoId: veiculo }); } catch (e) { console.error(e); }
       pendingAnexo = null;
     }
-    // atualiza o odômetro da van e calcula os indicadores
-    if (km > 0 && v && km > kmAntes) await dataSet('vehicles', v.id, { ...stripId(v), km });
+    // o abastecimento entra como leitura; espelha no cadastro como base
+    if (km > 0 && v) await dataSet('vehicles', v.id, { ...stripId(v), km });
     const partes = ['Abastecimento salvo ✓'];
     if (km > kmAntes && kmAntes > 0) partes.push('rodou ' + fmtKm(km - kmAntes) + ' desde o último registro');
     const cons = consumoMedio(veiculo);
