@@ -329,6 +329,19 @@ button.alert-item:active { transform: scale(.985); }
 .vd-cell small { display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
 .vd-cell b { font-size: .92rem; font-variant-numeric: tabular-nums; }
 
+/* ═══════════ FINANCIAMENTO (bloco só-leitura na ficha) ═══════════ */
+.fin-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+.fin-card.fin-sec { opacity: .68; }
+.fin-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.fin-head b { font-size: .98rem; overflow-wrap: anywhere; }
+.fin-grid { margin-bottom: 0; }
+.fin-cell-wide { grid-column: 1 / -1; }
+.fin-chip { font-size: .7rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; flex: none; }
+.fin-chip.fin-emdia    { background: color-mix(in srgb, var(--pos) 16%, transparent);  color: var(--pos); }
+.fin-chip.fin-atraso   { background: color-mix(in srgb, var(--neg) 16%, transparent);  color: var(--neg); }
+.fin-chip.fin-quitado  { background: color-mix(in srgb, var(--txt2) 14%, transparent); color: var(--txt2); }
+.fin-chip.fin-cancelado{ background: var(--card2); color: var(--txt3); text-decoration: line-through; }
+
 /* ═══════════ MOTORISTAS / LINHAS ═══════════ */
 .row-btn {
   display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;

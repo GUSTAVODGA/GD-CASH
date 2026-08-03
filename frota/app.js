@@ -1844,6 +1844,8 @@ function openVehDetail(id) {
       <button class="qa" onclick="pickAnexo('vehicle','${id}','veh-anexos')">${icon('filePlus', 22)}Adicionar<br>documento</button>
     </div>
 
+    ${financiamentoBlocoHTML(id)}
+
     <h2 class="sec-title">${icon('history', 14)} Histórico</h2>
     <div id="van-timeline"><div class="empty-mini">Carregando…</div></div>
     <button class="btn-link" onclick="verHistoricoCompleto('${id}')">Ver todos os lançamentos →</button>
@@ -2587,6 +2589,46 @@ async function removerOuArquivarFinanciamento(id) {
     atualizadoPorNome: (me && (me.nome || me.email)) || '', atualizadoEm: Date.now(),
   });
   return { acao: 'arquivado', motivo: 'contrato possui lançamentos vinculados' };
+}
+
+// Situação derivada → rótulo, classe de cor e prioridade de ordenação.
+// Ativos (atrasado/em dia) vêm primeiro; quitado/cancelado ficam em segundo plano.
+const FIN_SIT = {
+  'atrasado':  { label: 'Atrasado',  cls: 'fin-atraso',    prio: 0, sec: false },
+  'em dia':    { label: 'Em dia',    cls: 'fin-emdia',     prio: 1, sec: false },
+  'quitado':   { label: 'Quitado',   cls: 'fin-quitado',   prio: 2, sec: true },
+  'cancelado': { label: 'Cancelado', cls: 'fin-cancelado', prio: 3, sec: true },
+};
+
+// Bloco SÓ-LEITURA de financiamentos da van (etapa 2). Não grava nada, não
+// gera tx, sem botões funcionais. Usa financiamentoResumo() como fonte.
+function financiamentoBlocoHTML(vid) {
+  const lista = (S.financiamentos || []).filter(f => f.veiculo === vid);
+  const header = `<h2 class="sec-title">${icon('landmark', 14)} Financiamento</h2>`;
+  if (!lista.length) {
+    return header + '<div class="empty-mini">Nenhum financiamento vinculado a esta van.</div>';
+  }
+  const cards = lista.map(f => {
+    const r = financiamentoResumo(f);
+    const sit = FIN_SIT[r.situacao] || FIN_SIT['em dia'];
+    const html = `
+      <div class="fin-card ${sit.cls}${sit.sec ? ' fin-sec' : ''}">
+        <div class="fin-head">
+          <b>${esc(f.credor || 'Financiamento')}</b>
+          <span class="fin-chip ${sit.cls}">${sit.label}</span>
+        </div>
+        <div class="vd-grid fin-grid">
+          <div class="vd-cell"><small>Parcela</small><b>${R(f.valorParcela)}</b></div>
+          <div class="vd-cell"><small>Parcelas</small><b>${r.parcelasPagas}/${Number(f.numParcelas) || 0}</b></div>
+          <div class="vd-cell"><small>Total pago</small><b>${R(r.totalPago)}</b></div>
+          <div class="vd-cell"><small>Saldo restante</small><b>${R(r.saldoRestante)}</b></div>
+          <div class="vd-cell fin-cell-wide"><small>Próx. vencimento</small><b>${r.proximoVencimento ? fmtData(r.proximoVencimento) : '—'}</b></div>
+        </div>
+      </div>`;
+    return { prio: sit.prio, venc: r.proximoVencimento || '9999-99-99', html };
+  });
+  cards.sort((a, b) => a.prio - b.prio || a.venc.localeCompare(b.venc));
+  return header + cards.map(c => c.html).join('');
 }
 
 function socioRow(s, E) {
