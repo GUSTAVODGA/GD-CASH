@@ -341,6 +341,9 @@ button.alert-item:active { transform: scale(.985); }
 .fin-chip.fin-atraso   { background: color-mix(in srgb, var(--neg) 16%, transparent);  color: var(--neg); }
 .fin-chip.fin-quitado  { background: color-mix(in srgb, var(--txt2) 14%, transparent); color: var(--txt2); }
 .fin-chip.fin-cancelado{ background: var(--card2); color: var(--txt3); text-decoration: line-through; }
+.fin-actions { margin-top: 10px; text-align: right; }
+.fin-resumo { background: var(--card2); border-radius: 10px; padding: 10px 12px; margin: 6px 0 14px; font-size: .86rem; line-height: 1.5; color: var(--txt2); }
+.fin-resumo b { color: var(--txt); font-variant-numeric: tabular-nums; }
 
 /* ═══════════ MOTORISTAS / LINHAS ═══════════ */
 .row-btn {

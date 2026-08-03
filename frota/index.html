@@ -360,6 +360,28 @@
   </div>
 </div>
 
+<!-- Novo/editar financiamento -->
+<div class="overlay" id="modal-fin">
+  <div class="sheet">
+    <div class="sheet-head"><h3 id="fin-form-title" data-ic="landmark">Novo financiamento</h3><button class="x" onclick="closeOverlay('modal-fin')">✕</button></div>
+    <p class="modal-note" id="fin-veh-info"></p>
+    <label class="fld"><span>Credor / instituição</span><input type="text" id="fin-credor" placeholder="Ex.: Banco do Brasil" oninput="finFormRecalc()"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Valor total do bem</span><input type="text" id="fin-valor-total" inputmode="decimal" placeholder="0,00" oninput="finFormRecalc()"></label>
+      <label class="fld"><span>Entrada</span><input type="text" id="fin-entrada" inputmode="decimal" placeholder="0,00" oninput="finFormRecalc()"></label>
+    </div>
+    <label class="fld"><span>Valor financiado <small>(sugerido: total − entrada)</small></span><input type="text" id="fin-financiado" inputmode="decimal" placeholder="0,00" oninput="finFinanciadoTocado=true;finFormRecalc()"></label>
+    <div class="fld-row">
+      <label class="fld"><span>Nº de parcelas</span><input type="text" id="fin-parcelas" inputmode="numeric" placeholder="Ex.: 48" oninput="finFormRecalc()"></label>
+      <label class="fld"><span>Valor da parcela</span><input type="text" id="fin-valor-parcela" inputmode="decimal" placeholder="0,00" oninput="finFormRecalc()"></label>
+    </div>
+    <label class="fld"><span>Primeiro vencimento</span><input type="date" id="fin-primeiro-venc"></label>
+    <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="fin-obs" rows="2" placeholder="Anotações sobre o contrato…"></textarea></label>
+    <div class="fin-resumo" id="fin-resumo"></div>
+    <button class="btn btn-primary btn-block" onclick="saveFinanciamento()">Salvar</button>
+  </div>
+</div>
+
 <!-- Novo/editar motorista -->
 <div class="overlay" id="modal-driver">
   <div class="sheet">

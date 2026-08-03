@@ -43,6 +43,7 @@ let txTipo = 'despesa', txCat = null, txOrigem = 'frota';
 let editingTxId = null, detailTxId = null, _salvandoTx = false, _salvandoNota = false;
 let editingVehId = null, detailVehId = null;
 let editingDrvId = null;
+let finFormVehId = null, finEditId = null, finFinanciadoTocado = false, _salvandoFin = false;
 
 // ══════════════════════════════════════════
 // ÍCONES — biblioteca única (SVG inline, traço consistente)
@@ -2615,7 +2616,9 @@ function financiamentoBlocoHTML(vid) {
   const lista = (S.financiamentos || []).filter(f => f.veiculo === vid);
   const header = `<h2 class="sec-title">${icon('landmark', 14)} Financiamento</h2>`;
   if (!lista.length) {
-    return header + '<div class="empty-mini">Nenhum financiamento vinculado a este veículo.</div>';
+    return header +
+      '<div class="empty-mini">Nenhum financiamento vinculado a este veículo.</div>' +
+      `<button class="btn btn-secondary btn-block" onclick="openFinForm('${vid}')">${icon('plus', 16)} Cadastrar financiamento</button>`;
   }
   const cards = lista.map(f => {
     const r = financiamentoResumo(f);
@@ -2633,11 +2636,110 @@ function financiamentoBlocoHTML(vid) {
           <div class="vd-cell"><small>Saldo restante</small><b>${R(r.saldoRestante)}</b></div>
           <div class="vd-cell fin-cell-wide"><small>Próx. vencimento</small><b>${r.proximoVencimento ? fmtData(r.proximoVencimento) : '—'}</b></div>
         </div>
+        <div class="fin-actions"><button class="btn-link" onclick="openFinForm('${vid}','${f.id}')">Editar contrato</button></div>
       </div>`;
     return { prio: sit.prio, venc: r.proximoVencimento || '9999-99-99', html };
   });
   cards.sort((a, b) => a.prio - b.prio || a.venc.localeCompare(b.venc));
-  return header + cards.map(c => c.html).join('');
+  return header + cards.map(c => c.html).join('') +
+    `<button class="btn btn-secondary btn-block" onclick="openFinForm('${vid}')">${icon('plus', 16)} Novo financiamento</button>`;
+}
+
+// formata número em pt-BR com 2 casas para os campos de dinheiro (vazio quando 0)
+function moneyInput(n) {
+  n = Number(n) || 0;
+  return n ? n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+}
+
+// abre o modal de cadastro/edição de financiamento. O veículo vem da ficha e
+// NÃO é trocável no modal (evita mudança silenciosa de vínculo).
+function openFinForm(vid, finId) {
+  if (!exigirEdicao()) return;
+  const f = finId ? (S.financiamentos || []).find(x => x.id === finId) : null;
+  finFormVehId = f ? f.veiculo : vid;   // em edição, mantém o veículo original
+  finEditId = f ? f.id : null;
+  const v = vehById(finFormVehId);
+  $('fin-form-title').textContent = f ? 'Editar financiamento' : 'Novo financiamento';
+  $('fin-veh-info').textContent = 'Veículo: ' + (v ? v.nome : '—');
+  $('fin-credor').value = f ? (f.credor || '') : '';
+  $('fin-valor-total').value = f ? moneyInput(f.valorTotal) : '';
+  $('fin-entrada').value = f ? moneyInput(f.entrada) : '';
+  $('fin-financiado').value = f ? moneyInput(f.valorFinanciado) : '';
+  $('fin-parcelas').value = f && f.numParcelas ? String(f.numParcelas) : '';
+  $('fin-valor-parcela').value = f ? moneyInput(f.valorParcela) : '';
+  $('fin-primeiro-venc').value = f ? (f.primeiroVencimento || '') : '';
+  $('fin-obs').value = f ? (f.obs || '') : '';
+  finFinanciadoTocado = !!f;           // edição respeita o valor salvo; novo auto-sugere
+  finFormRecalc();
+  openOverlay('modal-fin');
+}
+
+// recalcula, sem gravar: sugestão de valor financiado + total das parcelas +
+// custo final estimado (entrada + parcelas).
+function finFormRecalc() {
+  const total = parseValor($('fin-valor-total').value);
+  const entrada = parseValor($('fin-entrada').value);
+  if (!finFinanciadoTocado) {
+    const sug = Math.max(0, centavos(total - entrada));
+    $('fin-financiado').value = moneyInput(sug);
+  }
+  const nP = parseIntBR($('fin-parcelas').value);
+  const vP = parseValor($('fin-valor-parcela').value);
+  const totalParcelas = centavos(nP * vP);
+  const custoFinal = centavos(entrada + totalParcelas);
+  $('fin-resumo').innerHTML =
+    `Total das parcelas: <b>${R(totalParcelas)}</b><br>Custo final estimado (entrada + parcelas): <b>${R(custoFinal)}</b>`;
+}
+
+// salva o contrato (cadastro ou edição). NÃO gera tx. Edição preserva id e
+// metadados de criação. Bloqueia entradas inválidas e protege quando já há
+// pagamentos vinculados. Guarda contra duplo toque.
+async function saveFinanciamento() {
+  const orig = finEditId ? (S.financiamentos || []).find(f => f.id === finEditId) : null;
+  const vid = orig ? orig.veiculo : finFormVehId;
+  const credor = $('fin-credor').value.trim();
+  const valorTotal = parseValor($('fin-valor-total').value);
+  const entrada = parseValor($('fin-entrada').value);
+  const valorFinanciado = parseValor($('fin-financiado').value);
+  const numParcelas = parseIntBR($('fin-parcelas').value);
+  const valorParcela = parseValor($('fin-valor-parcela').value);
+  const primeiroVenc = $('fin-primeiro-venc').value;
+
+  if (!vid) { toast('Veículo não identificado.'); return; }
+  if (!credor) { toast('Informe o credor/instituição.'); return; }
+  if (valorTotal < 0 || entrada < 0 || valorFinanciado < 0 || valorParcela < 0) { toast('Valores não podem ser negativos.'); return; }
+  if (entrada > valorTotal) { toast('A entrada não pode ser maior que o valor total.'); return; }
+  if (numParcelas < 1) { toast('Informe uma quantidade de parcelas válida.'); return; }
+  if (valorParcela <= 0) { toast('O valor da parcela deve ser maior que zero.'); return; }
+  if (!primeiroVenc || isNaN(new Date(primeiroVenc + 'T00:00:00').getTime())) { toast('Informe um primeiro vencimento válido.'); return; }
+
+  if (orig) {
+    const pagos = financiamentoPagamentos(orig.id);
+    if (pagos.length) {
+      const maxNum = Math.max(...pagos.map(t => Number(t.parcelaNum) || 0));
+      if (numParcelas < maxNum) { toast(`Já existe a parcela ${maxNum} paga — o nº de parcelas não pode ser menor.`); return; }
+      const totalPago = centavos(pagos.reduce((s, t) => s + (Number(t.valor) || 0), 0));
+      if (valorFinanciado < totalPago) { toast(`O valor financiado não pode ser menor que o total já pago (${R(totalPago)}).`); return; }
+    }
+  }
+
+  if (_salvandoFin) return;            // evita duplicar por duplo toque
+  _salvandoFin = true;
+  const obj = novoFinanciamento({
+    id: orig ? orig.id : undefined,    // edição preserva o id
+    veiculo: vid, credor, valorTotal, entrada, valorFinanciado,
+    numParcelas, valorParcela, primeiroVencimento: primeiroVenc,
+    obs: $('fin-obs').value.trim(),
+    status: orig ? orig.status : 'ativo',
+    criadoPorNome: orig ? orig.criadoPorNome : undefined,  // preserva metadados de criação
+    criadoEm: orig ? orig.criadoEm : undefined,
+  });
+  closeOverlay('modal-fin');
+  try {
+    await dataSet('financiamentos', obj.id, obj);
+    toast(orig ? 'Financiamento atualizado ✓' : 'Financiamento cadastrado ✓');
+  } catch (e) { console.error(e); toast('Não foi possível salvar. Tente de novo.'); }
+  _salvandoFin = false;
 }
 
 function socioRow(s, E) {
