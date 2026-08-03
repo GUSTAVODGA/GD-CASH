@@ -2485,23 +2485,41 @@ async function restaurarBackup(backup) {
 // as funções só são chamadas pelas etapas seguintes (cadastro/pagamento).
 // ══════════════════════════════════════════
 
+// arredonda para centavos (evita resíduos de ponto flutuante, ex.: R$ 0,01)
+function centavos(v) { return Math.round((Number(v) || 0) * 100) / 100; }
+
+// soma N meses a uma data YYYY-MM-DD, com clamp do dia ao último dia do mês
+// (ex.: 31/01 + 1 mês → 28/02). Usada para derivar vencimentos das parcelas.
+function addMesesData(ymd, n) {
+  if (!ymd) return '';
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  if (!y || !m || !d) return '';
+  const total = (m - 1) + (Number(n) || 0);
+  const ny = y + Math.floor(total / 12);
+  const nm = ((total % 12) + 12) % 12; // 0..11
+  const ultimoDia = new Date(ny, nm + 1, 0).getDate();
+  const nd = Math.min(d, ultimoDia);
+  return ny + '-' + String(nm + 1).padStart(2, '0') + '-' + String(nd).padStart(2, '0');
+}
+
 // Fábrica do contrato: identificadores e metadados consistentes com o app
 // (mesmo padrão de newId/autor/timestamps usado em veículos e lançamentos).
 // Vários financiamentos por veículo são permitidos (cada um tem id próprio).
+// PERSISTE apenas o estado ADMINISTRATIVO em `status`: 'ativo' ou 'cancelado'.
+// Nunca grava 'quitado' — quitado/em dia/atrasado são DERIVADOS (ver resumo).
 function novoFinanciamento(dados = {}) {
-  const nParc = Number(dados.numParcelas) || 0;
   return {
     id: dados.id || newId(),
     veiculo: dados.veiculo || '',
     credor: (dados.credor || '').trim(),
-    valorTotal: Number(dados.valorTotal) || 0,
-    entrada: Number(dados.entrada) || 0,          // fica só no contrato; não gera despesa
-    valorFinanciado: Number(dados.valorFinanciado) || 0,
-    numParcelas: nParc,
-    valorParcela: Number(dados.valorParcela) || 0,
+    valorTotal: centavos(dados.valorTotal),
+    entrada: centavos(dados.entrada),             // fica só no contrato; não gera despesa
+    valorFinanciado: centavos(dados.valorFinanciado),
+    numParcelas: Number(dados.numParcelas) || 0,
+    valorParcela: centavos(dados.valorParcela),
     primeiroVencimento: dados.primeiroVencimento || '', // data completa YYYY-MM-DD
     obs: (dados.obs || '').trim(),
-    status: dados.status || 'ativo',              // ativo | quitado | cancelado (manual)
+    status: dados.status === 'cancelado' ? 'cancelado' : 'ativo', // administrativo apenas
     criadoPorNome: dados.criadoPorNome || (me && (me.nome || me.email)) || '',
     criadoEm: dados.criadoEm || Date.now(),
     atualizadoPorNome: (me && (me.nome || me.email)) || '',
@@ -2516,21 +2534,59 @@ function financiamentoPagamentos(finId) {
   return S.tx.filter(t => !t.deleted && t.financiamentoId === finId && t.cat === 'financiamento');
 }
 
-// Métricas derivadas do contrato. IMPORTANTE (regra aprovada): o status "quitado"
-// exige parcelas concluídas E saldo zerado — não apenas a contagem.
+// Métricas e SITUAÇÃO derivadas do contrato. O único estado persistido é
+// 'ativo'/'cancelado'; aqui derivamos a situação real a partir das parcelas,
+// valores e vencimentos — sem depender de um status gravado que possa divergir:
+//   - cancelado : estado administrativo gravado
+//   - quitado   : parcelas concluídas E saldo <= 0 (em centavos)
+//   - atrasado  : existe parcela em aberto com vencimento anterior a hoje
+//                 (ou saldo em aberto sem parcela futura agendada)
+//   - em dia    : ainda há parcelas, mas nenhuma vencida
 function financiamentoResumo(fin) {
   const pagos = financiamentoPagamentos(fin.id);
   const parcelasPagas = pagos.length;
-  const totalPago = pagos.reduce((s, t) => s + (Number(t.valor) || 0), 0);
+  const totalPago = centavos(pagos.reduce((s, t) => s + (Number(t.valor) || 0), 0));
   const numParcelas = Number(fin.numParcelas) || 0;
   const parcelasRestantes = Math.max(0, numParcelas - parcelasPagas);
-  const financiado = Number(fin.valorFinanciado) || 0;
-  const saldoRestante = Math.round((financiado - totalPago) * 100) / 100;
-  let status;
-  if (fin.status === 'cancelado') status = 'cancelado';
-  else if (numParcelas > 0 && parcelasPagas >= numParcelas && saldoRestante <= 0) status = 'quitado';
-  else status = 'ativo';
-  return { parcelasPagas, parcelasRestantes, totalPago, saldoRestante, status };
+  const saldoRestante = centavos((Number(fin.valorFinanciado) || 0) - totalPago);
+
+  // vencimento da próxima parcela em aberto (nº parcelasPagas+1)
+  const proximoVencimento = (fin.primeiroVencimento && parcelasRestantes > 0)
+    ? addMesesData(fin.primeiroVencimento, parcelasPagas) : '';
+
+  let situacao;
+  if (fin.status === 'cancelado') {
+    situacao = 'cancelado';
+  } else if (numParcelas > 0 && parcelasPagas >= numParcelas && saldoRestante <= 0) {
+    situacao = 'quitado';
+  } else if (proximoVencimento) {
+    situacao = proximoVencimento < todayStr() ? 'atrasado' : 'em dia';
+  } else if (saldoRestante > 0) {
+    situacao = 'atrasado'; // devia mais e não há parcela futura agendada
+  } else {
+    situacao = 'em dia';
+  }
+  return { parcelasPagas, parcelasRestantes, totalPago, saldoRestante, proximoVencimento, situacao };
+}
+
+// Exclusão SEGURA de um contrato:
+//   - sem nenhum pagamento vinculado  → pode ser excluído de fato;
+//   - com tx vinculado                → NÃO apaga; arquiva marcando 'cancelado',
+//     preservando o contrato e todos os lançamentos (rastreabilidade).
+// (Ainda não ligada a botão — fundação.)
+async function removerOuArquivarFinanciamento(id) {
+  const fin = S.financiamentos.find(f => f.id === id);
+  if (!fin) return { acao: 'inexistente' };
+  if (financiamentoPagamentos(id).length === 0) {
+    await dataDelete('financiamentos', id);
+    return { acao: 'excluido' };
+  }
+  const { id: _omit, ...resto } = fin;
+  await dataSet('financiamentos', id, {
+    ...resto, status: 'cancelado',
+    atualizadoPorNome: (me && (me.nome || me.email)) || '', atualizadoEm: Date.now(),
+  });
+  return { acao: 'arquivado', motivo: 'contrato possui lançamentos vinculados' };
 }
 
 function socioRow(s, E) {

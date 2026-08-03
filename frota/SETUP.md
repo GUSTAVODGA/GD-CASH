@@ -118,6 +118,38 @@ Com isso, mesmo que alguém descubra o endereço do app, sem estar logado com um
 desses 3 e-mails **não lê nem escreve nada** — e um sócio "Só visualiza" também
 não consegue gravar, nem por chamada direta ao banco.
 
+> O conjunto de regras acima também está versionado em `frota/firestore.rules`
+> (fonte única). A linha `match /financiamentos/{id}` já está incluída.
+
+### 6.1 Aplicar e validar a regra de `financiamentos` (antes de publicar o recurso)
+
+Hoje o projeto **não tem** Firebase CLI nem `firebase.json`/`.firebaserc` — as
+regras são mantidas **manualmente pelo Console**. A coleção `financiamentos`
+**não existe nas regras atualmente publicadas**, então, por padrão (deny-by-default),
+ela é **negada** para leitura e escrita até que a regra abaixo seja aplicada.
+
+**Aplicar (Console — caminho atual do projeto):**
+1. Firebase Console → **Firestore Database** → aba **Regras**.
+2. Cole o conteúdo de `frota/firestore.rules` (ou apenas acrescente a linha
+   `match /financiamentos/{id} { allow read: if isSocio(); allow write: if podeEditar(); }`
+   junto das demais).
+3. **Publicar**.
+
+**Validar (sem afetar dados reais):**
+- No Console, aba **Regras → Playground**: simule `get`/`create` em
+  `financiamentos/teste` autenticado com um dos 3 e-mails (deve **permitir** para
+  admin/editor e **negar** para "Só visualiza" e para não-sócios).
+- No app real, logado como sócio: criar/editar/excluir **um contrato de teste** e
+  conferir no Console que o documento aparece/some em `financiamentos`; depois
+  apagar o teste. (Enquanto a regra não estiver publicada, o listener ao vivo de
+  `financiamentos` retorna *permission-denied* — registra erro no console do
+  navegador, sem quebrar o app.)
+
+**Opção futura (CLI):** para versionar/publicar as regras por linha de comando,
+adotar `firebase-tools` com um `firebase.json` apontando `firestore.rules` e um
+`.firebaserc` com o projeto, e então `firebase deploy --only firestore:rules`.
+Não adotado agora para não introduzir dependências novas.
+
 ## 7. Autorizar o domínio do app
 
 1. **Authentication** → aba **Configurações** → **Domínios autorizados**.
