@@ -2552,9 +2552,17 @@ function financiamentoResumo(fin) {
   const parcelasRestantes = Math.max(0, numParcelas - parcelasPagas);
   const saldoRestante = centavos((Number(fin.valorFinanciado) || 0) - totalPago);
 
-  // vencimento da próxima parcela em aberto (nº parcelasPagas+1)
-  const proximoVencimento = (fin.primeiroVencimento && parcelasRestantes > 0)
-    ? addMesesData(fin.primeiroVencimento, parcelasPagas) : '';
+  // PRIMEIRA parcela ainda em aberto, por NÚMERO da parcela (parcelaNum) — não
+  // pela mera contagem. Assim, se a parcela 2 foi paga fora de ordem e a 1
+  // segue aberta, o próximo vencimento é o da parcela 1.
+  const pagasNums = new Set(pagos.map(t => Number(t.parcelaNum)).filter(n => n > 0));
+  let primeiraEmAberto = 0;
+  for (let n = 1; n <= numParcelas; n++) { if (!pagasNums.has(n)) { primeiraEmAberto = n; break; } }
+
+  // vencimento da 1ª parcela em aberto = primeiroVencimento + (nº - 1) meses.
+  // Cancelado não mostra próximo vencimento.
+  const proximoVencimento = (primeiraEmAberto > 0 && fin.status !== 'cancelado' && fin.primeiroVencimento)
+    ? addMesesData(fin.primeiroVencimento, primeiraEmAberto - 1) : '';
 
   let situacao;
   if (fin.status === 'cancelado') {
@@ -2562,13 +2570,14 @@ function financiamentoResumo(fin) {
   } else if (numParcelas > 0 && parcelasPagas >= numParcelas && saldoRestante <= 0) {
     situacao = 'quitado';
   } else if (proximoVencimento) {
+    // no dia exato do vencimento ainda é "em dia"; atrasado só a partir do dia seguinte
     situacao = proximoVencimento < todayStr() ? 'atrasado' : 'em dia';
   } else if (saldoRestante > 0) {
     situacao = 'atrasado'; // devia mais e não há parcela futura agendada
   } else {
     situacao = 'em dia';
   }
-  return { parcelasPagas, parcelasRestantes, totalPago, saldoRestante, proximoVencimento, situacao };
+  return { parcelasPagas, parcelasRestantes, totalPago, saldoRestante, primeiraEmAberto, proximoVencimento, situacao };
 }
 
 // Exclusão SEGURA de um contrato:
@@ -2606,7 +2615,7 @@ function financiamentoBlocoHTML(vid) {
   const lista = (S.financiamentos || []).filter(f => f.veiculo === vid);
   const header = `<h2 class="sec-title">${icon('landmark', 14)} Financiamento</h2>`;
   if (!lista.length) {
-    return header + '<div class="empty-mini">Nenhum financiamento vinculado a esta van.</div>';
+    return header + '<div class="empty-mini">Nenhum financiamento vinculado a este veículo.</div>';
   }
   const cards = lista.map(f => {
     const r = financiamentoResumo(f);
