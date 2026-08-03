@@ -375,6 +375,8 @@
       <label class="fld"><span>Nº de parcelas</span><input type="text" id="fin-parcelas" inputmode="numeric" placeholder="Ex.: 48" oninput="finFormRecalc()"></label>
       <label class="fld"><span>Valor da parcela</span><input type="text" id="fin-valor-parcela" inputmode="decimal" placeholder="0,00" oninput="finFormRecalc()"></label>
     </div>
+    <label class="fld"><span>Parcelas já pagas antes do cadastro no Lagos</span><input type="text" id="fin-base" inputmode="numeric" value="0"></label>
+    <div class="fld-hint" id="fin-base-hint">Use para pagamentos feitos antes de começar o controle no Lagos. Não serão lançados no Financeiro.</div>
     <label class="fld"><span>Primeiro vencimento</span><input type="date" id="fin-primeiro-venc" oninput="finFormRecalc()" onchange="finFormRecalc()"></label>
     <div class="fld-hint" id="fin-venc-extenso" style="display:none"></div>
     <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="fin-obs" rows="2" placeholder="Anotações sobre o contrato…"></textarea></label>

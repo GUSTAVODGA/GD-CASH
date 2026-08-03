@@ -2520,6 +2520,9 @@ function novoFinanciamento(dados = {}) {
     valorFinanciado: centavos(dados.valorFinanciado),
     numParcelas: Number(dados.numParcelas) || 0,
     valorParcela: centavos(dados.valorParcela),
+    // parcelas já quitadas ANTES de começar o controle no Lagos (base inicial).
+    // Não geram tx nem despesa; representam as primeiras parcelas como concluídas.
+    parcelasAntesLagos: Math.max(0, Math.floor(Number(dados.parcelasAntesLagos) || 0)),
     primeiroVencimento: dados.primeiroVencimento || '', // data completa YYYY-MM-DD
     obs: (dados.obs || '').trim(),
     status: dados.status === 'cancelado' ? 'cancelado' : 'ativo', // administrativo apenas
@@ -2546,23 +2549,30 @@ function financiamentoPagamentos(finId) {
 //                 (ou saldo em aberto sem parcela futura agendada)
 //   - em dia    : ainda há parcelas, mas nenhuma vencida
 function financiamentoResumo(fin) {
-  const pagos = financiamentoPagamentos(fin.id);
-  const parcelasPagas = pagos.length;
-  const totalPago = centavos(pagos.reduce((s, t) => s + (Number(t.valor) || 0), 0));
   const numParcelas = Number(fin.numParcelas) || 0;
+  const valorParcela = Number(fin.valorParcela) || 0;
+  // base inicial: parcelas quitadas antes do cadastro (não são tx). Cobrem as
+  // parcelas 1..base como concluídas, sem virar despesa.
+  const base = Math.max(0, Math.min(Math.floor(Number(fin.parcelasAntesLagos) || 0), numParcelas));
+  const pagos = financiamentoPagamentos(fin.id);
+  const parcelasPagas = Math.min(numParcelas, base + pagos.length);
+  // totalPago = base × valor da parcela (histórico) + pagamentos do Lagos
+  const totalPagoBase = centavos(base * valorParcela);
+  const totalPagoTx = centavos(pagos.reduce((s, t) => s + (Number(t.valor) || 0), 0));
+  const totalPago = centavos(totalPagoBase + totalPagoTx);
   const parcelasRestantes = Math.max(0, numParcelas - parcelasPagas);
   // valorFinanciado é o principal (informativo). O que ainda falta DESEMBOLSAR
-  // é o total das parcelas (com juros) menos o já pago.
+  // é o total das parcelas (com juros) menos o já pago (base + Lagos).
   const valorFinanciado = centavos(fin.valorFinanciado);
-  const totalParcelas = centavos(numParcelas * (Number(fin.valorParcela) || 0));
+  const totalParcelas = centavos(numParcelas * valorParcela);
   const saldoRestante = centavos(totalParcelas - totalPago);
 
-  // PRIMEIRA parcela ainda em aberto, por NÚMERO da parcela (parcelaNum) — não
-  // pela mera contagem. Assim, se a parcela 2 foi paga fora de ordem e a 1
-  // segue aberta, o próximo vencimento é o da parcela 1.
+  // PRIMEIRA parcela ainda em aberto, por NÚMERO da parcela. Parcelas 1..base
+  // contam como concluídas; além disso, as pagas por tx (parcelaNum). Assim o
+  // próximo vencimento é sempre a primeira que ainda não foi coberta.
   const pagasNums = new Set(pagos.map(t => Number(t.parcelaNum)).filter(n => n > 0));
   let primeiraEmAberto = 0;
-  for (let n = 1; n <= numParcelas; n++) { if (!pagasNums.has(n)) { primeiraEmAberto = n; break; } }
+  for (let n = 1; n <= numParcelas; n++) { if (n <= base || pagasNums.has(n)) continue; primeiraEmAberto = n; break; }
 
   // vencimento da 1ª parcela em aberto = primeiroVencimento + (nº - 1) meses.
   // Cancelado não mostra próximo vencimento.
@@ -2683,6 +2693,14 @@ function openFinForm(vid, finId) {
   $('fin-valor-parcela').value = f ? moneyInput(f.valorParcela) : '';
   $('fin-primeiro-venc').value = f ? (f.primeiroVencimento || '') : '';
   $('fin-obs').value = f ? (f.obs || '') : '';
+  // base inicial (parcelas pagas antes do Lagos). Bloqueia se já houver pagamento
+  // registrado no Lagos, para evitar sobreposição/contagem dupla.
+  const temPagamentos = f ? financiamentoPagamentos(f.id).length > 0 : false;
+  $('fin-base').value = f ? String(Number(f.parcelasAntesLagos) || 0) : '0';
+  $('fin-base').disabled = temPagamentos;
+  $('fin-base-hint').textContent = temPagamentos
+    ? 'Bloqueado: já há pagamentos registrados no Lagos para este contrato.'
+    : 'Use para pagamentos feitos antes de começar o controle no Lagos. Não serão lançados no Financeiro.';
   finFinanciadoTocado = !!f;           // edição respeita o valor salvo; novo auto-sugere
   finFormRecalc();
   openOverlay('modal-fin');
@@ -2725,6 +2743,7 @@ async function saveFinanciamento() {
   const numParcelas = parseIntBR($('fin-parcelas').value);
   const valorParcela = parseValor($('fin-valor-parcela').value);
   const primeiroVenc = $('fin-primeiro-venc').value;
+  let base = parseIntBR($('fin-base').value);
 
   if (!vid) { toast('Veículo não identificado.'); return; }
   if (!credor) { toast('Informe o credor/instituição.'); return; }
@@ -2733,10 +2752,13 @@ async function saveFinanciamento() {
   if (numParcelas < 1) { toast('Informe uma quantidade de parcelas válida.'); return; }
   if (valorParcela <= 0) { toast('O valor da parcela deve ser maior que zero.'); return; }
   if (!primeiroVenc || isNaN(new Date(primeiroVenc + 'T00:00:00').getTime())) { toast('Informe um primeiro vencimento válido.'); return; }
+  if (base < 0 || base > numParcelas) { toast(`Parcelas já pagas antes do cadastro deve ficar entre 0 e ${numParcelas}.`); return; }
 
   if (orig) {
     const pagos = financiamentoPagamentos(orig.id);
     if (pagos.length) {
+      // com pagamentos no Lagos: a base fica travada (evita contagem dupla)
+      base = Math.max(0, Math.floor(Number(orig.parcelasAntesLagos) || 0));
       const maxNum = Math.max(...pagos.map(t => Number(t.parcelaNum) || 0));
       if (numParcelas < maxNum) { toast(`Já existe a parcela ${maxNum} paga — o nº de parcelas não pode ser menor.`); return; }
       const totalPago = centavos(pagos.reduce((s, t) => s + (Number(t.valor) || 0), 0));
@@ -2749,7 +2771,7 @@ async function saveFinanciamento() {
   const obj = novoFinanciamento({
     id: orig ? orig.id : undefined,    // edição preserva o id
     veiculo: vid, credor, valorTotal, entrada, valorFinanciado,
-    numParcelas, valorParcela, primeiroVencimento: primeiroVenc,
+    numParcelas, valorParcela, parcelasAntesLagos: base, primeiroVencimento: primeiroVenc,
     obs: $('fin-obs').value.trim(),
     status: orig ? orig.status : 'ativo',
     criadoPorNome: orig ? orig.criadoPorNome : undefined,  // preserva metadados de criação
