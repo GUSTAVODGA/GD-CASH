@@ -2551,7 +2551,11 @@ function financiamentoResumo(fin) {
   const totalPago = centavos(pagos.reduce((s, t) => s + (Number(t.valor) || 0), 0));
   const numParcelas = Number(fin.numParcelas) || 0;
   const parcelasRestantes = Math.max(0, numParcelas - parcelasPagas);
-  const saldoRestante = centavos((Number(fin.valorFinanciado) || 0) - totalPago);
+  // valorFinanciado é o principal (informativo). O que ainda falta DESEMBOLSAR
+  // é o total das parcelas (com juros) menos o já pago.
+  const valorFinanciado = centavos(fin.valorFinanciado);
+  const totalParcelas = centavos(numParcelas * (Number(fin.valorParcela) || 0));
+  const saldoRestante = centavos(totalParcelas - totalPago);
 
   // PRIMEIRA parcela ainda em aberto, por NÚMERO da parcela (parcelaNum) — não
   // pela mera contagem. Assim, se a parcela 2 foi paga fora de ordem e a 1
@@ -2578,7 +2582,7 @@ function financiamentoResumo(fin) {
   } else {
     situacao = 'em dia';
   }
-  return { parcelasPagas, parcelasRestantes, totalPago, saldoRestante, primeiraEmAberto, proximoVencimento, situacao };
+  return { parcelasPagas, parcelasRestantes, valorFinanciado, totalParcelas, totalPago, saldoRestante, primeiraEmAberto, proximoVencimento, situacao };
 }
 
 // Exclusão SEGURA de um contrato:
@@ -2645,6 +2649,16 @@ function financiamentoBlocoHTML(vid) {
     `<button class="btn btn-secondary btn-block" onclick="openFinForm('${vid}')">${icon('plus', 16)} Novo financiamento</button>`;
 }
 
+// data YYYY-MM-DD por extenso, sem ambiguidade (baseada em string, sem fuso).
+// Ex.: "2026-09-10" → "10 de setembro de 2026".
+function dataPorExtenso(ymd) {
+  if (!ymd) return '';
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  const meses = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
+  if (!y || !m || !d || m < 1 || m > 12) return '';
+  return `${d} de ${meses[m - 1]} de ${y}`;
+}
+
 // formata número em pt-BR com 2 casas para os campos de dinheiro (vazio quando 0)
 function moneyInput(n) {
   n = Number(n) || 0;
@@ -2689,6 +2703,13 @@ function finFormRecalc() {
   const custoFinal = centavos(entrada + totalParcelas);
   $('fin-resumo').innerHTML =
     `Total das parcelas: <b>${R(totalParcelas)}</b><br>Custo final estimado (entrada + parcelas): <b>${R(custoFinal)}</b>`;
+  // confirmação da data por extenso (some quando o campo está vazio)
+  const ext = $('fin-venc-extenso');
+  if (ext) {
+    const txt = dataPorExtenso($('fin-primeiro-venc').value);
+    ext.textContent = txt ? 'Primeiro vencimento: ' + txt : '';
+    ext.style.display = txt ? '' : 'none';
+  }
 }
 
 // salva o contrato (cadastro ou edição). NÃO gera tx. Edição preserva id e
