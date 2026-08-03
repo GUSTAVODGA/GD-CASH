@@ -32,7 +32,7 @@ let me = null; // { uid, email, nome }
 
 // Estado compartilhado (espelho do Firestore ou do localStorage no demo)
 // (anexos ficam fora dos listeners: são carregados sob demanda, por item)
-let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [], empresa: [] };
+let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [], empresa: [], financiamentos: [] };
 let unsubs = [];
 
 // Estado de UI
@@ -144,9 +144,18 @@ const CATS = {
     { id: 'outros_r',  nome: 'Outros',       ico: 'coins' },
   ]
 };
+// Categorias internas: reconhecidas por catInfo (nome/ícone corretos em listas,
+// filtros e PDF quando houver lançamentos), mas propositalmente FORA das grades
+// selecionáveis (CATS.despesa/escritorio/receita). Assim a categoria existe sem
+// expor um botão de função ainda incompleta. "financiamento" só passará a ser
+// lançável quando o fluxo de pagamento de parcela (etapa posterior) existir.
+const CATS_INTERNAS = [
+  { id: 'financiamento', nome: 'Financiamento', ico: 'landmark' },
+];
 function catInfo(id) {
   return CATS.despesa.find(c => c.id === id) || CATS.escritorio.find(c => c.id === id) ||
-    CATS.receita.find(c => c.id === id) || { id, nome: 'Outros', ico: 'package' };
+    CATS.receita.find(c => c.id === id) || CATS_INTERNAS.find(c => c.id === id) ||
+    { id, nome: 'Outros', ico: 'package' };
 }
 // origem de um lançamento: registros antigos não têm o campo — deduz pela categoria
 function origemDe(t) {
@@ -334,7 +343,7 @@ function salvarEmpresaDoc(patch) {
 
 function startListeners() {
   stopListeners();
-  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa'].forEach(coll => {
+  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa', 'financiamentos'].forEach(coll => {
     unsubs.push(db.collection(coll).onSnapshot(snap => {
       S[coll] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
       renderAll();
@@ -2434,6 +2443,7 @@ function exportBackup() {
       tx: S.tx,
       kmlog: S.kmlog,
       eventos: S.eventos || [],
+      financiamentos: S.financiamentos || [],
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -2443,6 +2453,84 @@ function exportBackup() {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     toast('Cópia de segurança baixada ✓');
   } catch (e) { console.error(e); toast('Não foi possível gerar o backup agora.'); }
+}
+
+// Restaura um backup (.json) para o estado, coleção por coleção.
+// SEGURO: só substitui as coleções PRESENTES no arquivo. Uma coleção ausente
+// (ex.: backup antigo sem 'financiamentos') é PRESERVADA como está — nunca apaga
+// o que o arquivo não traz. Retorna a lista de coleções efetivamente aplicadas.
+// (Ainda não ligada a nenhum botão — fundação para a restauração.)
+async function restaurarBackup(backup) {
+  if (!backup || typeof backup !== 'object') throw new Error('Backup inválido.');
+  const COLS = ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'financiamentos'];
+  const aplicadas = [];
+  for (const coll of COLS) {
+    if (!Array.isArray(backup[coll])) continue; // ausente/antigo → preserva o atual
+    S[coll] = backup[coll].map(x => ({ ...x }));
+    aplicadas.push(coll);
+  }
+  if (backup.empresa && typeof backup.empresa === 'object') {
+    const { id, ...resto } = backup.empresa;
+    S.empresa = [{ ...resto, id: 'dados' }];
+    aplicadas.push('empresa');
+  }
+  demoSave();
+  renderAll();
+  return aplicadas;
+}
+
+// ══════════════════════════════════════════
+// FINANCIAMENTOS — fundação de dados (sem UI ainda)
+// Modelo do contrato + métricas derivadas. Nada aqui cria registros sozinho:
+// as funções só são chamadas pelas etapas seguintes (cadastro/pagamento).
+// ══════════════════════════════════════════
+
+// Fábrica do contrato: identificadores e metadados consistentes com o app
+// (mesmo padrão de newId/autor/timestamps usado em veículos e lançamentos).
+// Vários financiamentos por veículo são permitidos (cada um tem id próprio).
+function novoFinanciamento(dados = {}) {
+  const nParc = Number(dados.numParcelas) || 0;
+  return {
+    id: dados.id || newId(),
+    veiculo: dados.veiculo || '',
+    credor: (dados.credor || '').trim(),
+    valorTotal: Number(dados.valorTotal) || 0,
+    entrada: Number(dados.entrada) || 0,          // fica só no contrato; não gera despesa
+    valorFinanciado: Number(dados.valorFinanciado) || 0,
+    numParcelas: nParc,
+    valorParcela: Number(dados.valorParcela) || 0,
+    primeiroVencimento: dados.primeiroVencimento || '', // data completa YYYY-MM-DD
+    obs: (dados.obs || '').trim(),
+    status: dados.status || 'ativo',              // ativo | quitado | cancelado (manual)
+    criadoPorNome: dados.criadoPorNome || (me && (me.nome || me.email)) || '',
+    criadoEm: dados.criadoEm || Date.now(),
+    atualizadoPorNome: (me && (me.nome || me.email)) || '',
+    atualizadoEm: Date.now(),
+  };
+}
+
+// Pagamentos de um contrato = lançamentos (tx) vinculados por financiamentoId,
+// categoria 'financiamento', não deletados. A verdade das parcelas pagas vem
+// da CONTAGEM desses tx (nunca de um contador gravado).
+function financiamentoPagamentos(finId) {
+  return S.tx.filter(t => !t.deleted && t.financiamentoId === finId && t.cat === 'financiamento');
+}
+
+// Métricas derivadas do contrato. IMPORTANTE (regra aprovada): o status "quitado"
+// exige parcelas concluídas E saldo zerado — não apenas a contagem.
+function financiamentoResumo(fin) {
+  const pagos = financiamentoPagamentos(fin.id);
+  const parcelasPagas = pagos.length;
+  const totalPago = pagos.reduce((s, t) => s + (Number(t.valor) || 0), 0);
+  const numParcelas = Number(fin.numParcelas) || 0;
+  const parcelasRestantes = Math.max(0, numParcelas - parcelasPagas);
+  const financiado = Number(fin.valorFinanciado) || 0;
+  const saldoRestante = Math.round((financiado - totalPago) * 100) / 100;
+  let status;
+  if (fin.status === 'cancelado') status = 'cancelado';
+  else if (numParcelas > 0 && parcelasPagas >= numParcelas && saldoRestante <= 0) status = 'quitado';
+  else status = 'ativo';
+  return { parcelasPagas, parcelasRestantes, totalPago, saldoRestante, status };
 }
 
 function socioRow(s, E) {

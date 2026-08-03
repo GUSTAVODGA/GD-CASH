@@ -109,6 +109,7 @@ service cloud.firestore {
     match /kmlog/{id}     { allow read: if isSocio(); allow write: if podeEditar(); }
     match /eventos/{id}   { allow read: if isSocio(); allow write: if podeEditar(); }
     match /anexos/{id}    { allow read: if isSocio(); allow write: if podeEditar(); }
+    match /financiamentos/{id} { allow read: if isSocio(); allow write: if podeEditar(); }
   }
 }
 ```
