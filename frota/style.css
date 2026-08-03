@@ -211,8 +211,11 @@ small { color: var(--txt3); }
   transition: transform .1s ease;
 }
 button.alert-item:active { transform: scale(.985); }
-.cat-row-btn { width: 100%; text-align: left; background: none; border: none; color: var(--txt); }
+.cat-row-btn { width: 100%; text-align: left; background: none; border: none; color: var(--txt); border-radius: 10px; padding: 2px 8px; margin: 0 -8px; transition: background .15s ease; }
 .cat-row-btn:active { opacity: .7; }
+/* categoria ativa: destaque discreto */
+.cat-row-btn.cat-row-on { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.cat-row-btn.cat-row-on .c-top b { color: var(--accent); font-weight: 700; }
 .alert-item.crit { border-left-color: var(--neg); }
 .alert-item .a-ico { display: flex; color: var(--warn); }
 .alert-item.crit .a-ico { color: var(--neg); }

@@ -1155,6 +1155,28 @@ function setLancOrigem(o) {
   renderLanc();
 }
 
+// toca numa categoria do resumo "Para onde foi o dinheiro" → filtra os lançamentos
+// por essa categoria no mês exibido; tocar de novo na mesma limpa o filtro.
+// Combina com os filtros de veículo e origem (não os limpa) e mantém o seletor
+// "Todas as categorias" sincronizado.
+function setLancCat(cat) {
+  const sel = $('lanc-cat-filter');
+  if (!sel) return;
+  const nova = sel.value === cat ? '' : cat; // toggle
+  sel.value = nova;
+  // categoria de despesa selecionada não pode conflitar com o filtro "Receitas"
+  if (nova && lancFilter === 'receita') {
+    lancFilter = 'todos';
+    document.querySelectorAll('#lanc-type-chips .chip').forEach(c => c.classList.toggle('chip-on', c.dataset.f === 'todos'));
+  }
+  renderLanc();
+  // leva o usuário até a seção de lançamentos filtrados
+  if (nova) {
+    const alvo = $('lanc-sec-lancamentos') || $('lanc-list');
+    if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
 function renderLanc() {
   $('lanc-month-label').textContent = monthLabel(monthOffset);
 
@@ -1193,7 +1215,10 @@ function renderLanc() {
 
   const el = $('lanc-list');
   if (!txs.length) {
-    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('calendar')}</span>Nada lançado com esses filtros neste mês.</div>`;
+    const msg = catSel.value
+      ? `Nenhum lançamento de <b>${esc(catInfo(catSel.value).nome)}</b> em ${esc(monthLabel(monthOffset))} com os filtros atuais.`
+      : 'Nada lançado com esses filtros neste mês.';
+    el.innerHTML = `<div class="empty-big"><span class="e-ico">${icon('calendar')}</span>${msg}</div>`;
     return;
   }
   // agrupa por dia (desc)
@@ -1213,8 +1238,8 @@ function chartDespesasHTML(desp, clicavel) {
   const total = desp.reduce((s, t) => s + t.valor, 0);
   const escr = desp.filter(t => origemDe(t) === 'escritorio').reduce((s, t) => s + t.valor, 0);
   const frota = total - escr;
-  const row = (ic, nome, val, pct, onclick) => `
-    <${onclick ? `button class="cat-row cat-row-btn" onclick="${onclick}"` : 'div class="cat-row"'}>
+  const row = (ic, nome, val, pct, onclick, ativo) => `
+    <${onclick ? `button class="cat-row cat-row-btn${ativo ? ' cat-row-on' : ''}" onclick="${onclick}"` : 'div class="cat-row"'}>
       <div class="c-ico">${icon(ic, 18)}</div>
       <div class="c-body">
         <div class="c-top"><b>${nome}</b><span class="c-val">${R(val)} <small>· ${pct}%</small></span></div>
@@ -1229,12 +1254,13 @@ function chartDespesasHTML(desp, clicavel) {
             row('building', 'Escritório', escr, Math.round(escr / total * 100), clicavel ? "setLancFilter('despesa');setLancOrigem('escritorio')" : '') +
             '<div class="chart-sep"></div>';
   }
-  // maiores categorias
+  // maiores categorias — no Financeiro (clicavel) cada linha filtra os lançamentos
+  const catAtiva = clicavel ? ($('lanc-cat-filter')?.value || '') : '';
   const porCat = {};
   desp.forEach(t => { porCat[t.cat] = (porCat[t.cat] || 0) + t.valor; });
   html += Object.entries(porCat).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([cat, val]) => {
     const c = catInfo(cat);
-    return row(c.ico, c.nome, val, Math.round(val / total * 100));
+    return row(c.ico, c.nome, val, Math.round(val / total * 100), clicavel ? `setLancCat('${cat}')` : '', clicavel && catAtiva === cat);
   }).join('');
   return html;
 }
