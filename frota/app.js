@@ -2582,12 +2582,201 @@ function deleteDriverFromForm() {
 }
 
 // ══════════════════════════════════════════
-// RESUMO DO MÊS EM IMAGEM (formato stories 1080×1920)
+// RELATÓRIO FINANCEIRO MENSAL (PDF)
+// Usa SEMPRE o mês exibido no Financeiro (monthOffset). jsPDF hospedado local.
 // ══════════════════════════════════════════
 function loadImg(src) {
   return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
 }
 
+async function ensureJsPDF() {
+  if (window.jspdf && window.jspdf.jsPDF) return;
+  await loadScript('vendor-jspdf.js?v=40');
+  await loadScript('vendor-jspdf-autotable.js?v=40');
+}
+
+// cores da marca (RGB para o jsPDF)
+const RPT = {
+  navy: [22, 34, 58], green: [46, 139, 61], red: [197, 38, 38],
+  ink: [20, 45, 84], muted: [110, 125, 150], line: [214, 224, 238],
+  zebra: [244, 247, 251], head: [22, 34, 58],
+};
+
+// monta o documento e devolve { doc, stats } — separado para poder validar
+function montarRelatorioDoc(logoImg) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();   // 595.28
+  const M = 40;                                  // margem
+  const CW = W - 2 * M;                          // largura útil
+  const mesLabel = monthLabel(monthOffset);
+  const geradoEm = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  // dados: SOMENTE o mês selecionado (txDoMes já exclui excluídos e filtra o mês)
+  const txs = txDoMes(monthOffset).slice().sort((a, b) => (a.data || '').localeCompare(b.data || '') || (a.ts || 0) - (b.ts || 0));
+  const receitas = txs.filter(t => t.tipo === 'receita');
+  const despesas = txs.filter(t => t.tipo === 'despesa');
+  const totInc = receitas.reduce((s, t) => s + t.valor, 0);
+  const totExp = despesas.reduce((s, t) => s + t.valor, 0);
+  const resultado = totInc - totExp;
+
+  // ---------- Cabeçalho (página 1) ----------
+  let y = M;
+  if (logoImg) { try { doc.addImage(logoImg, 'PNG', M, y, 46, 46); } catch (e) {} }
+  doc.setTextColor(...RPT.navy);
+  doc.setFont('helvetica', 'bolditalic'); doc.setFontSize(22);
+  doc.text('LAGOS', M + 58, y + 22);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...RPT.muted);
+  doc.text('Serviços de Transporte', M + 58, y + 38);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...RPT.green);
+  doc.text('RELATÓRIO FINANCEIRO MENSAL', W - M, y + 14, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(...RPT.ink);
+  doc.text(mesLabel, W - M, y + 30, { align: 'right' });
+  doc.setFontSize(8); doc.setTextColor(...RPT.muted);
+  doc.text('Gerado em ' + geradoEm, W - M, y + 44, { align: 'right' });
+  y += 60;
+  doc.setDrawColor(...RPT.line); doc.setLineWidth(1); doc.line(M, y, W - M, y);
+  y += 18;
+
+  // ---------- Resumo (3 blocos) ----------
+  const bw = (CW - 20) / 3;
+  const bloco = (bx, titulo, valor, cor) => {
+    doc.setDrawColor(...RPT.line); doc.setFillColor(...RPT.zebra);
+    doc.roundedRect(bx, y, bw, 58, 6, 6, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...RPT.muted);
+    doc.text(titulo.toUpperCase(), bx + 12, y + 18);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(...cor);
+    doc.text(R(valor), bx + 12, y + 42);
+  };
+  bloco(M, 'Receitas', totInc, RPT.green);
+  bloco(M + bw + 10, 'Despesas', totExp, RPT.red);
+  bloco(M + 2 * (bw + 10), 'Resultado', resultado, resultado < 0 ? RPT.red : RPT.navy);
+  y += 78;
+
+  const tituloSecao = (txt) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...RPT.navy);
+    doc.text(txt, M, y); y += 6;
+  };
+  const opts = (extra) => Object.assign({
+    theme: 'grid', margin: { left: M, right: M, top: 64, bottom: 46 },
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: 5, textColor: RPT.ink, lineColor: RPT.line, lineWidth: 0.5, overflow: 'linebreak' },
+    headStyles: { fillColor: RPT.head, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    alternateRowStyles: { fillColor: RPT.zebra },
+  }, extra);
+
+  // ---------- Despesas por categoria (TODAS) ----------
+  tituloSecao('Despesas por categoria');
+  const porCat = {};
+  despesas.forEach(t => { porCat[t.cat] = (porCat[t.cat] || 0) + t.valor; });
+  const catRows = Object.entries(porCat).sort((a, b) => b[1] - a[1]).map(([cat, val]) => [
+    catInfo(cat).nome, R(val), (totExp ? Math.round(val / totExp * 100) : 0) + '%',
+  ]);
+  doc.autoTable(opts({
+    startY: y + 6,
+    head: [['Categoria', 'Valor', '% das despesas']],
+    body: catRows.length ? catRows : [['—', R(0), '0%']],
+    columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right', cellWidth: 90 } },
+    foot: [[{ content: 'Total de despesas', styles: { fontStyle: 'bold' } }, { content: R(totExp), styles: { halign: 'right', fontStyle: 'bold' } }, '']],
+    footStyles: { fillColor: [237, 242, 249], textColor: RPT.navy },
+  }));
+  y = doc.lastAutoTable.finalY + 22;
+
+  // ---------- Gastos por veículo + total sem veículo ----------
+  tituloSecao('Gastos por veículo');
+  const porVeh = {}; let semVeh = 0;
+  despesas.forEach(t => { if (t.veiculo) porVeh[t.veiculo] = (porVeh[t.veiculo] || 0) + t.valor; else semVeh += t.valor; });
+  const vehRows = Object.entries(porVeh).sort((a, b) => b[1] - a[1]).map(([vid, val]) => [vehNome(vid), R(val)]);
+  vehRows.push([{ content: 'Sem veículo vinculado', styles: { fontStyle: 'italic' } }, R(semVeh)]);
+  doc.autoTable(opts({
+    startY: y + 6,
+    head: [['Veículo', 'Despesas no mês']],
+    body: vehRows,
+    columnStyles: { 1: { halign: 'right', cellWidth: 140 } },
+    foot: [[{ content: 'Total', styles: { fontStyle: 'bold' } }, { content: R(totExp), styles: { halign: 'right', fontStyle: 'bold' } }]],
+    footStyles: { fillColor: [237, 242, 249], textColor: RPT.navy },
+  }));
+  y = doc.lastAutoTable.finalY + 22;
+
+  // ---------- Lançamentos do mês (TODOS) ----------
+  tituloSecao('Lançamentos do mês (' + txs.length + ')');
+  const lancRows = txs.map(t => [
+    fmtData(t.data),
+    t.tipo === 'receita' ? 'Receita' : 'Despesa',
+    catInfo(t.cat).nome,
+    t.desc || '—',
+    t.veiculo ? vehNome(t.veiculo) : '—',
+    { content: (t.tipo === 'receita' ? '+ ' : '- ') + R(t.valor), styles: { halign: 'right', textColor: t.tipo === 'receita' ? RPT.green : RPT.red } },
+  ]);
+  doc.autoTable(opts({
+    startY: y + 6,
+    head: [['Data', 'Tipo', 'Categoria', 'Descrição', 'Veículo', 'Valor']],
+    body: lancRows.length ? lancRows : [[{ content: 'Nenhum lançamento neste mês.', colSpan: 6, styles: { halign: 'center', textColor: RPT.muted } }]],
+    columnStyles: {
+      0: { cellWidth: 54 }, 1: { cellWidth: 50 }, 2: { cellWidth: 78 },
+      3: { cellWidth: 'auto' }, 4: { cellWidth: 78 }, 5: { cellWidth: 74, halign: 'right' },
+    },
+    foot: [[
+      { content: 'Subtotais', styles: { fontStyle: 'bold' } },
+      { content: '', colSpan: 3 },
+      { content: 'Receitas ' + R(totInc) + '   ·   Despesas ' + R(totExp), styles: { halign: 'right', fontStyle: 'bold' }, colSpan: 2 },
+    ]],
+    footStyles: { fillColor: [237, 242, 249], textColor: RPT.navy, fontSize: 8.5 },
+  }));
+  y = doc.lastAutoTable.finalY;
+
+  // ---------- Total geral ----------
+  const alturaTotal = 34;
+  if (y + alturaTotal > doc.internal.pageSize.getHeight() - 46) { doc.addPage(); y = 64; } else { y += 12; }
+  doc.setFillColor(...RPT.navy); doc.roundedRect(M, y, CW, alturaTotal, 6, 6, 'F');
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(255, 255, 255);
+  doc.text('RESULTADO DO MÊS', M + 14, y + 22);
+  doc.setTextColor(...(resultado < 0 ? [248, 113, 113] : [122, 222, 130]));
+  doc.text(R(resultado), W - M - 14, y + 22, { align: 'right' });
+
+  // ---------- Rodapé + numeração em todas as páginas ----------
+  const total = doc.internal.getNumberOfPages();
+  const PH = doc.internal.pageSize.getHeight();
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    if (i > 1) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...RPT.muted);
+      doc.text('LAGOS · Relatório Financeiro · ' + mesLabel, M, 32);
+      doc.setDrawColor(...RPT.line); doc.setLineWidth(0.5); doc.line(M, 40, W - M, 40);
+    }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...RPT.muted);
+    doc.text('Lagos Serviços de Transporte', M, PH - 22);
+    doc.text('Página ' + i + ' de ' + total, W - M, PH - 22, { align: 'right' });
+  }
+
+  return { doc, stats: { mes: mesLabel, receitas: totInc, despesas: totExp, resultado, nLancamentos: txs.length, nCategorias: catRows.length, paginas: total } };
+}
+
+async function gerarRelatorioPDF() {
+  toast('Gerando o relatório…');
+  try { await ensureJsPDF(); }
+  catch (e) { console.error(e); toast('Não foi possível carregar o gerador de PDF. Tente com internet.'); return; }
+  let logoImg = null;
+  try { logoImg = await loadImg('icon-192.png?v=36'); } catch (e) {}
+  let doc;
+  try { doc = montarRelatorioDoc(logoImg).doc; }
+  catch (e) { console.error(e); toast('Erro ao montar o relatório.'); return; }
+  const nomeArq = 'lagos-relatorio-' + monthLabel(monthOffset).toLowerCase().replace(/\s+/g, '-') + '.pdf';
+  const blob = doc.output('blob');
+  const file = new File([blob], nomeArq, { type: 'application/pdf' });
+  if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Lagos — Relatório ' + monthLabel(monthOffset) }); }
+    catch (e) {}
+  } else {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = nomeArq;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  }
+  toast('Relatório pronto ✓');
+}
+
+// (mantido apenas por compatibilidade de referências antigas)
 async function buildResumoCanvas() {
   const W = 1080, H = 1920;
   const c = document.createElement('canvas');
