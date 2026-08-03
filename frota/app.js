@@ -2609,12 +2609,12 @@ async function buildResumoCanvas() {
   x.fillStyle = 'rgba(244,247,251,0.5)'; x.font = '500 30px system-ui,sans-serif';
   x.fillText('Serviços de Transporte', 230, 210);
 
-  // mês
-  const mLabel = monthLabel(0);
+  // mês — usa EXATAMENTE o mês exibido no Financeiro (monthOffset), não o atual
+  const mLabel = monthLabel(monthOffset);
   x.fillStyle = 'rgba(244,247,251,0.45)'; x.font = '600 34px system-ui,sans-serif';
   x.fillText(mLabel.toUpperCase(), 80, 330);
 
-  const txs = txDoMes(0);
+  const txs = txDoMes(monthOffset);
   const inc = txs.filter(t => t.tipo === 'receita').reduce((s, t) => s + t.valor, 0);
   const exp = txs.filter(t => t.tipo === 'despesa').reduce((s, t) => s + t.valor, 0);
   const liq = inc - exp;
@@ -2675,7 +2675,7 @@ async function buildResumoCanvas() {
     x.fillText('CUSTO POR VEÍCULO', 80, y);
     y += 62;
     vehs.forEach(([vid, val]) => {
-      const rodou = vehById(vid) ? kmRodadoMes(vid) : 0;
+      const rodou = vehById(vid) ? kmRodadoMes(vid, monthOffset) : 0;
       x.fillStyle = '#f4f7fb'; x.font = '600 36px system-ui,sans-serif';
       x.fillText(vehNome(vid), 80, y);
       x.textAlign = 'right';
@@ -2706,7 +2706,7 @@ async function shareResumoMes() {
   c.toBlob(blob => {
     const file = new File([blob], 'lagos-resumo.png', { type: 'image/png' });
     if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file], title: 'Lagos — ' + monthLabel(0) }).catch(() => {});
+      navigator.share({ files: [file], title: 'Lagos — ' + monthLabel(monthOffset) }).catch(() => {});
     } else {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
