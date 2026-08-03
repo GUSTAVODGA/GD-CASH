@@ -1440,29 +1440,50 @@ function deleteTxFromDetail() {
 // Leituras de km de um veículo: registros manuais (kmlog) + abastecimentos com km
 function kmReadings(vid) {
   const manuais = S.kmlog.filter(l => l.veiculo === vid && l.km > 0)
-    .map(l => ({ data: l.data, km: l.km, ts: l.ts || 0 }));
+    .map(l => ({ data: l.data, km: l.km, ts: l.ts || 0, tipo: 'kmlog', id: l.id }));
   const abastecidas = S.tx.filter(t => !t.deleted && t.veiculo === vid && t.cat === 'combustivel' && t.km > 0)
-    .map(t => ({ data: t.data, km: t.km, ts: t.ts || 0 }));
+    .map(t => ({ data: t.data, km: t.km, ts: t.ts || 0, tipo: 'tx', id: t.id }));
   // ordena por data e, no mesmo dia, pela ordem em que foi registrado (ts) e depois km
   return [...manuais, ...abastecidas].sort((a, b) => a.data.localeCompare(b.data) || (a.ts - b.ts) || (a.km - b.km));
 }
 
-// FONTE ÚNICA da quilometragem atual: a leitura MAIS RECENTE do veículo
-// (registros manuais em kmlog + abastecimentos com km). Se não houver nenhuma
-// leitura, cai no valor de cadastro (v.km) como base. Isto garante que toda
-// tela mostre o mesmo número e que uma leitura nova — inclusive uma correção
-// para menos — passe a valer imediatamente.
+// A leitura que representa o odômetro AGORA: a mais recente por data e, no mesmo
+// dia, pela ordem de registro (ts) — nunca "a de maior km". Assim uma correção
+// (inclusive para menos) registrada por último passa a valer.
+function kmLeituraAtual(vid) {
+  const reads = kmReadings(vid);
+  return reads.length ? reads[reads.length - 1] : null;
+}
+
+// FONTE ÚNICA da quilometragem atual. Se não houver leitura, cai no valor de
+// cadastro (v.km) como base.
 function kmAtual(v) {
   if (!v) return 0;
-  const reads = kmReadings(v.id);
-  return reads.length ? reads[reads.length - 1].km : (Number(v.km) || 0);
+  const r = kmLeituraAtual(v.id);
+  return r ? r.km : (Number(v.km) || 0);
+}
+
+// Leituras VÁLIDAS para estatística. Uma leitura cujo km é MAIOR que o odômetro
+// atual é fisicamente impossível (o hodômetro não pode ter sido maior no passado
+// do que é hoje) — trata-se de uma leitura errada/superada. Ela é IGNORADA nos
+// cálculos, mas continua preservada no histórico para rastreabilidade.
+function kmReadingsValidas(vid) {
+  const atual = kmLeituraAtual(vid);
+  if (!atual) return [];
+  return kmReadings(vid).filter(r => r.km <= atual.km);
+}
+// Conjunto de ids de leituras desconsideradas (km acima do odômetro atual).
+function kmLeiturasIgnoradas(vid) {
+  const atual = kmLeituraAtual(vid);
+  if (!atual) return new Set();
+  return new Set(kmReadings(vid).filter(r => r.km > atual.km).map(r => r.id));
 }
 
 // Km rodado no mês = última leitura do mês − última leitura anterior ao mês
 // (se não houver leitura anterior, usa a primeira leitura do próprio mês)
 function kmRodadoMes(vid, offset = 0) {
   const mk = monthKey(offset);
-  const reads = kmReadings(vid);
+  const reads = kmReadingsValidas(vid);
   const doMes = reads.filter(r => r.data.startsWith(mk));
   if (!doMes.length) return 0;
   const ultima = Math.max(...doMes.map(r => r.km));
@@ -1535,8 +1556,9 @@ function deleteKmLog(id) {
 // ══════════════════════════════════════════
 function consumoMedio(vid) {
   // média = soma dos Δkm entre abastecimentos consecutivos / litros dos abastecimentos posteriores
+  const ign = kmLeiturasIgnoradas(vid);
   const fills = S.tx.filter(t => !t.deleted)
-    .filter(t => t.veiculo === vid && t.cat === 'combustivel' && t.km > 0 && t.litros > 0)
+    .filter(t => t.veiculo === vid && t.cat === 'combustivel' && t.km > 0 && t.litros > 0 && !ign.has(t.id))
     .sort((a, b) => a.km - b.km);
   if (fills.length < 2) return null;
   let dKm = 0, litros = 0;
@@ -1820,10 +1842,13 @@ function diaDe(dataStr, ts) {
 
 // ── Timeline da van: lançamentos + km + documentos + eventos, agrupados por dia ──
 async function renderVanTimeline(vid, txsV) {
+  const ign = kmLeiturasIgnoradas(vid);
+  const notaIgnorada = '<div class="tx-meta km-superada">Leitura desconsiderada nas estatísticas (acima do odômetro atual)</div>';
   const itens = [
     ...txsV.map(t => ({
       ts: t.ts || 0, dia: diaDe(t.data, t.ts),
-      html: txItemHTML(t, t.cat === 'combustivel' ? 'tl-fuel' : t.cat === 'manutencao' ? 'tl-wrench' : ''),
+      html: txItemHTML(t, t.cat === 'combustivel' ? 'tl-fuel' : t.cat === 'manutencao' ? 'tl-wrench' : '')
+        + (ign.has(t.id) ? notaIgnorada : ''),
     })),
     ...S.kmlog.filter(l => l.veiculo === vid).map(l => ({
       ts: l.ts || 0, dia: diaDe(l.data, l.ts),
@@ -1833,6 +1858,7 @@ async function renderVanTimeline(vid, txsV) {
           <div class="tx-body">
             <div class="tx-title">Km registrado: ${fmtKm(l.km)}</div>
             <div class="tx-meta">${authorChip(l.autorNome)}</div>
+            ${ign.has(l.id) ? notaIgnorada : ''}
           </div>
           <button class="x" onclick="deleteKmLog('${l.id}')">✕</button>
         </div>`,
@@ -1895,7 +1921,7 @@ function openVehStats(id) {
   const txV = S.tx.filter(t => !t.deleted && t.veiculo === id);
   const desp = txV.filter(t => t.tipo === 'despesa');
   const gastoTotal = desp.reduce((s, t) => s + t.valor, 0);
-  const reads = kmReadings(id);
+  const reads = kmReadingsValidas(id);
   const kmTotal = reads.length >= 2 ? reads[reads.length - 1].km - reads[0].km : 0;
   const cons = consumoMedio(id);
   const custoKm = kmTotal > 0 ? gastoTotal / kmTotal : null;
@@ -1909,7 +1935,8 @@ function openVehStats(id) {
   ];
 
   // consumo por abastecimento (km/L entre abastecimentos consecutivos)
-  const fills = desp.filter(t => t.cat === 'combustivel' && t.km > 0 && t.litros > 0).sort((a, b) => a.km - b.km);
+  const ignFill = kmLeiturasIgnoradas(id);
+  const fills = desp.filter(t => t.cat === 'combustivel' && t.km > 0 && t.litros > 0 && !ignFill.has(t.id)).sort((a, b) => a.km - b.km);
   const consSerie = [];
   for (let i = 1; i < fills.length; i++) {
     const dkm = fills[i].km - fills[i - 1].km;
