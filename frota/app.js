@@ -44,6 +44,7 @@ let editingTxId = null, detailTxId = null, _salvandoTx = false, _salvandoNota = 
 let editingVehId = null, detailVehId = null;
 let editingDrvId = null;
 let finFormVehId = null, finEditId = null, finFinanciadoTocado = false, _salvandoFin = false;
+let finPagId = null, _salvandoPag = false;
 
 // ══════════════════════════════════════════
 // ÍCONES — biblioteca única (SVG inline, traço consistente)
@@ -1201,8 +1202,12 @@ function renderLanc() {
   const catSel = $('lanc-cat-filter');
   const curCat = catSel.value;
   const opt = c => `<option value="${c.id}">${c.nome}</option>`;
+  // "Financiamento" só entra no FILTRO quando já existe algum pagamento — nunca
+  // vira opção de criar despesa avulsa (a grade do lançamento não o inclui).
+  const frotaCats = S.tx.some(t => !t.deleted && t.cat === 'financiamento')
+    ? CATS.despesa.concat(CATS_INTERNAS.filter(c => c.id === 'financiamento')) : CATS.despesa;
   catSel.innerHTML = '<option value="">Todas as categorias</option>' +
-    `<optgroup label="Frota">${CATS.despesa.map(opt).join('')}</optgroup>` +
+    `<optgroup label="Frota">${frotaCats.map(opt).join('')}</optgroup>` +
     `<optgroup label="Escritório">${CATS.escritorio.map(opt).join('')}</optgroup>` +
     `<optgroup label="Receitas">${CATS.receita.map(opt).join('')}</optgroup>`;
   catSel.value = curCat;
@@ -1289,6 +1294,7 @@ let pendingAnexo = null; // nota importada aguardando o salvamento do lançament
 
 function openTxForm(tx) {
   if (!exigirEdicao()) return;
+  if (tx && ehPagamentoFin(tx)) { toast('Pagamento de financiamento: exclua e registre novamente pelo contrato.'); return; }
   pendingAnexo = null;
   $('tx-anexo-chip').style.display = 'none';
   editingTxId = tx ? tx.id : null;
@@ -1446,18 +1452,25 @@ function openTxDetail(id) {
   if (t.km) rows.push(['Odômetro', fmtKm(t.km)]);
   if (t.desc) rows.push(['Descrição', t.desc]);
   rows.push(['Lançado por', (t.autorNome || '—') + (t.ts ? ' · ' + fmtDataHora(t.ts) : '')]);
+  const pagFin = ehPagamentoFin(t);
   $('tx-detail-body').innerHTML = '<div class="detail-rows">' +
     rows.map(([k, v]) => `<div class="detail-row"><small>${k}</small><b>${esc(v)}</b></div>`).join('') +
     '</div>' +
+    (pagFin ? '<p class="modal-note" style="margin-bottom:12px">Pagamento de financiamento. Para corrigir, exclua e registre de novo pelo contrato — assim o vínculo com a parcela é preservado.</p>' : '') +
     (t.veiculo && vehById(t.veiculo)
       ? `<button class="btn btn-secondary btn-block" style="margin-bottom:12px" onclick="closeOverlay('modal-tx-detail');openVehDetail('${t.veiculo}')">${icon('truck', 16)} Abrir ficha da ${esc(vehNome(t.veiculo))}</button>`
       : '') +
     '<div class="anexos-list" id="tx-anexos"></div>';
+  // pagamento de financiamento não pode ser editado pelo editor genérico
+  // (evita trocar de categoria ou perder financiamentoId/parcelaNum). Só excluir.
+  const editBtn = $('tx-edit-btn');
+  if (editBtn) editBtn.style.display = pagFin ? 'none' : '';
   renderAnexosInto('tx-anexos', id, 'tx');
   openOverlay('modal-tx-detail');
 }
 function editTxFromDetail() {
   const t = S.tx.find(x => x.id === detailTxId);
+  if (t && ehPagamentoFin(t)) { toast('Pagamento de financiamento: exclua e registre novamente pelo contrato.'); return; }
   closeOverlay('modal-tx-detail');
   if (t) openTxForm(t);
 }
@@ -2650,7 +2663,10 @@ function financiamentoBlocoHTML(vid) {
           <div class="vd-cell"><small>Saldo restante</small><b>${R(r.saldoRestante)}</b></div>
           <div class="vd-cell fin-cell-wide"><small>Próx. vencimento</small><b>${r.proximoVencimento ? fmtData(r.proximoVencimento) : '—'}</b></div>
         </div>
-        <div class="fin-actions"><button class="btn-link" onclick="openFinForm('${vid}','${f.id}')">Editar contrato</button></div>
+        <div class="fin-actions">
+          ${(r.situacao === 'em dia' || r.situacao === 'atrasado') ? `<button class="btn btn-small" onclick="openFinPagForm('${f.id}')">${icon('plus', 14)} Registrar parcela</button>` : ''}
+          <button class="btn-link" onclick="openFinForm('${vid}','${f.id}')">Editar contrato</button>
+        </div>
       </div>`;
     return { prio: sit.prio, venc: r.proximoVencimento || '9999-99-99', html };
   });
@@ -2784,6 +2800,83 @@ async function saveFinanciamento() {
   } catch (e) { console.error(e); toast('Não foi possível salvar. Tente de novo.'); }
   _salvandoFin = false;
 }
+
+// ── PAGAMENTO DE PARCELA (Etapa 4) ──
+// Parcelas ainda em aberto: número > base e sem tx (não deletado) para ela.
+function parcelasEmAberto(fin) {
+  const num = Number(fin.numParcelas) || 0;
+  const base = Math.max(0, Math.min(Math.floor(Number(fin.parcelasAntesLagos) || 0), num));
+  const pagas = new Set(financiamentoPagamentos(fin.id).map(t => Number(t.parcelaNum)));
+  const out = [];
+  for (let n = 1; n <= num; n++) { if (n > base && !pagas.has(n)) out.push(n); }
+  return out;
+}
+
+function openFinPagForm(finId) {
+  if (!exigirEdicao()) return;
+  const f = (S.financiamentos || []).find(x => x.id === finId);
+  if (!f) return;
+  const r = financiamentoResumo(f);
+  if (r.situacao === 'cancelado' || r.situacao === 'quitado') { toast('Contrato ' + r.situacao + ' não aceita pagamento.'); return; }
+  finPagId = finId;
+  const v = vehById(f.veiculo);
+  $('finpag-info').textContent = 'Veículo: ' + (v ? v.nome : '—') + ' · ' + (f.credor || 'Financiamento');
+  const abertas = parcelasEmAberto(f);
+  const sel = $('finpag-parcela');
+  sel.innerHTML = abertas.map(n => `<option value="${n}">Parcela ${n}/${f.numParcelas}</option>`).join('');
+  sel.value = String(r.primeiraEmAberto || abertas[0] || '');
+  $('finpag-valor').value = R(f.valorParcela);
+  $('finpag-data').value = todayStr();
+  finPagChanged();
+  openOverlay('modal-finpag');
+}
+
+// atualiza vencimento derivado e descrição automática ao trocar a parcela
+function finPagChanged() {
+  const f = (S.financiamentos || []).find(x => x.id === finPagId);
+  if (!f) return;
+  const n = parseInt($('finpag-parcela').value, 10) || 0;
+  const venc = n > 0 ? addMesesData(f.primeiroVencimento, n - 1) : '';
+  $('finpag-venc').textContent = venc ? 'Vencimento da parcela: ' + fmtData(venc) + ' (' + dataPorExtenso(venc) + ')' : '';
+  $('finpag-desc').textContent = 'Descrição: Parcela ' + n + '/' + (Number(f.numParcelas) || 0) + ' · ' + (f.credor || 'Financiamento');
+}
+
+// registra UM pagamento de parcela como despesa vinculada ao contrato.
+async function saveFinPagamento() {
+  const f = (S.financiamentos || []).find(x => x.id === finPagId);
+  if (!f) { toast('Contrato não encontrado.'); return; }
+  const r = financiamentoResumo(f);
+  if (r.situacao === 'cancelado' || r.situacao === 'quitado') { toast('Contrato ' + r.situacao + ' não aceita pagamento.'); return; }
+  const num = Number(f.numParcelas) || 0;
+  const base = Math.max(0, Math.min(Math.floor(Number(f.parcelasAntesLagos) || 0), num));
+  const n = parseInt($('finpag-parcela').value, 10) || 0;
+  const data = $('finpag-data').value || todayStr();
+
+  if (n < 1 || n > num) { toast('Escolha uma parcela válida.'); return; }
+  if (n <= base) { toast(`A parcela ${n} está coberta pelas parcelas anteriores ao Lagos.`); return; }
+  if (!data || isNaN(new Date(data + 'T00:00:00').getTime())) { toast('Informe uma data de pagamento válida.'); return; }
+  // revalida AGORA se a parcela ainda está aberta (corrida / soft-delete)
+  if (financiamentoPagamentos(f.id).some(t => Number(t.parcelaNum) === n)) { toast(`A parcela ${n} já foi registrada.`); return; }
+
+  if (_salvandoPag) return;           // bloqueia duplo toque
+  _salvandoPag = true;
+  const id = 'fin_' + f.id + '_p' + n; // id determinístico: reenvio não duplica
+  const t = {
+    tipo: 'despesa', cat: 'financiamento', origem: 'frota', veiculo: f.veiculo,
+    financiamentoId: f.id, parcelaNum: n, valor: centavos(f.valorParcela), data,
+    desc: 'Parcela ' + n + '/' + num + ' · ' + (f.credor || 'Financiamento'),
+    autorNome: me.nome || me.email, autorUid: me.uid, ts: Date.now(),
+  };
+  closeOverlay('modal-finpag');
+  try {
+    await dataSet('tx', id, t);
+    toast(`Parcela ${n} registrada ✓`);
+  } catch (e) { console.error(e); toast('Não foi possível salvar. Tente de novo.'); }
+  _salvandoPag = false;
+}
+
+// um lançamento é pagamento de financiamento?
+function ehPagamentoFin(t) { return !!(t && t.cat === 'financiamento' && t.financiamentoId); }
 
 function socioRow(s, E) {
   const papel = (E.permissoes || {})[permKey(s.email)] || 'admin';

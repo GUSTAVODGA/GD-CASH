@@ -294,7 +294,7 @@
     <div class="sheet-head"><h3>Lançamento</h3><button class="x" onclick="closeOverlay('modal-tx-detail')">✕</button></div>
     <div id="tx-detail-body"></div>
     <div class="fld-row">
-      <button class="btn btn-secondary" data-ic="pencil" onclick="editTxFromDetail()">Editar</button>
+      <button class="btn btn-secondary" id="tx-edit-btn" data-ic="pencil" onclick="editTxFromDetail()">Editar</button>
       <button class="btn btn-danger" data-ic="trash" onclick="deleteTxFromDetail()">Excluir</button>
     </div>
   </div>
@@ -382,6 +382,20 @@
     <label class="fld"><span>Observações <small>(opcional)</small></span><textarea id="fin-obs" rows="2" placeholder="Anotações sobre o contrato…"></textarea></label>
     <div class="fin-resumo" id="fin-resumo"></div>
     <button class="btn btn-primary btn-block" onclick="saveFinanciamento()">Salvar</button>
+  </div>
+</div>
+
+<!-- Registrar pagamento de parcela -->
+<div class="overlay" id="modal-finpag">
+  <div class="sheet">
+    <div class="sheet-head"><h3 data-ic="landmark">Registrar parcela</h3><button class="x" onclick="closeOverlay('modal-finpag')">✕</button></div>
+    <p class="modal-note" id="finpag-info"></p>
+    <label class="fld"><span>Parcela</span><select id="finpag-parcela" onchange="finPagChanged()"></select></label>
+    <div class="fld-hint" id="finpag-venc"></div>
+    <label class="fld"><span>Valor da parcela <small>(do contrato)</small></span><input type="text" id="finpag-valor" readonly></label>
+    <label class="fld"><span>Data do pagamento</span><input type="date" id="finpag-data"></label>
+    <div class="fld-hint" id="finpag-desc"></div>
+    <button class="btn btn-primary btn-block" onclick="saveFinPagamento()">Confirmar pagamento</button>
   </div>
 </div>
 
