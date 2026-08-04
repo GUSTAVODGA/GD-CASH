@@ -393,7 +393,8 @@
     <label class="fld"><span>Parcela</span><select id="finpag-parcela" onchange="finPagChanged()"></select></label>
     <div class="fld-hint" id="finpag-venc"></div>
     <label class="fld"><span>Valor da parcela <small>(do contrato)</small></span><input type="text" id="finpag-valor" readonly></label>
-    <label class="fld"><span>Data do pagamento</span><input type="date" id="finpag-data"></label>
+    <label class="fld"><span>Data do pagamento</span><input type="date" id="finpag-data" oninput="finPagChanged()" onchange="finPagChanged()"></label>
+    <div class="fld-hint" id="finpag-data-extenso"></div>
     <div class="fld-hint" id="finpag-desc"></div>
     <button class="btn btn-primary btn-block" onclick="saveFinPagamento()">Confirmar pagamento</button>
   </div>

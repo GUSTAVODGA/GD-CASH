@@ -2826,7 +2826,9 @@ function openFinPagForm(finId) {
   sel.innerHTML = abertas.map(n => `<option value="${n}">Parcela ${n}/${f.numParcelas}</option>`).join('');
   sel.value = String(r.primeiraEmAberto || abertas[0] || '');
   $('finpag-valor').value = R(f.valorParcela);
-  $('finpag-data').value = todayStr();
+  const hoje = todayStr();
+  $('finpag-data').value = hoje;
+  $('finpag-data').max = hoje;   // impede escolher data futura no seletor nativo
   finPagChanged();
   openOverlay('modal-finpag');
 }
@@ -2839,6 +2841,13 @@ function finPagChanged() {
   const venc = n > 0 ? addMesesData(f.primeiroVencimento, n - 1) : '';
   $('finpag-venc').textContent = venc ? 'Vencimento da parcela: ' + fmtData(venc) + ' (' + dataPorExtenso(venc) + ')' : '';
   $('finpag-desc').textContent = 'Descrição: Parcela ' + n + '/' + (Number(f.numParcelas) || 0) + ' · ' + (f.credor || 'Financiamento');
+  // confirmação inequívoca da data do pagamento (armazenada em YYYY-MM-DD)
+  const ext = $('finpag-data-extenso');
+  if (ext) {
+    const t = dataPorExtenso($('finpag-data').value);
+    ext.textContent = t ? 'Data do pagamento: ' + t : '';
+    ext.style.display = t ? '' : 'none';
+  }
 }
 
 // registra UM pagamento de parcela como despesa vinculada ao contrato.
@@ -2855,6 +2864,7 @@ async function saveFinPagamento() {
   if (n < 1 || n > num) { toast('Escolha uma parcela válida.'); return; }
   if (n <= base) { toast(`A parcela ${n} está coberta pelas parcelas anteriores ao Lagos.`); return; }
   if (!data || isNaN(new Date(data + 'T00:00:00').getTime())) { toast('Informe uma data de pagamento válida.'); return; }
+  if (data > todayStr()) { toast('A data do pagamento não pode ser futura.'); return; }
   // revalida AGORA se a parcela ainda está aberta (corrida / soft-delete)
   if (financiamentoPagamentos(f.id).some(t => Number(t.parcelaNum) === n)) { toast(`A parcela ${n} já foi registrada.`); return; }
 
