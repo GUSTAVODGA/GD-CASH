@@ -345,6 +345,8 @@ button.alert-item:active { transform: scale(.985); }
 .fin-resumo { background: var(--card2); border-radius: 10px; padding: 10px 12px; margin: 6px 0 14px; font-size: .86rem; line-height: 1.5; color: var(--txt2); }
 .fin-resumo b { color: var(--txt); font-variant-numeric: tabular-nums; }
 .fld-hint { margin: -6px 2px 12px; font-size: .82rem; color: var(--txt2); }
+/* ação destrutiva discreta no editor de financiamento */
+.fin-danger { display: block; width: 100%; text-align: center; margin-top: 12px; color: var(--neg); font-weight: 600; }
 
 /* ═══════════ MOTORISTAS / LINHAS ═══════════ */
 .row-btn {

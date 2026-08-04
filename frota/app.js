@@ -2718,6 +2718,13 @@ function openFinForm(vid, finId) {
     ? 'Bloqueado: já há pagamentos registrados no Lagos para este contrato.'
     : 'Use para pagamentos feitos antes de começar o controle no Lagos. Não serão lançados no Financeiro.';
   finFinanciadoTocado = !!f;           // edição respeita o valor salvo; novo auto-sugere
+  // ação destrutiva só na EDIÇÃO: "Excluir contrato" (sem pagamentos) ou
+  // "Cancelar contrato" (com pagamentos vinculados).
+  const delBtn = $('fin-del-btn');
+  if (delBtn) {
+    if (f) { delBtn.textContent = financiamentoPagamentos(f.id).length ? 'Cancelar contrato' : 'Excluir contrato'; delBtn.style.display = ''; }
+    else { delBtn.style.display = 'none'; }
+  }
   finFormRecalc();
   openOverlay('modal-fin');
 }
@@ -2799,6 +2806,36 @@ async function saveFinanciamento() {
     toast(orig ? 'Financiamento atualizado ✓' : 'Financiamento cadastrado ✓');
   } catch (e) { console.error(e); toast('Não foi possível salvar. Tente de novo.'); }
   _salvandoFin = false;
+}
+
+// Excluir (sem pagamentos) ou Cancelar/arquivar (com pagamentos) o contrato.
+// Delega em removerOuArquivarFinanciamento(), que é o único ponto de decisão:
+// exclusão física só acontece quando NÃO há pagamento vinculado — nem por
+// chamada direta um contrato com tx é apagado.
+let _processandoFin = false;
+async function excluirOuCancelarFin() {
+  if (!exigirEdicao()) return;
+  if (!finEditId) return;
+  const f = (S.financiamentos || []).find(x => x.id === finEditId);
+  if (!f) return;
+  const vid = finFormVehId;
+  const nPag = financiamentoPagamentos(finEditId).length;
+  const nome = f.credor || 'Financiamento';
+  const titulo = nPag ? 'Cancelar contrato' : 'Excluir contrato';
+  const msg = nPag
+    ? `${nome} tem ${nPag} pagamento${nPag > 1 ? 's' : ''} registrado${nPag > 1 ? 's' : ''} no Lagos. O contrato será ARQUIVADO como cancelado — os pagamentos continuam no Financeiro e no PDF, nada é apagado. Confirmar?`
+    : `${nome} não tem pagamentos. Isto remove apenas o contrato — o veículo e os lançamentos não são tocados. Confirmar?`;
+  confirmDialog(titulo, msg, async () => {
+    if (_processandoFin) return;          // evita executar duas vezes
+    _processandoFin = true;
+    try {
+      const r = await removerOuArquivarFinanciamento(finEditId);
+      closeOverlay('modal-fin');
+      if (vid) openVehDetail(vid);         // atualiza o card imediatamente
+      toast(r.acao === 'excluido' ? 'Contrato excluído ✓' : 'Contrato cancelado ✓');
+    } catch (e) { console.error(e); toast('Não foi possível concluir. Tente de novo.'); }
+    _processandoFin = false;
+  });
 }
 
 // ── PAGAMENTO DE PARCELA (Etapa 4) ──
