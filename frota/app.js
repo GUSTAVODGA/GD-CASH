@@ -1778,6 +1778,12 @@ async function saveVehicle() {
 
 function deleteVehicleFromForm() {
   const id = editingVehId;
+  // não permite excluir um veículo que tem financiamento vinculado — isso deixaria
+  // o contrato órfão (só é visto pela ficha do veículo). Oriente a DESATIVAR.
+  if ((S.financiamentos || []).some(f => f.veiculo === id)) {
+    toast('Este veículo tem financiamento vinculado. Resolva o contrato ou use "Inativo" em vez de excluir.');
+    return;
+  }
   confirmDialog('Excluir veículo', 'Os lançamentos já feitos serão mantidos no histórico. Excluir o veículo?', async () => {
     closeOverlay('modal-veh');
     try { await dataDelete('vehicles', id); toast('Veículo excluído'); }
