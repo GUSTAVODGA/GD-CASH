@@ -1,3 +1,16 @@
+// ESTADO REAL atualmente publicado no Console do Firebase (conferido pelo dono
+// do projeto). Regra "catch-all": qualquer sócio autorizado lê e grava em
+// QUALQUER coleção — inclusive `financiamentos`, que portanto já está liberada
+// sem nenhuma alteração no Console.
+//
+// IMPORTANTE — política de acesso:
+// A diferenciação de papéis (admin / editor / "só visualiza") é aplicada
+// APENAS na interface do app (função podeEditar()/exigirEdicao()). As regras
+// abaixo NÃO distinguem papéis: para o Firestore, todo sócio autenticado pode
+// gravar. Endurecer isso (enforcement de leitor no banco) seria OUTRA etapa,
+// deliberada, e não faz parte desta entrega — mudá-la agora poderia bloquear
+// usuários existentes.
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -8,28 +21,8 @@ service cloud.firestore {
         'lagosoperacional+thadeu@gmail.com'
       ];
     }
-    // papel do usuário logado, lido de empresa/dados (padrão: admin)
-    function papel() {
-      let e = /databases/$(database)/documents/empresa/dados;
-      let key = request.auth.token.email.replace('[.#$/\\[\\]]', '_');
-      return (isSocio() && exists(e) && ('permissoes' in get(e).data)
-              && (key in get(e).data.permissoes))
-        ? get(e).data.permissoes[key] : 'admin';
+    match /{document=**} {
+      allow read, write: if isSocio();
     }
-    function podeEditar() { return isSocio() && papel() != 'leitor'; }
-    function isAdmin()    { return isSocio() && papel() == 'admin'; }
-
-    // dados da empresa e permissões: só administradores gravam
-    match /empresa/{doc}  { allow read: if isSocio(); allow write: if isAdmin(); }
-    // cada sócio ajusta o próprio nome/foto
-    match /profiles/{uid} { allow read: if isSocio(); allow write: if isSocio(); }
-    // operação e financeiro: "Só visualiza" não grava
-    match /vehicles/{id}  { allow read: if isSocio(); allow write: if podeEditar(); }
-    match /drivers/{id}   { allow read: if isSocio(); allow write: if podeEditar(); }
-    match /tx/{id}        { allow read: if isSocio(); allow write: if podeEditar(); }
-    match /kmlog/{id}     { allow read: if isSocio(); allow write: if podeEditar(); }
-    match /eventos/{id}   { allow read: if isSocio(); allow write: if podeEditar(); }
-    match /anexos/{id}    { allow read: if isSocio(); allow write: if podeEditar(); }
-    match /financiamentos/{id} { allow read: if isSocio(); allow write: if podeEditar(); }
   }
 }
