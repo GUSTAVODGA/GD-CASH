@@ -6430,7 +6430,7 @@ function renderAjustes() {
       <div class="sdivider"></div>
       <div class="srow srow-muted">
         <span class="srow-icon">${ic.info}</span>
-        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v31</div></div>
+        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v55</div></div>
       </div>
       <div class="sdivider"></div>
       <div class="srow srow-muted">
@@ -8277,6 +8277,32 @@ function deletePatrimonioUI(id) {
   });
 }
 
+// Menu "⋮" do detalhe de imóvel/outro bem — surfacing das ações que antes só
+// existiam dentro do formulário (Arquivar/Reativar e Excluir), em paridade com
+// o menu do veículo. Não adiciona funcionalidade: apenas expõe o que já existe.
+var _patMenuTarget = null;
+function openPatMenu(id) {
+  const p = getPatrimonio(id); if (!p) return;
+  _patMenuTarget = id;
+  const t = document.getElementById('patmenu-title');
+  if (t) t.textContent = p.nome || 'Patrimônio';
+  const arqLbl = document.getElementById('patmenu-archive-lbl');
+  if (arqLbl) arqLbl.textContent = p.status === 'inativo' ? 'Reativar' : 'Arquivar';
+  openOverlay('pat-menu-sheet');
+}
+function patMenuArchive() {
+  closeOverlay('pat-menu-sheet');
+  const id = _patMenuTarget; const p = getPatrimonio(id); if (!p) return;
+  const reactivate = p.status === 'inativo';
+  updatePatrimonio(id, { status: reactivate ? 'ativo' : 'inativo' });
+  renderPatDetail(id);
+  gdToast(reactivate ? 'Patrimônio reativado.' : 'Patrimônio arquivado. Sai dos totais ativos; histórico preservado.', { type: reactivate ? 'success' : 'info' });
+}
+function patMenuDelete() {
+  closeOverlay('pat-menu-sheet');
+  if (_patMenuTarget) deletePatrimonioUI(_patMenuTarget);
+}
+
 // ══════════════════════════════════════════
 // PATRIMÔNIO 2.0 — DETALHE, FINANCIAMENTOS E HISTÓRICO (Etapa 3)
 // ══════════════════════════════════════════
@@ -8297,6 +8323,27 @@ function _patFmtDate(iso) {
 
 function _patTrashSvg() {
   return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>';
+}
+
+// Ícones de estado vazio (contorno, discretos) — apenas orientam, sem novas ações.
+const _PAT_EMPTY_ICONS = {
+  despesa:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 3h12l2 2v16l-2-1-2 1-2-1-2 1-2-1-2 1V5z"/><line x1="8" y1="8" x2="14" y2="8"/><line x1="8" y1="12" x2="14" y2="12"/></svg>',
+  pendencia: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a1.5 1.5 0 0 0 1.29 2.25h17.78A1.5 1.5 0 0 0 22.18 18L13.71 3.86a1.5 1.5 0 0 0-2.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  historico: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15.5 14"/></svg>',
+};
+// Estado vazio orientativo (ícone + título + dica). Substitui o texto "morto".
+function _patEmptyState(iconKey, title, hint) {
+  return `<div class="pat-inl-empty">
+    <div class="pat-inl-empty-ico">${_PAT_EMPTY_ICONS[iconKey] || _PAT_EMPTY_ICONS.historico}</div>
+    <div class="pat-inl-empty-title">${escHtml(title)}</div>
+    ${hint ? `<div class="pat-inl-empty-hint">${escHtml(hint)}</div>` : ''}
+  </div>`;
+}
+// Faixa de estado do bem (Arquivado/Vendido) — visível no topo do card principal.
+function _patStateBanner(statusK) {
+  if (statusK === 'inativo') return `<div class="pat-state-banner pat-state-arquivado"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg><span>Arquivado</span></div>`;
+  if (statusK === 'vendido') return `<div class="pat-state-banner pat-state-vendido"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Vendido</span></div>`;
+  return '';
 }
 
 // Card de financiamento (compartilhado por imóvel/outro e veículo). ownerId =
@@ -8334,14 +8381,14 @@ function _finCardHtml(f, ownerId, kind) {
       </div>
       <div class="pagfin-progress"><span class="pagfin-progress-fill" style="width:${quitado}%"></span></div>
       <div class="pagfin-grid">
-        <div class="pagfin-cell"><span class="pagfin-cell-lbl">Valor do bem</span><span class="pagfin-cell-val">${R(f.valorBem || 0)}</span></div>
+        <div class="pagfin-cell"><span class="pagfin-cell-lbl">Valor financiado</span><span class="pagfin-cell-val">${R(f.valorOriginal || 0)}</span></div>
         <div class="pagfin-cell"><span class="pagfin-cell-lbl">Já pago</span><span class="pagfin-cell-val pagfin-pos">${R(pagos)}</span></div>
         <div class="pagfin-cell"><span class="pagfin-cell-lbl">Saldo devedor</span><span class="pagfin-cell-val pagfin-neg">${R(st.saldo)}</span></div>
         <div class="pagfin-cell"><span class="pagfin-cell-lbl">% quitado</span><span class="pagfin-cell-val">${quitado}%</span></div>
       </div>
       ${quitadoTotal
         ? `<div class="pagfin-quitado">✓ Financiamento quitado</div>`
-        : `<button class="btn btn-secondary pagfin-add-btn" onclick="openPagFinForm('${ownerId}','${f.id}','${kind}')">+ Registrar pagamento</button>`}
+        : `<button class="btn btn-primary pagfin-add-btn" onclick="openPagFinForm('${ownerId}','${f.id}','${kind}')">Registrar pagamento</button>`}
       <div class="pagfin-hist">${pagsHtml}</div>
     </div>`;
 }
@@ -8382,10 +8429,10 @@ function renderPatDetail(id) {
     if (d.cartorio)   detRows.push(['Cartório', d.cartorio]);
   }
 
-  // ── Financiamentos ──
+  // ── Financiamento (mesma affordance discreta e discoverável do veículo) ──
   const finHtml = fins.length === 0
-    ? `<div class="pat-det-empty">Nenhum financiamento. Para adicionar, toque em "Editar" e ative "Este bem é financiado".</div>`
-    : fins.map(f => _finCardHtml(f, p.id, 'pat')).join('');
+    ? `<button class="btn btn-secondary" style="width:100%" onclick="openPatFinForm('${p.id}','','pat')">Este bem é financiado — adicionar</button>`
+    : `<div class="pat-list-group" style="margin-bottom:0">${fins.map(f => _finCardHtml(f, p.id, 'pat')).join('')}</div>`;
 
   // ── Histórico (mais recente primeiro; estável para datas iguais) ──
   const hist = (p.historico || []).slice()
@@ -8393,7 +8440,7 @@ function renderPatDetail(id) {
     .sort((a, b) => String(b.e.data || '').localeCompare(String(a.e.data || '')) || b.i - a.i)
     .map(x => x.e);
   const histHtml = hist.length === 0
-    ? `<div class="pat-det-empty">Nenhum evento registrado.</div>`
+    ? _patEmptyState('historico', 'Nenhum evento ainda', 'Registre reavaliações e acontecimentos para acompanhar a evolução deste bem.')
     : hist.map(e => {
         let title, body = '';
         if (e.tipo === 'avaliacao') {
@@ -8420,9 +8467,16 @@ function renderPatDetail(id) {
       }).join('');
 
   cont.innerHTML = `
-    ${_pageHeader("renderPatrimonioHome()", chipName, `<button class="btn-pill" onclick="openPatForm(null,'${p.id}')">Editar</button>`)}
+    ${_pageHeader("renderPatrimonioHome()", chipName, `
+      <div class="phr-actions">
+        <button class="btn-pill" onclick="openPatForm(null,'${p.id}')">Editar</button>
+        <button class="pat-kebab-btn" onclick="openPatMenu('${p.id}')" aria-label="Mais ações">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+        </button>
+      </div>`)}
 
-    <div class="card pat-det-hero">
+    <div class="card pat-det-hero${statusK !== 'ativo' ? ' pat-hero-inactive' : ''}">
+      ${_patStateBanner(statusK)}
       <div class="pat-det-hero-row">
         <div class="pat-list-photo pat-det-photo${p.foto ? '' : ' pat-ico-' + typeKey}">
           ${p.foto ? `<img src="${escHtml(p.foto)}" alt="${escHtml(p.nome)}">` : _patIcon(typeKey)}
@@ -8431,32 +8485,36 @@ function renderPatDetail(id) {
           <div class="pat-det-name">${escHtml(p.nome)}</div>
           <div class="pat-list-meta">
             <span class="pat-chip pat-chip-${typeKey}">${chipName}</span>
-            <span class="pat-status s-${statusK}"><span class="pat-status-dot"></span><span class="pat-status-lbl">${_patStatusLabel(statusK)}</span></span>
+            ${statusK === 'ativo' ? `<span class="pat-status s-${statusK}"><span class="pat-status-dot"></span><span class="pat-status-lbl">${_patStatusLabel(statusK)}</span></span>` : ''}
           </div>
         </div>
       </div>
-      <div class="pat-det-val-lbl">Valor atual estimado</div>
-      <div class="pat-det-val">${R(p.valorEstimado || 0)}</div>
-      ${saldoTot > 0 ? `<div class="pat-det-liq">Financiamentos −${R(saldoTot)} · Líquido <b>${R((p.valorEstimado || 0) - saldoTot)}</b></div>` : ''}
+      <div class="pat-det-valblock">
+        <div class="pat-det-val-lbl">Valor atual estimado</div>
+        <div class="pat-det-val">${R(p.valorEstimado || 0)}</div>
+        ${saldoTot > 0 ? `
+        <div class="pat-det-liqrow"><span>Financiamentos</span><span class="pat-det-liqrow-neg">−${R(saldoTot)}</span></div>
+        <div class="pat-det-liqrow pat-det-liqrow-net"><span>Patrimônio líquido</span><span>${R((p.valorEstimado || 0) - saldoTot)}</span></div>` : ''}
+      </div>
       ${p.observacoes ? `<div class="pat-det-obs">${escHtml(p.observacoes)}</div>` : ''}
     </div>
 
     ${detRows.length > 0 ? `
-    <div class="sec-label" style="margin:18px 0 10px">Detalhes</div>
+    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Detalhes</div></div>
     <div class="pat-list-group" style="margin-bottom:0">
       ${detRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
     </div>` : ''}
 
     <div class="pat-det-sec-head">
-      <div class="sec-label" style="margin:0">Financiamentos</div>
+      <div class="sec-label" style="margin:0">Financiamento</div>
     </div>
-    <div class="pat-list-group" style="margin-bottom:0">${finHtml}</div>
+    ${finHtml}
 
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Histórico</div>
-      <button class="btn-pill" onclick="openPatEvtForm('${p.id}')">+ Evento</button>
+      <button class="pat-link-add" onclick="openPatEvtForm('${p.id}')">+ Evento</button>
     </div>
-    <div class="pat-list-group" style="margin-bottom:calc(96px + env(safe-area-inset-bottom, 0px))">${histHtml}</div>
+    <div class="pat-list-group pat-det-lastgroup">${histHtml}</div>
   `;
 }
 
@@ -8764,7 +8822,7 @@ function renderVehPatDetail(id) {
   // ── Pendências abertas vinculadas (resumo) ──
   const pends = _vehLinkedPends(v).filter(p => p.status === 'aberta');
   const pendHtml = pends.length === 0
-    ? `<div class="pat-det-empty">Nenhuma pendência aberta.</div>`
+    ? _patEmptyState('pendencia', 'Nenhuma pendência aberta', 'Use “+ Vincular” para acompanhar pendências deste veículo aqui.')
     : pends.map(p => `
         <div class="pat-fin-item" style="cursor:default">
           <div class="pat-fin-body">
@@ -8777,7 +8835,7 @@ function renderVehPatDetail(id) {
   // ── Despesas vinculadas ──
   const exps = (v.linkedExpenses || []).map(eid => (D.expenses || []).find(e => e.id === eid)).filter(Boolean);
   const expHtml = exps.length === 0
-    ? `<div class="pat-det-empty">Nenhuma despesa vinculada.</div>`
+    ? _patEmptyState('despesa', 'Nenhuma despesa vinculada', 'Use “+ Vincular” para acompanhar o custo real deste veículo.')
     : exps.map(e => `
         <div class="pat-fin-item" style="cursor:default">
           <div class="pat-fin-body">
@@ -8806,10 +8864,12 @@ function renderVehPatDetail(id) {
     });
   }
   histItems.sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
-  const histHtml = histItems.length === 0 ? '' : `
-    <div class="sec-label" style="margin:18px 0 10px">Histórico</div>
-    <div class="pat-list-group" style="margin-bottom:0">
-      ${histItems.map(e => `
+  const histHtml = `
+    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Histórico</div></div>
+    <div class="pat-list-group pat-det-lastgroup">
+      ${histItems.length === 0
+        ? _patEmptyState('historico', 'Nenhum evento ainda', 'Atualizações de km e reavaliações do veículo aparecem aqui.')
+        : histItems.map(e => `
         <div class="pat-hist-item">
           <div class="pat-hist-dot-col"><span class="pat-hist-dot ${e.kind === 'aval' ? 'pat-hist-dot-aval' : ''}"></span></div>
           <div class="pat-hist-body">
@@ -8823,10 +8883,10 @@ function renderVehPatDetail(id) {
   // ── Financiamento do veículo (mesmo fluxo do imóvel; fonte única D.debts) ──
   const vehDebts = _debtsForVehicle(v.id);
   const finVehHtml = `
-    <div class="sec-label" style="margin:18px 0 10px">Financiamento</div>
+    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Financiamento</div></div>
     ${vehDebts.length === 0
       ? `<button class="btn btn-secondary" style="width:100%" onclick="openPatFinForm('${v.id}','','veh')">Este bem é financiado — adicionar</button>`
-      : vehDebts.map(f => _finCardHtml(f, v.id, 'veh')).join('')}`;
+      : `<div class="pat-list-group" style="margin-bottom:0">${vehDebts.map(f => _finCardHtml(f, v.id, 'veh')).join('')}</div>`}`;
 
   const safePhoto = _vehSafePhoto(v.photo);
   const photoHtml = safePhoto
@@ -8842,7 +8902,8 @@ function renderVehPatDetail(id) {
         </button>
       </div>`)}
 
-    <div class="card pat-det-hero">
+    <div class="card pat-det-hero${statusK !== 'ativo' ? ' pat-hero-inactive' : ''}">
+      ${_patStateBanner(statusK)}
       <div class="pat-det-hero-row">
         <div class="pat-list-photo pat-det-photo${safePhoto ? '' : ' pat-ico-veiculo'}">${photoHtml}</div>
         <div class="pat-det-hero-info">
@@ -8850,21 +8911,23 @@ function renderVehPatDetail(id) {
           ${sub ? `<div class="pat-det-sub-line">${escHtml(sub)}</div>` : ''}
           <div class="pat-list-meta">
             <span class="pat-chip pat-chip-veiculo">Veículo</span>
-            <span class="pat-status s-${statusK}"><span class="pat-status-dot"></span><span class="pat-status-lbl">${escHtml(statusLbl)}</span></span>
+            ${statusK === 'ativo' ? `<span class="pat-status s-${statusK}"><span class="pat-status-dot"></span><span class="pat-status-lbl">${escHtml(statusLbl)}</span></span>` : ''}
           </div>
           ${(v.plate || (v.km != null && v.km !== '')) ? `<div class="pat-det-sub-line" style="margin-top:4px">${[v.plate ? escHtml(v.plate) : '', (v.km != null && v.km !== '') ? Number(v.km).toLocaleString('pt-BR') + ' km' : ''].filter(Boolean).join(' · ')}</div>` : ''}
         </div>
       </div>
-      <div class="pat-det-val-lbl">Valor atual estimado</div>
-      ${valorInformado
-        ? `<div class="pat-det-val">${R(pat.valorEstimado)}</div>`
-        : `<div class="pat-det-val-empty">Valor não informado</div>`}
+      <div class="pat-det-valblock">
+        <div class="pat-det-val-lbl">Valor atual estimado</div>
+        ${valorInformado
+          ? `<div class="pat-det-val">${R(pat.valorEstimado)}</div>`
+          : `<div class="pat-det-val-empty">Valor não informado</div>`}
+      </div>
     </div>
 
     ${finVehHtml}
 
     ${hasInfo ? `
-    <div class="sec-label" style="margin:18px 0 10px">Informações do veículo</div>
+    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Informações do veículo</div></div>
     <div class="pat-list-group" style="margin-bottom:0">
       ${infoRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
       ${v.notes ? `<div class="pat-det-row pat-det-row-notes"><span class="pat-det-row-lbl">Observações</span><span class="pat-det-row-val pat-det-row-val-notes">${escHtml(v.notes)}</span></div>` : ''}
