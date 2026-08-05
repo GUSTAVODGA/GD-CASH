@@ -855,13 +855,13 @@
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="vmenu-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Veículo</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-        <button class="av-sheet-opt" onclick="vehMenuStatus()" aria-label="Alterar status do veículo">
+        <button class="av-sheet-opt" id="vmenu-status-opt" onclick="vehMenuStatus()" aria-label="Alterar status do veículo">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M21 12a9 9 0 1 1-6.219-8.56"/><polyline points="21 3 21 9 15 9"/></svg>
           <span style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--text)">Alterar status</span>
         </button>
-        <button class="av-sheet-opt" onclick="vehMenuArchive()" aria-label="Arquivar veículo">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-          <span style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--text)">Arquivar</span>
+        <button class="av-sheet-opt" onclick="vehMenuArchive()" aria-label="Marcar como vendido ou reabrir">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>
+          <span id="vmenu-life-lbl" style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--text)">Marcar como vendido</span>
         </button>
         <button class="av-sheet-opt" onclick="vehMenuDelete()" aria-label="Excluir veículo definitivamente">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--rd)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -878,9 +878,9 @@
       <div class="sheet-handle"></div>
       <div class="sheet-title" id="patmenu-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Patrimônio</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-        <button class="av-sheet-opt" onclick="patMenuArchive()" aria-label="Arquivar ou reativar patrimônio">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
-          <span id="patmenu-archive-lbl" style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--text)">Arquivar</span>
+        <button class="av-sheet-opt" onclick="patMenuArchive()" aria-label="Marcar como vendido, encerrar ou reabrir">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 6 9 17l-5-5"/></svg>
+          <span id="patmenu-archive-lbl" style="flex:1;text-align:left;font-size:14px;font-weight:700;color:var(--text)">Marcar como vendido</span>
         </button>
         <button class="av-sheet-opt" onclick="patMenuDelete()" aria-label="Excluir patrimônio definitivamente">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--rd)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
@@ -888,6 +888,15 @@
         </button>
       </div>
       <button class="btn btn-secondary" style="width:100%" onclick="closeOverlay('pat-menu-sheet')">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Fluxo de liquidação do bem (venda/encerramento): data, valor recebido e destino da dívida -->
+  <div class="overlay" id="venda-sheet" onclick="if(event.target===this)closeOverlay('venda-sheet')">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title" id="venda-title">Marcar como vendido</div>
+      <div id="venda-body"></div>
     </div>
   </div>
 
@@ -1509,7 +1518,6 @@
         <option value="em_uso">Em uso</option>
         <option value="na_oficina">Na oficina</option>
         <option value="a_venda">À venda</option>
-        <option value="vendido">Vendido</option>
       </select>
     </div>
     <button class="btn btn-primary" onclick="saveVehStatus()">Salvar</button>

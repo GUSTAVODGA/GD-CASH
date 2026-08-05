@@ -284,9 +284,10 @@ async function loadFromCloud() {
       // Consolidação canônica de dívidas (idempotente) + reconciliação unificada.
       // Roda após loadFromCloud para migrar dados antigos e limpar marcadores órfãos.
       const _migrated = migrateDebtsV1();
+      const _patLife = migratePatrimonioLifecycleV1();
       const _debtCleaned = reconcileDebtPayments();
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
-      if (_fxCleaned || _migrated || _debtCleaned || _fxNeedSave) save();
+      if (_fxCleaned || _migrated || _patLife || _debtCleaned || _fxNeedSave) save();
     } else {
       // Primeiro login — oferece migrar dados locais existentes
       const local = localStorage.getItem('gdcash_v1');
@@ -875,6 +876,7 @@ let D = (() => {
 // Migração canônica de dívidas no boot local (offline / antes do loadFromCloud).
 // Idempotente: flag global + identidade por origem. loadFromCloud roda de novo sem duplicar.
 try { if (migrateDebtsV1()) localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch (e) {}
+try { if (migratePatrimonioLifecycleV1()) localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch (e) {}
 
 // ══════════════════════════════════════════
 // MODAL SYSTEM
@@ -1293,9 +1295,16 @@ function getDayPlatDisplay(date, pid) {
   if(items.length>0) return items.reduce((s,it)=>s+it.amount,0);
   return getDayIncome(date)[pid]||0;
 }
-function sumDayIncome(date)   { return D.platforms.reduce((s,p)=>s+getDayPlatIncome(date,p.id),0); }
+// Receita avulsa (venda de patrimônio) de um dia — fora do modelo por plataforma
+// (platformId nulo). Entra nos TOTAIS de dia/semana/mês, nunca no per-plataforma/ritmo.
+function _saleIncomeDay(date) {
+  return (D.incomeItems || []).filter(it =>
+    it.status === 'paid' && !it.platformId && it.meta && it.meta.source === 'asset-sale' &&
+    localDateKey(it.date) === date).reduce((s, it) => s + (it.amount || 0), 0);
+}
+function sumDayIncome(date)   { return D.platforms.reduce((s,p)=>s+getDayPlatIncome(date,p.id),0) + _saleIncomeDay(date); }
 function sumPlatWeek(pid,off=0) { return weekDates(off).reduce((s,d)=>s+getDayPlatIncome(d,pid),0); }
-function sumWeekIncome(off=0) { return D.platforms.reduce((s,p)=>s+sumPlatWeek(p.id,off),0); }
+function sumWeekIncome(off=0) { return D.platforms.reduce((s,p)=>s+sumPlatWeek(p.id,off),0) + weekDates(off).reduce((s,d)=>s+_saleIncomeDay(d),0); }
 function sumWeekExpenses(off=0)   { const dates=weekDates(off); return D.expenses.filter(e=>dates.includes(e.date)).reduce((s,e)=>s+e.amount,0); }
 function getDayExpenses(date)     { return D.expenses.filter(e=>e.date===date); }
 function sumDayExpenses(date)     { return getDayExpenses(date).reduce((s,e)=>s+e.amount,0); }
@@ -1330,6 +1339,9 @@ function monthAggregate(off=0) {
         receitas += getDayIncome(d)[p.id]||0;
       }
     });
+    // Receita avulsa (venda de patrimônio) — entra no total do mês, fora do per-plataforma.
+    (D.incomeItems||[]).filter(it=>it.status==='paid' && !it.platformId && it.meta && it.meta.source==='asset-sale' && localDateKey(it.date)===d)
+      .forEach(it=>{ receitas+=it.amount; lancReceitas.push(it); });
   });
   const lancGastos = (D.expenses||[]).filter(e=>keys.has(localDateKey(e.date)));
   const gastos = lancGastos.reduce((s,e)=>s+e.amount,0);
@@ -1805,12 +1817,12 @@ function _isVehCat(cat) {
 function _populateExpVehSel() {
   const sel = document.getElementById('exp-veh-sel');
   if (!sel) return;
-  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado');
+  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
   sel.innerHTML = '<option value="">— Veículo (opcional) —</option>' + vehs.map(v => `<option value="${v.id}">${escHtml(v.name)}</option>`).join('');
 }
 
 function _onExpCatChange() {
-  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado');
+  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
   const vehSel   = document.getElementById('exp-veh-sel');
   const linkRow  = document.getElementById('exp-veh-link-row');
   if (!vehSel || vehs.length === 0) { if (vehSel) vehSel.style.display = 'none'; if (linkRow) linkRow.style.display = 'none'; return; }
@@ -1836,13 +1848,13 @@ function _showExpVehManual() {
 function _populatePendVehSel() {
   const sel = document.getElementById('pend-veh-sel');
   if (!sel) return;
-  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado');
+  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
   sel.innerHTML = '<option value="">— Nenhum —</option>' + vehs.map(v => `<option value="${v.id}">${escHtml(v.name)}</option>`).join('');
 }
 
 function _onPendCatChange() {
   const cat   = document.getElementById('pend-cat-sel')?.value || '';
-  const vehs  = (D.vehicles || []).filter(v => v.status !== 'arquivado');
+  const vehs  = (D.vehicles || []).filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
   const vehRow = document.getElementById('pend-veh-row');
   if (!vehRow) return;
   if (vehs.length === 0 || cat !== 'carro') {
@@ -3517,10 +3529,14 @@ function _debtRegistrarPagamento(debtId, opts) {
     : `${d.titulo}${d.credor ? ' — ' + d.credor : ''}`;
   const descricao = (opts.descricao && opts.descricao.trim()) || descBase;
   const expId = uid();
-  D.expenses.push({ id: expId, date: data, category: categoria, amount: valor, description: descricao,
-    meta: { source: 'debt', debtId: d.id, parcelNo: parcelNo } });
+  // saleId opcional: amarra o pagamento à liquidação de um bem (para estorno na reabertura).
+  const expMeta = { source: 'debt', debtId: d.id, parcelNo: parcelNo };
+  if (opts.saleId) expMeta.saleId = opts.saleId;
+  D.expenses.push({ id: expId, date: data, category: categoria, amount: valor, description: descricao, meta: expMeta });
   D.debtPayments = D.debtPayments || [];
-  D.debtPayments.push({ id: uid(), debtId: d.id, parcelNo: parcelNo, expenseId: expId, valor: valor, data: data, criadoEm: Date.now() });
+  const payRec = { id: uid(), debtId: d.id, parcelNo: parcelNo, expenseId: expId, valor: valor, data: data, criadoEm: Date.now() };
+  if (opts.saleId) payRec.meta = { saleId: opts.saleId };
+  D.debtPayments.push(payRec);
   d.atualizadoEm = Date.now();
   return expId;
 }
@@ -3534,6 +3550,24 @@ function reconcileDebtPayments() {
   const before = D.debtPayments.length;
   D.debtPayments = D.debtPayments.filter(p => p && p.debtId && debtIds.has(p.debtId) && (!p.expenseId || expIds.has(p.expenseId)));
   return D.debtPayments.length !== before;
+}
+
+// ── Migração idempotente do ciclo de vida do patrimônio (V1) ──
+// "Arquivado"/"inativo"/"vendido" legados → estado canônico 'encerrado'.
+// Veículo 'arquivado' → 'vendido' (lifecycle encerrado). Preserva TUDO: histórico,
+// despesas, pagamentos e vínculos. NÃO cria eventos sintéticos (entrada/quitação).
+// Idempotente via flag _patLifecycleSchema; releitura não reprocessa.
+function migratePatrimonioLifecycleV1() {
+  if (D._patLifecycleSchema === 1) return false;
+  let changed = false;
+  (D.patrimonios || []).forEach(p => {
+    if (p.status === 'inativo' || p.status === 'vendido') { p.status = 'encerrado'; changed = true; }
+  });
+  (D.vehicles || []).forEach(v => {
+    if (v.status === 'arquivado') { v.status = 'vendido'; changed = true; }
+  });
+  D._patLifecycleSchema = 1;
+  return true; // sempre grava a flag na primeira execução
 }
 
 // ── Migração idempotente V1: consolida installments + patrimonios.financiamentos ──
@@ -6489,11 +6523,11 @@ var pendFilter = 'abertas';
 function _pendAssetRef(p) {
   const liveVeh = id => {
     const v = (D.vehicles || []).find(x => x.id === id);
-    return (v && v.status !== 'arquivado') ? v : null;
+    return (v && v.status !== 'arquivado' && v.status !== 'vendido') ? v : null;
   };
   const livePat = id => {
     const x = (D.patrimonios || []).find(y => y.id === id);
-    return (x && x.status !== 'inativo') ? x : null;
+    return (x && x.status !== 'inativo' && x.status !== 'encerrado') ? x : null;
   };
   if (p.patrimonioId) {
     const pat = livePat(p.patrimonioId);
@@ -6511,7 +6545,7 @@ function _pendAssetRef(p) {
     if (v) return { kind: 'vehicle', id: v.id, name: v.name };
   }
   const vLink = (D.vehicles || []).find(v =>
-    v.status !== 'arquivado' && (v.linkedPendencias || []).includes(p.id));
+    v.status !== 'arquivado' && v.status !== 'vendido' && (v.linkedPendencias || []).includes(p.id));
   if (vLink) return { kind: 'vehicle', id: vLink.id, name: vLink.name };
   const patLink = (D.patrimonios || []).find(x =>
     x.status !== 'inativo' && ((x.detalhes || {}).linkedPendencias || []).includes(p.id));
@@ -7692,18 +7726,52 @@ function _patIcon(tipo) {
 function _patChevr() {
   return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
 }
-function _patStatusLabel(status) {
-  return ({ ativo:'Ativo', vendido:'Vendido', inativo:'Arquivado' })[status] || status;
-}
 function _patTypeKey(tipo) {
   return (tipo === 'veiculo' || tipo === 'imovel') ? tipo : 'outro';
+}
+// ── Ciclo de vida canônico do patrimônio: 'ativo' | 'encerrado' ──
+// Tipos não vendáveis (futuro: empresa etc.) usam o rótulo "Encerrado";
+// os demais (veículo/imóvel/outro) usam "Vendido". "Arquivado" não existe mais.
+const _PAT_NAO_VENDAVEL = new Set([]);
+function _patEncerradoLabel(tipo) { return _PAT_NAO_VENDAVEL.has(_patTypeKey(tipo)) ? 'Encerrado' : 'Vendido'; }
+function _patStatusLabel(status, tipo) {
+  if (status === 'ativo') return 'Ativo';
+  // 'encerrado' (canônico) e legados ('vendido'/'inativo') → rótulo de encerrado por tipo
+  return _patEncerradoLabel(tipo);
+}
+// Estado de ciclo de vida a partir de um id (patId ou vehId).
+function _patLifecycleOf(id) {
+  const veh = (D.vehicles || []).find(v => v.id === id);
+  if (veh) return (veh.status === 'vendido' || veh.status === 'arquivado') ? 'encerrado' : 'ativo';
+  const p = (D.patrimonios || []).find(x => x.id === id);
+  if (p) return (p.status === 'ativo') ? 'ativo' : 'encerrado';
+  return 'ativo';
+}
+// Registro-dono onde guardamos metadata do bem (patrimônio de preferência; senão veículo).
+function _patOwnerRec(id) {
+  const rec = (D.patrimonios || []).find(p => p.id === id || p._idOriginal === id);
+  if (rec) return rec;
+  return (D.vehicles || []).find(v => v.id === id) || null;
+}
+// Aplica o estado de ciclo de vida ao(s) registro(s) do bem, preservando/restaurando
+// a situação operacional do veículo. life: 'ativo' | 'encerrado'.
+function _patSetLifecycle(id, life, prevStatusStore) {
+  const veh = (D.vehicles || []).find(v => v.id === id || (_patOwnerRec(id) && v.id === _patOwnerRec(id)._idOriginal));
+  const rec = (D.patrimonios || []).find(p => p.id === id || p._idOriginal === id);
+  if (veh) {
+    if (life === 'encerrado') { if (prevStatusStore) prevStatusStore.prevStatus = veh.status; veh.status = 'vendido'; }
+    else { veh.status = (prevStatusStore && prevStatusStore.prevStatus) || 'em_uso'; }
+  } else if (rec) {
+    if (life === 'encerrado') { if (prevStatusStore) prevStatusStore.prevStatus = rec.status; rec.status = 'encerrado'; }
+    else { rec.status = 'ativo'; }
+  }
 }
 
 // Visão unificada e SEM duplicação de D.vehicles + D.patrimonios.
 function _patUnifiedItems() {
   const vehs = Array.isArray(D.vehicles)    ? D.vehicles    : [];
   const pats = Array.isArray(D.patrimonios) ? D.patrimonios : [];
-  const VEH2PAT_STATUS = { em_uso:'ativo', na_oficina:'ativo', a_venda:'ativo', vendido:'vendido', arquivado:'inativo' };
+  const VEH2PAT_STATUS = { em_uso:'ativo', na_oficina:'ativo', a_venda:'ativo', vendido:'encerrado', arquivado:'encerrado' };
 
   // Patrimônio migrado indexado pelo id do veículo original
   const patByVehId = {};
@@ -7738,7 +7806,7 @@ function _patUnifiedItems() {
       tipo:           p.tipo || 'outro',
       nome:           p.nome || '',
       foto:           p.foto || null,
-      status:         p.status || 'ativo',
+      status:         (p.status === 'ativo' || !p.status) ? 'ativo' : 'encerrado',
       valorEstimado:  p.valorEstimado  || 0,
       financiamentos: p.financiamentos || [],
       vehId:          null,
@@ -7751,12 +7819,14 @@ function _patUnifiedItems() {
 
 function _patNetTotals(items) {
   const list  = items || _patUnifiedItems();
-  const gross = list.filter(i => i.status !== 'vendido' && i.status !== 'inativo')
+  // Bens que compõem o patrimônio: apenas ATIVOS (encerrados/vendidos saem do total).
+  const gross = list.filter(i => i.status === 'ativo')
                     .reduce((s, i) => s + (i.valorEstimado || 0), 0);
-  // Saldo devedor vem da FONTE ÚNICA de dívidas: apenas dívidas vinculadas a um bem
-  // (patrimônio ou veículo) e não canceladas reduzem o patrimônio líquido.
+  // TODA dívida ativa reduz o patrimônio líquido, vinculada a um bem ou não.
+  // O vínculo é contexto/apresentação, não decide a existência da obrigação.
+  // Excluídas apenas quitadas (saldo 0) e canceladas. Pausada continua contando.
   const debt  = (D.debts || [])
-    .filter(d => (d.patrimonioId || d.vehicleId) && _debtStatus(d) !== 'cancelada')
+    .filter(d => _debtStatus(d) !== 'cancelada' && _debtStatus(d) !== 'quitada')
     .reduce((s, d) => s + _debtSaldo(d), 0);
   return { gross, debt, net: gross - debt };
 }
@@ -7797,6 +7867,8 @@ function patAddTipo(tipo) {
 
 // Filtro interno por categoria (Veículos / Imóveis / Outros bens).
 // Tocar no card ativa o filtro; tocar de novo (ou em "Limpar") remove.
+var _patShowEncerrados = false;
+function patToggleEncerrados() { _patShowEncerrados = !_patShowEncerrados; renderPatrimonioHome(true); }
 var _patCatFilter = null;
 function patToggleCatFilter(tipo) {
   _patCatFilter = (_patCatFilter === tipo) ? null : tipo;
@@ -7823,7 +7895,8 @@ function renderPatrimonioHome(preserveScroll) {
   const { gross, debt, net } = _patNetTotals(items);
   const totals  = { veiculo: 0, imovel: 0, outro: 0 };
   const counts  = { veiculo: 0, imovel: 0, outro: 0 };
-  const activeItems = items.filter(i => i.status !== 'vendido' && i.status !== 'inativo');
+  const activeItems = items.filter(i => i.status === 'ativo');
+  const encerradosItems = items.filter(i => i.status !== 'ativo');
   activeItems.forEach(i => {
     const k = _patTypeKey(i.tipo);
     totals[k] += i.valorEstimado || 0;
@@ -7872,13 +7945,21 @@ function renderPatrimonioHome(preserveScroll) {
     </div>
 
     <div class="pat-det-sec-head pat-home-filter-head" style="margin:0 0 10px">
-      <div class="sec-label" style="margin:0">${_patCatFilter ? catNames[_patCatFilter] : 'Todos os patrimônios'}</div>
+      <div class="sec-label" style="margin:0">${_patCatFilter ? catNames[_patCatFilter] : 'Patrimônio atual'}</div>
       ${_patCatFilter ? `<button class="btn-pill" onclick="patToggleCatFilter('${_patCatFilter}')">Limpar filtro</button>` : ''}
     </div>
     <div class="pat-list-group">
-      ${(_patCatFilter ? items.filter(i => _patTypeKey(i.tipo) === _patCatFilter) : items).map(i => _renderPatListItem(i)).join('')
-        || `<div class="pat-det-empty">Nenhum item nesta categoria.</div>`}
+      ${(_patCatFilter ? activeItems.filter(i => _patTypeKey(i.tipo) === _patCatFilter) : activeItems).map(i => _renderPatListItem(i)).join('')
+        || `<div class="pat-det-empty">Nenhum bem ativo${_patCatFilter ? ' nesta categoria' : ''}.</div>`}
     </div>
+
+    ${encerradosItems.length ? `
+    <button class="pat-encerrados-head" onclick="patToggleEncerrados()" aria-expanded="${_patShowEncerrados}">
+      <span class="sec-label" style="margin:0">Vendidos / Encerrados</span>
+      <span class="pat-encerrados-count">${encerradosItems.length}</span>
+      <svg class="pat-encerrados-chev${_patShowEncerrados ? ' open' : ''}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    ${_patShowEncerrados ? `<div class="pat-list-group pat-encerrados-list">${encerradosItems.map(i => _renderPatListItem(i)).join('')}</div>` : ''}` : ''}
 
     <div class="pat-home-bottom-spacer"></div>
   `;
@@ -7888,7 +7969,8 @@ function renderPatrimonioHome(preserveScroll) {
 function _renderPatListItem(item) {
   const typeKey   = _patTypeKey(item.tipo);
   const statusK   = item.status || 'ativo';
-  const statusLbl = _patStatusLabel(statusK);
+  const statusCls = statusK === 'ativo' ? 'ativo' : 'vendido';
+  const statusLbl = _patStatusLabel(statusK, item.tipo);
   const chipName  = { veiculo:'Veículo', imovel:'Imóvel', outro:'Outro bem' }[typeKey];
 
   const photoHtml = item.foto
@@ -7914,7 +7996,7 @@ function _renderPatListItem(item) {
         <div class="pat-list-name">${escHtml(item.nome)}</div>
         <div class="pat-list-meta">
           <span class="pat-chip pat-chip-${typeKey}">${chipName}</span>
-          <span class="pat-status s-${statusK}">
+          <span class="pat-status s-${statusCls}">
             <span class="pat-status-dot"></span>
             <span class="pat-status-lbl">${statusLbl}</span>
           </span>
@@ -7983,8 +8065,6 @@ function openPatForm(tipo, id) {
   const freqSel = ['mensal','quinzenal','semanal','anual','irregular'].map(fr =>
     `<option value="${fr}" ${(fin0?.frequencia||'mensal')===fr?'selected':''}>${({mensal:'Mensal',quinzenal:'Quinzenal',semanal:'Semanal',anual:'Anual',irregular:'Irregular / sem periodicidade'})[fr]}</option>`).join('');
   const backAction = p ? `renderPatDetail('${p.id}')` : 'renderPatrimonioHome()';
-  const statusSel = ['ativo','vendido','inativo'].map(s =>
-    `<option value="${s}" ${(p?.status||'ativo')===s?'selected':''}>${_patStatusLabel(s)}</option>`).join('');
   cont.innerHTML = `
     ${_pageHeader(backAction, `${p ? 'Editar' : 'Novo'} ${tipoLbl.toLowerCase()}`)}
     <div class="form-group">
@@ -7994,10 +8074,6 @@ function openPatForm(tipo, id) {
     <div class="form-group">
       <label class="form-label">Valor atual (${escHtml(currSym)})</label>
       <input class="form-input" id="pf-valor" type="number" min="0" step="any" value="${p && p.valorEstimado ? p.valorEstimado : ''}" placeholder="${t==='imovel' ? '350000' : '3500'}">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Status</label>
-      <select class="form-input" id="pf-status">${statusSel}</select>
     </div>
     <div class="form-group">
       <label class="form-label">Foto (opcional)</label>
@@ -8163,10 +8239,13 @@ function savePatrimonioForm() {
     const raw = document.getElementById(elId)?.value;
     return raw === '' || raw == null ? 0 : Number(raw) || 0;
   };
+  const _pfId = document.getElementById('pf-id')?.value;
   const fields = {
     nome,
     valorEstimado: valorRaw === '' || valorRaw == null ? 0 : Number(valorRaw) || 0,
-    status:        document.getElementById('pf-status')?.value || 'ativo',
+    // Ciclo de vida é gerido pelo menu (Vender/Reabrir), não pelo formulário:
+    // criar nasce 'ativo'; editar preserva o estado atual.
+    status:        (_pfId ? (getPatrimonio(_pfId)?.status || 'ativo') : 'ativo'),
     foto:          document.getElementById('pf-photo-data')?.value || null,
     observacoes:   (document.getElementById('pf-obs')?.value || '').trim(),
   };
@@ -8286,21 +8365,193 @@ function openPatMenu(id) {
   _patMenuTarget = id;
   const t = document.getElementById('patmenu-title');
   if (t) t.textContent = p.nome || 'Patrimônio';
-  const arqLbl = document.getElementById('patmenu-archive-lbl');
-  if (arqLbl) arqLbl.textContent = p.status === 'inativo' ? 'Reativar' : 'Arquivar';
+  const lbl = document.getElementById('patmenu-archive-lbl');
+  if (lbl) lbl.textContent = _patLifecycleOf(id) === 'encerrado'
+    ? 'Reabrir'
+    : (_patEncerradoLabel(p.tipo) === 'Vendido' ? 'Marcar como vendido' : 'Encerrar');
   openOverlay('pat-menu-sheet');
 }
+// Botão de ciclo de vida do menu: vender (ativo) ou reabrir (encerrado).
 function patMenuArchive() {
   closeOverlay('pat-menu-sheet');
-  const id = _patMenuTarget; const p = getPatrimonio(id); if (!p) return;
-  const reactivate = p.status === 'inativo';
-  updatePatrimonio(id, { status: reactivate ? 'ativo' : 'inativo' });
-  renderPatDetail(id);
-  gdToast(reactivate ? 'Patrimônio reativado.' : 'Patrimônio arquivado. Sai dos totais ativos; histórico preservado.', { type: reactivate ? 'success' : 'info' });
+  const id = _patMenuTarget; if (!id) return;
+  if (_patLifecycleOf(id) === 'encerrado') reabrirBem(id); else venderBem(id);
 }
 function patMenuDelete() {
   closeOverlay('pat-menu-sheet');
-  if (_patMenuTarget) deletePatrimonioUI(_patMenuTarget);
+  if (_patMenuTarget) excluirBemGuardado(_patMenuTarget);
+}
+
+// ══════════════════════════════════════════
+// CICLO DE VIDA DO PATRIMÔNIO — Venda/Encerramento, Reabertura e Exclusão guardada
+// ══════════════════════════════════════════
+function _patIsVeiculo(id) { return (D.vehicles || []).some(v => v.id === id); }
+function _patNomeOf(id) { const v = (D.vehicles || []).find(x => x.id === id); if (v) return v.name || ''; const p = getPatrimonio(id); return p ? (p.nome || '') : ''; }
+function _patTipoOf(id) { if (_patIsVeiculo(id)) return 'veiculo'; const p = getPatrimonio(id); return p ? (p.tipo || 'outro') : 'outro'; }
+// Financiamentos vinculados ao bem (fonte única D.debts).
+function _debtsDoBem(id) {
+  const rec = _patOwnerRec(id);
+  const vidKey = _patIsVeiculo(id) ? id : (rec ? (rec._idOriginal || rec.id) : id);
+  const patKey = rec ? rec.id : id;
+  return (D.debts || []).filter(x => x.tipo === 'financiamento' && (x.patrimonioId === patKey || (x.vehicleId && x.vehicleId === vidKey)));
+}
+function _debtsAtivasDoBem(id) { return _debtsDoBem(id).filter(d => _debtStatus(d) !== 'cancelada' && _debtSaldo(d) > 0); }
+function _relinkDebtToBem(d, id) {
+  if (_patIsVeiculo(id)) { d.vehicleId = id; d.patrimonioId = null; }
+  else { const rec = _patOwnerRec(id); d.patrimonioId = rec ? rec.id : id; d.vehicleId = null; }
+  d.atualizadoEm = Date.now();
+}
+// Resumo da venda (derivado; nunca armazenado em duplicidade).
+function _patVendaOf(id) { const rec = _patOwnerRec(id); if (rec && rec.venda) return rec.venda; const v = (D.vehicles || []).find(x => x.id === id); return (v && v.venda) || null; }
+// Resumo derivado da venda (entrou / quitação / líquido) — nunca armazena duplicidade.
+function _patVendaSummaryHtml(venda) {
+  if (!venda) return '';
+  const entrou = venda.valor || 0;
+  const quit = venda.dividaDestino === 'quitada'
+    ? (D.debtPayments || []).filter(p => p.meta && p.meta.saleId === venda.saleId).reduce((s, p) => s + (p.valor || 0), 0)
+    : 0;
+  const liq = entrou - quit;
+  return `<div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Venda</div></div>
+    <div class="pat-list-group" style="margin-bottom:0"><div class="pat-venda-summary">
+      <div class="pat-venda-row"><span>Data</span><span>${_patFmtDate(venda.data)}</span></div>
+      ${entrou > 0 ? `<div class="pat-venda-row"><span>Entrou</span><span class="pos">${R(entrou)}</span></div>` : ''}
+      ${quit > 0 ? `<div class="pat-venda-row"><span>Quitação da dívida</span><span class="neg">−${R(quit)}</span></div>` : ''}
+      ${venda.dividaDestino === 'mantida' ? `<div class="pat-venda-row"><span>Dívida</span><span>mantida (sem vínculo)</span></div>` : ''}
+      ${(entrou > 0 || quit > 0) ? `<div class="pat-venda-row pat-venda-net"><span>Resultado líquido</span><span>${R(liq)}</span></div>` : ''}
+    </div></div>`;
+}
+
+var _vendaTarget = null;
+function venderBem(id) {
+  if (_patLifecycleOf(id) !== 'ativo') { gdToast('Este bem já está encerrado.', { type: 'info' }); return; }
+  _vendaTarget = id;
+  const tipo = _patTipoOf(id);
+  const verbo = _patEncerradoLabel(tipo) === 'Vendido' ? 'Marcar como vendido' : 'Encerrar';
+  const saldo = _debtsAtivasDoBem(id).reduce((s, d) => s + _debtSaldo(d), 0);
+  const tEl = document.getElementById('venda-title'); if (tEl) tEl.textContent = verbo;
+  const body = document.getElementById('venda-body');
+  body.innerHTML = `
+    <div class="form-group"><label class="form-label">Data da venda</label>
+      <input class="form-input" id="venda-data" inputmode="numeric" placeholder="dd/mm/aaaa" value="${_isoToBr(todayStr())}"></div>
+    <div class="form-group"><label class="form-label">Valor recebido (opcional)</label>
+      <input class="form-input" id="venda-valor" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></div>
+    ${saldo > 0 ? `
+    <div class="form-group">
+      <label class="form-label">Este bem ainda tem financiamento — saldo ${R(saldo)}</label>
+      <div class="venda-debt-opts">
+        <label class="venda-opt"><input type="radio" name="venda-divida" value="quitada" checked><span>Quitei na venda</span></label>
+        <label class="venda-opt"><input type="radio" name="venda-divida" value="mantida"><span>Continuo devendo (sem vínculo com o bem)</span></label>
+      </div>
+    </div>` : ''}
+    <div class="venda-note">Nada é apagado — histórico, despesas e pagamentos ficam preservados. Você pode reabrir depois.</div>
+    <div class="df-actions">
+      <button class="btn btn-secondary" onclick="closeOverlay('venda-sheet')">Cancelar</button>
+      <button class="btn btn-primary" id="venda-confirm" onclick="confirmarVendaBem()">${verbo}</button>
+    </div>`;
+  const dEl = document.getElementById('venda-data'); if (dEl && typeof _maskDateBR === 'function') _maskDateBR(dEl);
+  openOverlay('venda-sheet');
+}
+function confirmarVendaBem() {
+  const id = _vendaTarget; if (!id) return;
+  const btn = document.getElementById('venda-confirm'); if (btn && btn.disabled) return;
+  if (_patLifecycleOf(id) !== 'ativo') { closeOverlay('venda-sheet'); return; } // guarda anti-duplo
+  const dataIso = _brToIso(document.getElementById('venda-data')?.value) || todayStr();
+  const valor = Math.max(0, Number(document.getElementById('venda-valor')?.value) || 0);
+  const debts = _debtsAtivasDoBem(id);
+  const saldo = debts.reduce((s, d) => s + _debtSaldo(d), 0);
+  const destinoEl = document.querySelector('input[name="venda-divida"]:checked');
+  const dividaDestino = saldo > 0 ? (destinoEl ? destinoEl.value : 'mantida') : null;
+  if (btn) btn.disabled = true;
+  const saleId = uid();
+  const rec = _patOwnerRec(id);
+  const venda = { saleId, data: dataIso, valor, dividaDestino };
+
+  // 1) Entrada da venda (receita avulsa asset-sale) — só se valor informado (>0)
+  if (valor > 0) {
+    const linkKey = _patIsVeiculo(id) ? { vehicleId: id } : { patrimonioId: (rec ? rec.id : id) };
+    const entrada = { id: uid(), date: dataIso, amount: valor, status: 'paid', platformId: null,
+      note: 'Venda de ' + (_patNomeOf(id) || 'bem'),
+      meta: Object.assign({ source: 'asset-sale', saleId }, linkKey) };
+    D.incomeItems = D.incomeItems || []; D.incomeItems.push(entrada);
+    venda.entradaId = entrada.id;
+  }
+
+  // 2) Destino da dívida
+  if (dividaDestino === 'quitada') {
+    debts.forEach(d => {
+      const sd = _debtSaldo(d);
+      if (sd > 0) _debtRegistrarPagamento(d.id, { valor: sd, data: dataIso, descricao: 'Quitação — venda de ' + (_patNomeOf(id) || 'bem'), saleId });
+    });
+  } else if (dividaDestino === 'mantida') {
+    venda.dividasDesvinculadas = debts.map(d => d.id);
+    debts.forEach(d => { d.vehicleId = null; d.patrimonioId = null; d.atualizadoEm = Date.now(); });
+  }
+
+  // 3) Encerrar o bem (preserva histórico) + grava a metadata de venda
+  _patSetLifecycle(id, 'encerrado', venda);
+  if (rec) rec.venda = venda; else { const veh = (D.vehicles || []).find(v => v.id === id); if (veh) veh.venda = venda; }
+  save();
+  closeOverlay('venda-sheet');
+  renderPatrimonioHome();
+  gdToast('Bem marcado como ' + _patEncerradoLabel(_patTipoOf(id)).toLowerCase() + '. Histórico preservado.', { type: 'success' });
+}
+function reabrirBem(id) {
+  const rec = _patOwnerRec(id);
+  const veh = (D.vehicles || []).find(v => v.id === id);
+  const venda = _patVendaOf(id);
+  const alterouDivida = venda && (venda.dividaDestino === 'quitada' || venda.dividaDestino === 'mantida');
+  gdConfirm({
+    title: 'Reabrir', confirmText: 'Reabrir',
+    msg: `Reabrir "${_patNomeOf(id)}"? Ele volta para o seu patrimônio atual como Ativo.` +
+      (alterouDivida ? ' A alteração da dívida feita na venda será revertida.' : ''),
+    onConfirm: () => {
+      if (venda) {
+        // Estorno da entrada
+        if (venda.entradaId) D.incomeItems = (D.incomeItems || []).filter(it => it.id !== venda.entradaId);
+        // Estorno da quitação: remove pagamento + despesa por saleId; re-vincula a dívida ao bem
+        if (venda.dividaDestino === 'quitada') {
+          const pays = (D.debtPayments || []).filter(p => p.meta && p.meta.saleId === venda.saleId);
+          pays.forEach(p => { if (p.expenseId) D.expenses = (D.expenses || []).filter(e => e.id !== p.expenseId); });
+          const debtIds = new Set(pays.map(p => p.debtId));
+          D.debtPayments = (D.debtPayments || []).filter(p => !(p.meta && p.meta.saleId === venda.saleId));
+          debtIds.forEach(did => { const d = getDebt(did); if (d) _relinkDebtToBem(d, id); });
+        } else if (venda.dividaDestino === 'mantida') {
+          (venda.dividasDesvinculadas || []).forEach(did => { const d = getDebt(did); if (d) _relinkDebtToBem(d, id); });
+        }
+      }
+      _patSetLifecycle(id, 'ativo', venda || {});
+      if (rec) delete rec.venda;
+      if (veh) delete veh.venda;
+      save();
+      renderPatrimonioHome();
+      gdToast('Bem reaberto. Voltou ao patrimônio ativo.', { type: 'success' });
+    },
+  });
+}
+// Excluir guardado: limpo só sem histórico/vínculos relevantes; senão orienta a Vender.
+function _bemTemHistorico(id) {
+  const rec = _patOwnerRec(id);
+  const veh = (D.vehicles || []).find(v => v.id === id);
+  const hist = ((rec && rec.historico) || []).length + ((veh && veh.history) || []).length;
+  const fins = _debtsDoBem(id).length;
+  const links = (veh && ((veh.linkedExpenses || []).length + (veh.linkedPendencias || []).length)) || 0;
+  const despVenda = (D.expenses || []).some(e => e.meta && e.meta.debtId && _debtsDoBem(id).some(d => d.id === e.meta.debtId));
+  return hist > 0 || fins > 0 || links > 0 || despVenda;
+}
+function excluirBemGuardado(id) {
+  if (_bemTemHistorico(id)) {
+    const tipo = _patTipoOf(id);
+    const verbo = _patEncerradoLabel(tipo) === 'Vendido' ? 'Marcar como vendido' : 'Encerrar';
+    gdConfirm({
+      title: 'Não dá para excluir', variant: 'warning', confirmText: verbo, cancelText: 'Voltar',
+      msg: `"${_patNomeOf(id)}" tem histórico e vínculos. Para não perder esse registro, marque como ${_patEncerradoLabel(tipo).toLowerCase()} — ele sai do seu patrimônio e fica no histórico.`,
+      onConfirm: () => venderBem(id),
+    });
+    return;
+  }
+  // Sem histórico → exclusão limpa (reusa os fluxos existentes por tipo)
+  if (_patIsVeiculo(id)) _vehDoDelete(id);
+  else deletePatrimonioUI(id);
 }
 
 // ══════════════════════════════════════════
@@ -8340,10 +8591,11 @@ function _patEmptyState(iconKey, title, hint) {
   </div>`;
 }
 // Faixa de estado do bem (Arquivado/Vendido) — visível no topo do card principal.
-function _patStateBanner(statusK) {
-  if (statusK === 'inativo') return `<div class="pat-state-banner pat-state-arquivado"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="4" rx="1"/><path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8"/><line x1="10" y1="12" x2="14" y2="12"/></svg><span>Arquivado</span></div>`;
-  if (statusK === 'vendido') return `<div class="pat-state-banner pat-state-vendido"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Vendido</span></div>`;
-  return '';
+function _patStateBanner(statusK, tipo) {
+  if (statusK === 'ativo') return '';
+  // Qualquer estado não-ativo é "Encerrado" (rótulo por tipo: Vendido/Encerrado).
+  const lbl = _patEncerradoLabel(tipo);
+  return `<div class="pat-state-banner pat-state-vendido"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>${escHtml(lbl)}</span></div>`;
 }
 
 // Card de financiamento (compartilhado por imóvel/outro e veículo). ownerId =
@@ -8429,9 +8681,13 @@ function renderPatDetail(id) {
     if (d.cartorio)   detRows.push(['Cartório', d.cartorio]);
   }
 
+  // Bem encerrado (vendido) = somente leitura: sem adicionar financiamento/evento.
+  const readonly = statusK !== 'ativo';
+  const venda = readonly ? _patVendaOf(p.id) : null;
+
   // ── Financiamento (mesma affordance discreta e discoverável do veículo) ──
   const finHtml = fins.length === 0
-    ? `<button class="btn btn-secondary" style="width:100%" onclick="openPatFinForm('${p.id}','','pat')">Este bem é financiado — adicionar</button>`
+    ? (readonly ? '' : `<button class="btn btn-secondary" style="width:100%" onclick="openPatFinForm('${p.id}','','pat')">Este bem é financiado — adicionar</button>`)
     : `<div class="pat-list-group" style="margin-bottom:0">${fins.map(f => _finCardHtml(f, p.id, 'pat')).join('')}</div>`;
 
   // ── Histórico (mais recente primeiro; estável para datas iguais) ──
@@ -8476,7 +8732,7 @@ function renderPatDetail(id) {
       </div>`)}
 
     <div class="card pat-det-hero${statusK !== 'ativo' ? ' pat-hero-inactive' : ''}">
-      ${_patStateBanner(statusK)}
+      ${_patStateBanner(statusK, p.tipo)}
       <div class="pat-det-hero-row">
         <div class="pat-list-photo pat-det-photo${p.foto ? '' : ' pat-ico-' + typeKey}">
           ${p.foto ? `<img src="${escHtml(p.foto)}" alt="${escHtml(p.nome)}">` : _patIcon(typeKey)}
@@ -8499,20 +8755,23 @@ function renderPatDetail(id) {
       ${p.observacoes ? `<div class="pat-det-obs">${escHtml(p.observacoes)}</div>` : ''}
     </div>
 
+    ${venda ? _patVendaSummaryHtml(venda) : ''}
+
     ${detRows.length > 0 ? `
     <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Detalhes</div></div>
     <div class="pat-list-group" style="margin-bottom:0">
       ${detRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
     </div>` : ''}
 
+    ${(!readonly || fins.length) ? `
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Financiamento</div>
     </div>
-    ${finHtml}
+    ${finHtml}` : ''}
 
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Histórico</div>
-      <button class="pat-link-add" onclick="openPatEvtForm('${p.id}')">+ Evento</button>
+      ${readonly ? '' : `<button class="pat-link-add" onclick="openPatEvtForm('${p.id}')">+ Evento</button>`}
     </div>
     <div class="pat-list-group pat-det-lastgroup">${histHtml}</div>
   `;
@@ -8807,7 +9066,9 @@ function renderVehPatDetail(id) {
   if (!cont) return;
 
   const pat     = _patForVehId(id); // enriquecimento (pode ser null)
-  const statusK = ({ em_uso:'ativo', na_oficina:'ativo', a_venda:'ativo', vendido:'vendido', arquivado:'inativo' })[v.status] || 'ativo';
+  const statusK = ({ em_uso:'ativo', na_oficina:'ativo', a_venda:'ativo', vendido:'encerrado', arquivado:'encerrado' })[v.status] || 'ativo';
+  const readonly = statusK !== 'ativo';           // vendido/encerrado = somente leitura
+  const venda = readonly ? _patVendaOf(id) : null;
   const statusLbl = VEH_STATUS_LABELS[v.status] || v.status;
   const sub     = [v.brand, v.model, v.year].filter(Boolean).join(' · ');
   // Valor informado: número positivo. 0/ausente/null → "Valor não informado".
@@ -8881,8 +9142,9 @@ function renderVehPatDetail(id) {
     </div>`;
 
   // ── Financiamento do veículo (mesmo fluxo do imóvel; fonte única D.debts) ──
+  // Bem encerrado (vendido) = somente leitura: sem adicionar financiamento/vínculos.
   const vehDebts = _debtsForVehicle(v.id);
-  const finVehHtml = `
+  const finVehHtml = (readonly && vehDebts.length === 0) ? '' : `
     <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Financiamento</div></div>
     ${vehDebts.length === 0
       ? `<button class="btn btn-secondary" style="width:100%" onclick="openPatFinForm('${v.id}','','veh')">Este bem é financiado — adicionar</button>`
@@ -8903,7 +9165,7 @@ function renderVehPatDetail(id) {
       </div>`)}
 
     <div class="card pat-det-hero${statusK !== 'ativo' ? ' pat-hero-inactive' : ''}">
-      ${_patStateBanner(statusK)}
+      ${_patStateBanner(statusK, 'veiculo')}
       <div class="pat-det-hero-row">
         <div class="pat-list-photo pat-det-photo${safePhoto ? '' : ' pat-ico-veiculo'}">${photoHtml}</div>
         <div class="pat-det-hero-info">
@@ -8924,6 +9186,8 @@ function renderVehPatDetail(id) {
       </div>
     </div>
 
+    ${venda ? _patVendaSummaryHtml(venda) : ''}
+
     ${finVehHtml}
 
     ${hasInfo ? `
@@ -8933,17 +9197,19 @@ function renderVehPatDetail(id) {
       ${v.notes ? `<div class="pat-det-row pat-det-row-notes"><span class="pat-det-row-lbl">Observações</span><span class="pat-det-row-val pat-det-row-val-notes">${escHtml(v.notes)}</span></div>` : ''}
     </div>` : ''}
 
+    ${(!readonly || pends.length) ? `
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Pendências</div>
-      <button class="pat-link-add" onclick="openVehLinkPend('${v.id}')">+ Vincular</button>
+      ${readonly ? '' : `<button class="pat-link-add" onclick="openVehLinkPend('${v.id}')">+ Vincular</button>`}
     </div>
-    <div class="pat-list-group" style="margin-bottom:0">${pendHtml}</div>
+    <div class="pat-list-group" style="margin-bottom:0">${pendHtml}</div>` : ''}
 
+    ${(!readonly || exps.length) ? `
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Despesas</div>
-      <button class="pat-link-add" onclick="openVehLinkExp('${v.id}')">+ Vincular</button>
+      ${readonly ? '' : `<button class="pat-link-add" onclick="openVehLinkExp('${v.id}')">+ Vincular</button>`}
     </div>
-    <div class="pat-list-group" style="margin-bottom:0">${expHtml}</div>
+    <div class="pat-list-group" style="margin-bottom:0">${expHtml}</div>` : ''}
 
     ${histHtml}
 
@@ -8958,43 +9224,35 @@ function openVehMenu(id) {
   const v = (D.vehicles || []).find(x => x.id === id);
   const t = document.getElementById('vmenu-title');
   if (t) t.textContent = v ? v.name : 'Veículo';
+  const encerrado = _patLifecycleOf(id) === 'encerrado';
+  const lifeLbl = document.getElementById('vmenu-life-lbl');
+  if (lifeLbl) lifeLbl.textContent = encerrado ? 'Reabrir' : 'Marcar como vendido';
+  const statusOpt = document.getElementById('vmenu-status-opt');
+  if (statusOpt) statusOpt.style.display = encerrado ? 'none' : ''; // "Alterar status" só em bem ativo
   openOverlay('veh-menu-sheet');
 }
 function vehMenuStatus() {
   closeOverlay('veh-menu-sheet');
   if (_vehMenuTarget) openVehStatus(_vehMenuTarget);
 }
+// Botão de ciclo de vida: vender (ativo) / reabrir (encerrado).
 function vehMenuArchive() {
   closeOverlay('veh-menu-sheet');
-  const id = _vehMenuTarget;
-  const v = (D.vehicles || []).find(x => x.id === id);
-  if (!v) return;
-  if (v.status === 'arquivado') { gdToast('Veículo já está arquivado.'); return; }
-  v.status = 'arquivado';
-  save();
-  renderVehPatDetail(id);
-  gdToast('Veículo arquivado. Histórico e vínculos preservados.');
+  const id = _vehMenuTarget; if (!id) return;
+  if (_patLifecycleOf(id) === 'encerrado') reabrirBem(id); else venderBem(id);
 }
 function vehMenuDelete() {
   closeOverlay('veh-menu-sheet');
-  const id = _vehMenuTarget;
-  const v = (D.vehicles || []).find(x => x.id === id);
-  if (!v) return;
-  const hasHistory = (v.history || []).length > 0;
-  const hasLinks   = (v.linkedExpenses || []).length > 0 || (v.linkedPendencias || []).length > 0;
-  if (hasHistory || hasLinks) {
-    gdToast('Veículo com histórico ou vínculos não pode ser excluído. Use "Arquivar".', { type: 'error' });
-    return;
-  }
+  if (_vehMenuTarget) excluirBemGuardado(_vehMenuTarget);
+}
+function _vehDoDelete(id) {
+  const v = (D.vehicles || []).find(x => x.id === id); if (!v) return;
   gdConfirm({
-    title: 'Excluir veículo',
+    title: 'Excluir veículo', variant: 'danger', confirmText: 'Excluir',
     msg: 'Excluir permanentemente este veículo? Esta ação não pode ser desfeita.',
-    confirmText: 'Excluir',
-    variant: 'danger',
     onConfirm: () => {
       D.vehicles = (D.vehicles || []).filter(x => x.id !== id);
-      save();
-      renderPatrimonioHome();
+      save(); renderPatrimonioHome();
       gdToast('Veículo excluído definitivamente.', { type: 'success' });
     },
   });
