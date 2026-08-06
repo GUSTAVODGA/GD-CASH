@@ -7084,6 +7084,7 @@ function renderVehDetail(id) {
 }
 
 function openVehForm(id) {
+  if (id && _patEncerradoBloqueado(id)) return;
   // Remove toasts residuais de ações anteriores (ex.: "Patrimônio adicionado")
   document.querySelectorAll('.av-toast').forEach(e => e.remove());
   const v = id ? (D.vehicles || []).find(x => x.id === id) : null;
@@ -7352,6 +7353,7 @@ function deleteVehHistItem(vehId, histId) {
 // ── Vincular despesa ──
 var _vehLinkExpTarget = null;
 function openVehLinkExp(vehId) {
+  if (_patEncerradoBloqueado(vehId)) return;
   _vehLinkExpTarget = vehId;
   const v = (D.vehicles || []).find(x => x.id === vehId);
   if (!v) return;
@@ -7378,6 +7380,7 @@ function saveVehLinkExp() {
 }
 
 function unlinkVehExp(vehId, expId) {
+  if (_patEncerradoBloqueado(vehId)) return;
   const v = (D.vehicles || []).find(x => x.id === vehId);
   if (!v) return;
   v.linkedExpenses = (v.linkedExpenses || []).filter(id => id !== expId);
@@ -7388,6 +7391,7 @@ function unlinkVehExp(vehId, expId) {
 // ── Vincular pendência ──
 var _vehLinkPendTarget = null;
 function openVehLinkPend(vehId) {
+  if (_patEncerradoBloqueado(vehId)) return;
   _vehLinkPendTarget = vehId;
   const v = (D.vehicles || []).find(x => x.id === vehId);
   if (!v) return;
@@ -7414,6 +7418,7 @@ function saveVehLinkPend() {
 }
 
 function unlinkVehPend(vehId, pId) {
+  if (_patEncerradoBloqueado(vehId)) return;
   const v = (D.vehicles || []).find(x => x.id === vehId);
   if (!v) return;
   v.linkedPendencias = (v.linkedPendencias || []).filter(id => id !== pId);
@@ -7424,6 +7429,7 @@ function unlinkVehPend(vehId, pId) {
 // ── Status ──
 var _vehStatusTarget = null;
 function openVehStatus(vehId) {
+  if (_patEncerradoBloqueado(vehId)) return;
   _vehStatusTarget = vehId;
   const v = (D.vehicles || []).find(x => x.id === vehId);
   if (!v) return;
@@ -7747,6 +7753,15 @@ function _patLifecycleOf(id) {
   if (p) return (p.status === 'ativo') ? 'ativo' : 'encerrado';
   return 'ativo';
 }
+// Guarda de somente-leitura: recusa qualquer edição/criação/exclusão de item de um
+// bem Vendido/Encerrado, mesmo por chamada direta à função. Retorna true se bloqueou.
+function _patEncerradoBloqueado(id) {
+  if (_patLifecycleOf(id) === 'encerrado') {
+    gdToast('Bem ' + _patEncerradoLabel(_patTipoOf(id)).toLowerCase() + ' é somente leitura. Reabra o bem para editar.', { type: 'info' });
+    return true;
+  }
+  return false;
+}
 // Registro-dono onde guardamos metadata do bem (patrimônio de preferência; senão veículo).
 function _patOwnerRec(id) {
   const rec = (D.patrimonios || []).find(p => p.id === id || p._idOriginal === id);
@@ -8043,6 +8058,7 @@ function _renderPatEmpty() {
 var PAT_TIPO_LABELS = { imovel: 'Imóvel', outro: 'Outro bem' };
 
 function openPatForm(tipo, id) {
+  if (id && _patEncerradoBloqueado(id)) return;
   // Remove toasts residuais de ações anteriores
   document.querySelectorAll('.av-toast').forEach(e => e.remove());
   const p = id ? getPatrimonio(id) : null;
@@ -8600,7 +8616,7 @@ function _patStateBanner(statusK, tipo) {
 
 // Card de financiamento (compartilhado por imóvel/outro e veículo). ownerId =
 // patrimonioId (kind 'pat') ou vehicleId (kind 'veh'); as ações preservam o contexto.
-function _finCardHtml(f, ownerId, kind) {
+function _finCardHtml(f, ownerId, kind, readonly) {
   const st = _debtState(f);
   const pagos = st.pago, quitado = st.progress, quitadoTotal = st.quitada;
   const freqLbl = { mensal:'Mensal', quinzenal:'Quinzenal', semanal:'Semanal', anual:'Anual', irregular:'Irregular' }[f.periodicidade] || '';
@@ -8626,10 +8642,10 @@ function _finCardHtml(f, ownerId, kind) {
           <div class="pat-fin-name">${escHtml(f.credor || 'Financiamento')}</div>
           ${metaBits ? `<div class="pat-fin-sub">${escHtml(metaBits)}</div>` : ''}
         </div>
-        <div class="pat-fin-head-actions">
+        ${readonly ? '' : `<div class="pat-fin-head-actions">
           <button class="pat-mini-edit" onclick="openPatFinForm('${ownerId}','${f.id}','${kind}')" aria-label="Editar financiamento"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
           <button class="pat-mini-del" onclick="deletePatFin('${ownerId}','${f.id}','${kind}')" aria-label="Excluir financiamento">${_patTrashSvg()}</button>
-        </div>
+        </div>`}
       </div>
       <div class="pagfin-progress"><span class="pagfin-progress-fill" style="width:${quitado}%"></span></div>
       <div class="pagfin-grid">
@@ -8640,7 +8656,7 @@ function _finCardHtml(f, ownerId, kind) {
       </div>
       ${quitadoTotal
         ? `<div class="pagfin-quitado">✓ Financiamento quitado</div>`
-        : `<button class="btn btn-primary pagfin-add-btn" onclick="openPagFinForm('${ownerId}','${f.id}','${kind}')">Registrar pagamento</button>`}
+        : (readonly ? '' : `<button class="btn btn-primary pagfin-add-btn" onclick="openPagFinForm('${ownerId}','${f.id}','${kind}')">Registrar pagamento</button>`)}
       <div class="pagfin-hist">${pagsHtml}</div>
     </div>`;
 }
@@ -8688,7 +8704,7 @@ function renderPatDetail(id) {
   // ── Financiamento (mesma affordance discreta e discoverável do veículo) ──
   const finHtml = fins.length === 0
     ? (readonly ? '' : `<button class="btn btn-secondary" style="width:100%" onclick="openPatFinForm('${p.id}','','pat')">Este bem é financiado — adicionar</button>`)
-    : `<div class="pat-list-group" style="margin-bottom:0">${fins.map(f => _finCardHtml(f, p.id, 'pat')).join('')}</div>`;
+    : `<div class="pat-list-group" style="margin-bottom:0">${fins.map(f => _finCardHtml(f, p.id, 'pat', readonly)).join('')}</div>`;
 
   // ── Histórico (mais recente primeiro; estável para datas iguais) ──
   const hist = (p.historico || []).slice()
@@ -8718,14 +8734,14 @@ function renderPatDetail(id) {
             ${body ? `<div class="pat-hist-val">${body}</div>` : ''}
             <div class="pat-hist-date">${_patFmtDate(e.data)}</div>
           </div>
-          ${isManual ? `<button class="pat-mini-del" onclick="deletePatEvt('${p.id}','${e.id}')" aria-label="Excluir evento">${_patTrashSvg()}</button>` : ''}
+          ${(isManual && !readonly) ? `<button class="pat-mini-del" onclick="deletePatEvt('${p.id}','${e.id}')" aria-label="Excluir evento">${_patTrashSvg()}</button>` : ''}
         </div>`;
       }).join('');
 
   cont.innerHTML = `
     ${_pageHeader("renderPatrimonioHome()", chipName, `
       <div class="phr-actions">
-        <button class="btn-pill" onclick="openPatForm(null,'${p.id}')">Editar</button>
+        ${readonly ? '' : `<button class="btn-pill" onclick="openPatForm(null,'${p.id}')">Editar</button>`}
         <button class="pat-kebab-btn" onclick="openPatMenu('${p.id}')" aria-label="Mais ações">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
         </button>
@@ -8786,6 +8802,7 @@ function _finRerender(kind, ownerId) {
 // ── CRUD de financiamentos (opera sobre a dívida canônica; finId === debtId) ──
 // ownerId = patrimonioId (kind 'pat') ou vehicleId (kind 'veh'). Mesmo fluxo p/ ambos.
 function openPatFinForm(patId, finId, kind) {
+  if (_patEncerradoBloqueado(patId)) return;
   _patFinTarget = { patId: patId, finId: finId || null, kind: kind || 'pat' };
   const f = finId ? getDebt(finId) : null;
   document.getElementById('pfin-title').textContent = f ? 'Editar financiamento' : 'Novo financiamento';
@@ -8853,6 +8870,7 @@ function savePatFin() {
 // ── Pagamento de financiamento: registra um pagamento na dívida (uma despesa) ──
 var _pagFinTarget = null; // { patId, finId(=debtId) }
 function openPagFinForm(patId, finId, kind) {
+  if (_patEncerradoBloqueado(patId)) return;
   const f = getDebt(finId);
   if (!f) return;
   // Bloqueio de pagamento após quitação: sem saldo, não há o que pagar.
@@ -8900,6 +8918,7 @@ function salvarPagamentoFin() {
 }
 
 function deletePatFin(patId, finId, kind) {
+  if (_patEncerradoBloqueado(patId)) return;
   const f = getDebt(finId);
   if (!f) return;
   const nPag = _debtPaymentsOf(finId).length;
@@ -8921,6 +8940,7 @@ function deletePatFin(patId, finId, kind) {
 
 // ── Eventos manuais do histórico ──
 function openPatEvtForm(patId) {
+  if (_patEncerradoBloqueado(patId)) return;
   _patEvtTarget = patId;
   document.getElementById('pevt-data').value  = todayStr();
   document.getElementById('pevt-desc').value  = '';
@@ -8952,6 +8972,7 @@ function savePatEvt() {
 }
 
 function deletePatEvt(patId, evtId) {
+  if (_patEncerradoBloqueado(patId)) return;
   const p = getPatrimonio(patId);
   if (!p) return;
   gdConfirm({
@@ -9090,7 +9111,7 @@ function renderVehPatDetail(id) {
             <div class="pat-fin-name">${escHtml(p.title)}</div>
             <div class="pat-fin-sub">${(PEND_PRIO_NAMES[p.priority] || '')}${p.estimatedValue ? ' · ' + R(p.estimatedValue) : ''}</div>
           </div>
-          <button class="pat-mini-del" onclick="unlinkVehPend('${v.id}','${p.id}')" aria-label="Desvincular pendência">${_patTrashSvg()}</button>
+          ${readonly ? '' : `<button class="pat-mini-del" onclick="unlinkVehPend('${v.id}','${p.id}')" aria-label="Desvincular pendência">${_patTrashSvg()}</button>`}
         </div>`).join('');
 
   // ── Despesas vinculadas ──
@@ -9105,7 +9126,7 @@ function renderVehPatDetail(id) {
           </div>
           <div class="pat-fin-right">
             <span class="pat-fin-saldo" style="color:var(--rd)">−${R(e.amount)}</span>
-            <button class="pat-mini-del" onclick="unlinkVehExp('${v.id}','${e.id}')" aria-label="Desvincular despesa">${_patTrashSvg()}</button>
+            ${readonly ? '' : `<button class="pat-mini-del" onclick="unlinkVehExp('${v.id}','${e.id}')" aria-label="Desvincular despesa">${_patTrashSvg()}</button>`}
           </div>
         </div>`).join('');
 
@@ -9148,7 +9169,7 @@ function renderVehPatDetail(id) {
     <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Financiamento</div></div>
     ${vehDebts.length === 0
       ? `<button class="btn btn-secondary" style="width:100%" onclick="openPatFinForm('${v.id}','','veh')">Este bem é financiado — adicionar</button>`
-      : `<div class="pat-list-group" style="margin-bottom:0">${vehDebts.map(f => _finCardHtml(f, v.id, 'veh')).join('')}</div>`}`;
+      : `<div class="pat-list-group" style="margin-bottom:0">${vehDebts.map(f => _finCardHtml(f, v.id, 'veh', readonly)).join('')}</div>`}`;
 
   const safePhoto = _vehSafePhoto(v.photo);
   const photoHtml = safePhoto
@@ -9158,7 +9179,7 @@ function renderVehPatDetail(id) {
   cont.innerHTML = `
     ${_pageHeader("_backToPatHomePreserveScroll()", 'Veículo', `
       <div class="phr-actions">
-        <button class="btn-pill" onclick="openVehForm('${v.id}')">Editar</button>
+        ${readonly ? '' : `<button class="btn-pill" onclick="openVehForm('${v.id}')">Editar</button>`}
         <button class="pat-kebab-btn" onclick="openVehMenu('${v.id}')" aria-label="Mais ações do veículo">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
         </button>
