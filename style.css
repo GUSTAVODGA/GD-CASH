@@ -3747,6 +3747,12 @@ button:focus-visible, [role="button"]:focus-visible {
 }
 .av-sheet-opt:active { background: var(--surface3); }
 
+/* Triagem da porta de entrada de Dívidas */
+.debt-triage-hint { font-size: 13px; line-height: 1.45; color: var(--tx3); margin-top: 4px; }
+.debt-triage-opt-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.debt-triage-opt-lbl { font-size: 14px; font-weight: 700; color: var(--text); }
+.debt-triage-opt-sub { font-size: 12px; color: var(--tx2); }
+
 /* Contraste reforçado no modo escuro — revisão final Etapa 2.
    Escopado ao módulo Patrimônio para não afetar outras abas. */
 :root[data-theme="dark"] #pat-home-cont .sec-label { color: rgba(232,237,255,.58); }

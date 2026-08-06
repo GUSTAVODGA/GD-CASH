@@ -3784,6 +3784,23 @@ function _debtIsAtiva(d) { const s = _debtStatus(d); return s === 'ativa' || s =
 
 function renderDividas() { renderDividasResumo(); renderDividasFiltros(); renderDividasList(); }
 
+// ── Triagem da porta de entrada: bem financiado começa pelo Patrimônio ──
+// Regra de produto: se a dívida nasceu para comprar um bem, o cadastro começa
+// pelo bem; se existe sozinha, começa aqui. Sem bloqueio, só direcionamento.
+function openDebtAddTriage() { openOverlay('debt-triage-sheet'); }
+function _debtTriageGo(kind) {
+  closeOverlay('debt-triage-sheet');
+  if (kind === 'semvem') { openDebtForm(); return; }
+  // Ordem importa: troca de aba primeiro (pode renderizar a Home e limpar flags),
+  // depois arma o retorno e o switch de financiamento, e por fim abre o formulário.
+  switchTab('patrimonio', 'mais');
+  _finFlowReturn = 'dividas';
+  _finFlowStartOn = true;
+  if (kind === 'veiculo') openVehForm();
+  else if (kind === 'imovel') openPatForm('imovel');
+  else if (kind === 'outro') openPatForm('outro');
+}
+
 function renderDividasResumo() {
   const el = document.getElementById('dividas-resumo'); if (!el) return;
   const debts = D.debts || [];
@@ -3877,7 +3894,7 @@ function _dividasEmptyAll() {
   return `<div class="div-empty">
     <div class="div-empty-title">Nenhuma dívida cadastrada</div>
     <div class="div-empty-txt">Cadastre financiamentos, compras parceladas, empréstimos, dívidas pessoais ou outras obrigações para acompanhar saldo, parcelas e vencimentos num só lugar.</div>
-    <button class="btn btn-primary" style="width:auto;padding:11px 20px" onclick="openDebtForm()">+ Adicionar dívida</button>
+    <button class="btn btn-primary" style="width:auto;padding:11px 20px" onclick="openDebtAddTriage()">+ Adicionar dívida</button>
   </div>`;
 }
 function _dividasEmptyFiltro() {
@@ -7092,6 +7109,17 @@ function openVehForm(id) {
   const cont = document.getElementById('veh-form-cont');
   if (!cont) return;
   const cancelAction = id ? `_refreshVehDetail('${id}')` : 'renderVehList()';
+  // ── Financiamento inline (paridade com imóvel/outro; fonte única D.debts) ──
+  const _vDebt = id ? _vehPrincipalDebt(id) : null;
+  const fin0 = _vDebt ? {
+    instituicao: _vDebt.credor, valorBem: _vDebt.valorBem, valorFinanciado: _vDebt.valorOriginal,
+    saldoDevedor: _debtSaldo(_vDebt), dataInicio: _vDebt.dataInicio, frequencia: _vDebt.periodicidade,
+    observacoes: _vDebt.observacoes,
+  } : null;
+  const finOn = !!fin0 || _finFlowStartOn;
+  _finFlowStartOn = false;
+  const freqSel = ['mensal','quinzenal','semanal','anual','irregular'].map(fr =>
+    `<option value="${fr}" ${(fin0?.frequencia||'mensal')===fr?'selected':''}>${({mensal:'Mensal',quinzenal:'Quinzenal',semanal:'Semanal',anual:'Anual',irregular:'Irregular / sem periodicidade'})[fr]}</option>`).join('');
   cont.innerHTML = `
     ${_pageHeader(cancelAction, id ? 'Editar veículo' : 'Novo veículo')}
     <div class="form-group">
@@ -7135,6 +7163,38 @@ function openVehForm(id) {
       <label class="form-label">Observações</label>
       <textarea class="form-input" id="vf-notes" rows="2" placeholder="Notas sobre o veículo">${escHtml(v?.notes||'')}</textarea>
     </div>
+    <div class="pf-fin-toggle">
+      <div class="pf-fin-toggle-txt">
+        <span class="pf-fin-toggle-lbl">Este veículo é financiado</span>
+        <span class="pf-fin-toggle-sub">Registre o financiamento junto com o veículo</span>
+      </div>
+      <label class="pf-switch">
+        <input type="checkbox" id="vf-fin-on" ${finOn?'checked':''} onchange="_toggleVfFin()" aria-label="Este veículo é financiado">
+        <span class="pf-switch-track"><span class="pf-switch-thumb"></span></span>
+      </label>
+    </div>
+    <div id="vf-fin-fields" class="pf-fin-fields" style="display:${finOn?'block':'none'}">
+      <div class="form-group">
+        <label class="form-label">Instituição / credor</label>
+        <input class="form-input" id="vff-inst" value="${escHtml(fin0?.instituicao||'')}" placeholder="Ex: Banco Toyota, Santander">
+      </div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label">Valor do bem (${escHtml(currSym)})</label><input class="form-input" id="vff-bem" type="number" min="0" step="any" value="${fin0?.valorBem||''}" placeholder="80000"></div>
+        <div class="form-group"><label class="form-label">Valor financiado (${escHtml(currSym)}) *</label><input class="form-input" id="vff-financiado" type="number" min="0" step="any" value="${fin0?.valorFinanciado||''}" placeholder="60000"></div>
+      </div>
+      <div class="veh-form-row">
+        <div class="form-group"><label class="form-label">Saldo devedor (${escHtml(currSym)}) *</label><input class="form-input" id="vff-saldo" type="number" min="0" step="any" value="${fin0?.saldoDevedor ?? ''}" placeholder="45000"></div>
+        <div class="form-group"><label class="form-label">Início</label><input class="form-input" id="vff-inicio" type="date" value="${fin0?.dataInicio||''}"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Frequência</label>
+        <select class="form-input" id="vff-freq">${freqSel}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Observações do financiamento</label>
+        <textarea class="form-input" id="vff-obs" rows="2" placeholder="Anotações (taxa, seguro, etc.)">${escHtml(fin0?.observacoes||'')}</textarea>
+      </div>
+    </div>
     <input type="hidden" id="vf-photo-data" value="${v?.photo||''}">
     <input type="hidden" id="vf-id" value="${v?.id||''}">
     <div class="veh-form-btns">
@@ -7148,6 +7208,25 @@ function saveVehicle() {
   if (!name) { gdToast('Nome obrigatório.'); return; }
   const existId = document.getElementById('vf-id')?.value;
   const id = existId || uid();
+  // ── Financiamento inline: valida ANTES de mutar D.vehicles (evita estado parcial). ──
+  const finOn = document.getElementById('vf-fin-on')?.checked;
+  let finFields = null;
+  if (finOn) {
+    const financiadoRaw = document.getElementById('vff-financiado')?.value;
+    const saldoRaw = document.getElementById('vff-saldo')?.value;
+    if (financiadoRaw === '' || financiadoRaw == null || saldoRaw === '' || saldoRaw == null) {
+      gdToast('Preencha valor financiado e saldo devedor (ou desligue "Este veículo é financiado").', { type: 'error' });
+      return;
+    }
+    finFields = {
+      titulo: name, credor: (document.getElementById('vff-inst')?.value || '').trim(),
+      valorBem: Number(document.getElementById('vff-bem')?.value) || 0,
+      valorFinanciado: Number(financiadoRaw) || 0, saldo: Number(saldoRaw) || 0,
+      dataInicio: document.getElementById('vff-inicio')?.value || '',
+      frequencia: document.getElementById('vff-freq')?.value || 'mensal',
+      observacoes: (document.getElementById('vff-obs')?.value || '').trim(),
+    };
+  }
   const photo = document.getElementById('vf-photo-data')?.value || null;
   const kmRaw = document.getElementById('vf-km')?.value;
   const vehicles = D.vehicles || [];
@@ -7175,10 +7254,23 @@ function saveVehicle() {
   const valorRaw = document.getElementById('vf-valor')?.value;
   const valorNum = (valorRaw === '' || valorRaw == null) ? null : (Number(valorRaw) || 0);
   _syncVehPatrimonioValor(id, valorNum, idx >= 0);
+  // Financiamento: cria/atualiza a dívida canônica vinculada por vehicleId (upsert —
+  // preserva debtId + pagamentos ao editar; nunca duplica pelo mesmo fluxo).
+  let finDebt = null;
+  if (finFields) finDebt = _patUpsertFinDebt({ vehicleId: id }, finFields);
   save();
+  // Retorno à Central de Dívidas quando o fluxo começou nela (bem novo financiado).
+  const startedInDividas = _finFlowReturn === 'dividas';
+  _finFlowReturn = null;
+  if (startedInDividas && finDebt && idx < 0) {
+    switchTab('dividas'); renderDividas();
+    gdToast('Veículo criado e financiamento vinculado.', { type: 'success' });
+    openDebtDetail(finDebt.id);
+    return;
+  }
   _vehDetailId = id;
   _refreshVehDetail(id);
-  gdToast(idx >= 0 ? 'Veículo atualizado.' : 'Veículo adicionado.');
+  gdToast(idx >= 0 ? 'Veículo atualizado.' : (finDebt ? 'Veículo e financiamento adicionados.' : 'Veículo adicionado.'));
 }
 
 // Busca o registro de patrimônio correspondente a um veículo (por _idOriginal ou id)
@@ -7891,6 +7983,7 @@ function patToggleCatFilter(tipo) {
 }
 
 function renderPatrimonioHome(preserveScroll) {
+  _finFlowReturn = null; // aterrissar na Home encerra qualquer fluxo iniciado em Dívidas
   _vehDetailId = null;
   _vehShowView('pat-home-view');
   if (!preserveScroll) {
@@ -8077,7 +8170,8 @@ function openPatForm(tipo, id) {
     saldoDevedor: _debtSaldo(_pDebt), dataInicio: _pDebt.dataInicio, frequencia: _pDebt.periodicidade,
     observacoes: _pDebt.observacoes,
   } : null;
-  const finOn = !!fin0;
+  const finOn = !!fin0 || _finFlowStartOn;
+  _finFlowStartOn = false;
   const freqSel = ['mensal','quinzenal','semanal','anual','irregular'].map(fr =>
     `<option value="${fr}" ${(fin0?.frequencia||'mensal')===fr?'selected':''}>${({mensal:'Mensal',quinzenal:'Quinzenal',semanal:'Semanal',anual:'Anual',irregular:'Irregular / sem periodicidade'})[fr]}</option>`).join('');
   const backAction = p ? `renderPatDetail('${p.id}')` : 'renderPatrimonioHome()';
@@ -8193,6 +8287,30 @@ function _togglePfFin() {
     // Pré-preenche "valor do bem" com o valor do patrimônio, se ainda vazio.
     const bem = document.getElementById('pff-bem');
     const val = document.getElementById('pf-valor')?.value;
+    if (bem && !bem.value && val) bem.value = val;
+  }
+}
+
+// ── Porta de entrada unificada Patrimônio ⇄ Dívidas ──────────────────────────
+// `_finFlowReturn`: quando um cadastro de bem financiado começou na Central de
+// Dívidas, ao concluir voltamos para lá mostrando a dívida criada.
+// `_finFlowStartOn`: abre o formulário do bem já com o switch de financiamento ligado.
+var _finFlowReturn = null;
+var _finFlowStartOn = false;
+
+// Dívida de financiamento principal de um veículo (no máx. uma). Fonte única D.debts.
+function _vehPrincipalDebt(vehId) {
+  return (D.debts || []).find(d => d.tipo === 'financiamento' && d.vehicleId === vehId) || null;
+}
+
+// Espelho de _togglePfFin para o formulário de veículo.
+function _toggleVfFin() {
+  const on = document.getElementById('vf-fin-on')?.checked;
+  const box = document.getElementById('vf-fin-fields');
+  if (box) box.style.display = on ? 'block' : 'none';
+  if (on) {
+    const bem = document.getElementById('vff-bem');
+    const val = document.getElementById('vf-valor')?.value;
     if (bem && !bem.value && val) bem.value = val;
   }
 }
@@ -8339,13 +8457,25 @@ function savePatrimonioForm() {
   } else {
     // Cadastro inicial: nenhum evento de reavaliação é criado
     const novo = createPatrimonio(Object.assign({ tipo }, fields));
+    let novoDebt = null;
     if (finToSave && novo) {
-      _patUpsertFinDebt({ patrimonioId: novo.id }, {
+      novoDebt = _patUpsertFinDebt({ patrimonioId: novo.id }, {
         titulo: nome, credor: finToSave.instituicao, valorBem: finToSave.valorBem,
         valorFinanciado: finToSave.valorFinanciado, saldo: finToSave.saldoDevedor,
         dataInicio: finToSave.dataInicio, frequencia: finToSave.frequencia, observacoes: finToSave.observacoes,
       });
       save();
+    }
+    // Retorno à Central de Dívidas quando o fluxo começou nela (bem novo financiado).
+    const startedInDividas = _finFlowReturn === 'dividas';
+    _finFlowReturn = null;
+    if (startedInDividas && novoDebt) {
+      switchTab('dividas'); renderDividas();
+      gdToast('Bem criado e financiamento vinculado.', { type: 'success' });
+      openDebtDetail(novoDebt.id);
+      return;
+    }
+    if (novoDebt) {
       gdToast('Patrimônio e financiamento adicionados.');
       renderPatDetail(novo.id); // abre o detalhe já com o financiamento
     } else {
