@@ -3752,6 +3752,10 @@ button:focus-visible, [role="button"]:focus-visible {
 .debt-triage-opt-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
 .debt-triage-opt-lbl { font-size: 14px; font-weight: 700; color: var(--text); }
 .debt-triage-opt-sub { font-size: 12px; color: var(--tx2); }
+.debt-link-seclbl { font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; color: var(--tx3); margin-bottom: 8px; }
+.pf-fin-linknote { font-size: 13px; line-height: 1.45; color: var(--tx2); background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-top: 8px; }
+.div-card-vinc { display: inline-block; margin-top: 10px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--ac); font-size: 12px; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.div-card-vinc:active { background: var(--surface3); }
 
 /* Contraste reforçado no modo escuro — revisão final Etapa 2.
    Escopado ao módulo Patrimônio para não afetar outras abas. */

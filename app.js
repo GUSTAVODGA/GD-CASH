@@ -3801,6 +3801,81 @@ function _debtTriageGo(kind) {
   else if (kind === 'outro') openPatForm('outro');
 }
 
+// ── Vincular uma dívida existente a um patrimônio (sem recriar nada) ──────────
+// `_debtLinkTarget`: dívida cuja sheet de vínculo está aberta.
+// `_debtLinkPending`: dívida a ser vinculada ao PRÓXIMO bem criado (fluxo "criar bem
+// a partir da dívida") — garante que o novo bem NÃO gere uma segunda dívida.
+var _debtLinkTarget = null;
+var _debtLinkPending = null;
+var _VINC_ICO = {
+  veiculo: '<path d="M5 13l1.4-4.2A2 2 0 0 1 8.3 7.5h7.4a2 2 0 0 1 1.9 1.3L19 13v4a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H8v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><circle cx="7.5" cy="16" r="1.1"/><circle cx="16.5" cy="16" r="1.1"/>',
+  imovel: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  outro: '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+};
+function _vincOptHtml(onclick, ico, lbl, sub) {
+  return `<button class="av-sheet-opt" onclick="${onclick}">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ico}</svg>
+    <span class="debt-triage-opt-txt"><span class="debt-triage-opt-lbl">${escHtml(lbl)}</span>${sub?`<span class="debt-triage-opt-sub">${escHtml(sub)}</span>`:''}</span>
+  </button>`;
+}
+function vincularDividaMenu(debtId) {
+  const d = getDebt(debtId); if (!d) return;
+  if (_debtHasBem(d)) { gdToast('Esta dívida já está vinculada a um bem.', { type: 'info' }); return; }
+  closeOverlay('debt-menu-sheet');
+  _debtLinkTarget = debtId;
+  const body = document.getElementById('debt-link-body');
+  if (body) {
+    // Bens existentes compatíveis: ativos apenas (encerrados não recebem vínculo).
+    const vehs = (D.vehicles || []).filter(v => _patLifecycleOf(v.id) !== 'encerrado');
+    const pats = (D.patrimonios || []).filter(p => p.tipo !== 'veiculo' && (p.status || 'ativo') === 'ativo');
+    const existOpts = [];
+    vehs.forEach(v => existOpts.push(_vincOptHtml(`_vincularDividaExistente('${debtId}','veh','${v.id}')`, _VINC_ICO.veiculo, v.name || 'Veículo', 'Veículo')));
+    pats.forEach(p => existOpts.push(_vincOptHtml(`_vincularDividaExistente('${debtId}','pat','${p.id}')`, _VINC_ICO[p.tipo] || _VINC_ICO.outro, p.nome || 'Bem', { imovel:'Imóvel', outro:'Outro bem' }[p.tipo] || 'Bem')));
+    const existBlock = existOpts.length ? `
+      <div><div class="debt-link-seclbl">Selecionar bem existente</div>
+      <div style="display:flex;flex-direction:column;gap:8px">${existOpts.join('')}</div></div>` : '';
+    const createBlock = `
+      <div><div class="debt-link-seclbl">Criar novo bem a partir desta dívida</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${_vincOptHtml(`_vincularDividaNovoBem('${debtId}','veiculo')`, _VINC_ICO.veiculo, 'Criar novo veículo', 'Usa os dados desta dívida')}
+        ${_vincOptHtml(`_vincularDividaNovoBem('${debtId}','imovel')`, _VINC_ICO.imovel, 'Criar novo imóvel', 'Usa os dados desta dívida')}
+        ${_vincOptHtml(`_vincularDividaNovoBem('${debtId}','outro')`, _VINC_ICO.outro, 'Criar outro bem', 'Usa os dados desta dívida')}
+      </div></div>`;
+    body.innerHTML = existBlock + createBlock;
+  }
+  openOverlay('debt-link-sheet');
+}
+// Rota 1 — vincular a um bem que já existe: preenche só vehicleId/patrimonioId.
+function _vincularDividaExistente(debtId, kind, targetId) {
+  const d = getDebt(debtId); if (!d) return;
+  if (_debtHasBem(d)) { gdToast('Esta dívida já está vinculada.', { type: 'info' }); return; }
+  if (_patLifecycleOf(targetId) === 'encerrado') { gdToast('Bem encerrado não pode receber vínculo.', { type: 'info' }); return; }
+  _relinkDebtToBem(d, targetId); // não toca saldo, parcelas, pagamentos nem projeções
+  save();
+  _debtLinkTarget = null;
+  closeOverlay('debt-link-sheet');
+  renderDividas();
+  gdToast('Dívida vinculada a ' + _debtBemNome(d) + '.', { type: 'success' });
+  openDebtDetail(debtId);
+}
+// Rota 2 — criar um novo bem a partir da dívida (o bem NÃO cria outra dívida).
+function _vincularDividaNovoBem(debtId, tipo) {
+  const d = getDebt(debtId); if (!d) return;
+  if (_debtHasBem(d)) { gdToast('Esta dívida já está vinculada.', { type: 'info' }); return; }
+  closeOverlay('debt-link-sheet'); closeOverlay('debt-detail-sheet');
+  switchTab('patrimonio', 'mais');
+  _debtLinkPending = debtId; // após switchTab (que pode limpar flags de fluxo)
+  if (tipo === 'veiculo') {
+    openVehForm();
+    const nm = document.getElementById('vf-name'); if (nm && !nm.value) nm.value = d.titulo || '';
+    const vv = document.getElementById('vf-valor'); if (vv && !vv.value && d.valorBem) vv.value = d.valorBem;
+  } else {
+    openPatForm(tipo);
+    const nm = document.getElementById('pf-nome'); if (nm && !nm.value) nm.value = d.titulo || '';
+    const vv = document.getElementById('pf-valor'); if (vv && !vv.value && d.valorBem) vv.value = d.valorBem;
+  }
+}
+
 function renderDividasResumo() {
   const el = document.getElementById('dividas-resumo'); if (!el) return;
   const debts = D.debts || [];
@@ -3863,7 +3938,7 @@ function _debtCardHtml(d, st) {
   const tm = DEBT_TIPO_META[d.tipo] || DEBT_TIPO_META.outro;
   const sm = DEBT_STATUS_META[st.status] || DEBT_STATUS_META.ativa;
   const bem = _debtBemNome(d);
-  const sub = [d.credor, bem].filter(Boolean).join(' · ');
+  const sub = d.credor || '';
   const temParcelas = st.parcelasTotal > 0;
   const progLine = `${st.progress}% pago${temParcelas ? ` · ${st.parcelasPagas} de ${st.parcelasTotal} parcelas` : ''}`;
   const venc = st.proximaNo ? `<div class="div-card-next">Próxima: ${R(st.proximaValor)} · ${_fmtDataBR(st.proximaVenc)}</div>` : '';
@@ -3887,6 +3962,7 @@ function _debtCardHtml(d, st) {
         <span class="div-status s-${sm.cls}">${sm.lbl}</span>
       </div>
       ${venc}
+      ${bem ? `<button class="div-card-vinc" onclick="event.stopPropagation();abrirBemDaDivida('${d.id}')">Vinculada a: ${escHtml(bem)}</button>` : ''}
     </div>`;
 }
 
@@ -3981,12 +4057,13 @@ function openDebtDetail(id) {
     ${d.observacoes ? `<div class="div-det-obs">${escHtml(d.observacoes)}</div>` : ''}
     <div class="div-det-actions">
       ${acaoPrimaria}
+      ${!_debtHasBem(d) ? `<button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="vincularDividaMenu('${d.id}')">Vincular a um patrimônio</button>` : ''}
       <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="openDebtMenu('${d.id}')">Mais ações</button>
     </div>
     <div class="parcel-det-hist-lbl" style="margin-top:16px">Histórico de pagamentos</div>
     <div class="pagfin-hist">${histHtml}</div>
     ${proxHtml}
-    ${_debtHasBem(d) ? `<button class="div-bem-link" onclick="abrirBemDaDivida('${d.id}')">Abrir ${d.vehicleId ? 'veículo' : 'patrimônio'} relacionado →</button>` : ''}
+    ${_debtHasBem(d) ? `<button class="div-bem-link" onclick="abrirBemDaDivida('${d.id}')">Vinculada a: ${escHtml(bem)} — abrir →</button>` : ''}
     <button class="btn btn-secondary" style="width:100%;margin-top:14px" onclick="closeOverlay('debt-detail-sheet')">Fechar</button>`;
   openOverlay('debt-detail-sheet');
 }
@@ -4019,6 +4096,7 @@ function openDebtMenu(id) {
   else if (st.status !== 'cancelada' && !st.quitada) opts.push(_debtMenuOpt('Pausar', 'pause', `pausarDivida('${id}')`));
   if (st.status !== 'cancelada') opts.push(_debtMenuOpt('Cancelar', 'cancel', `cancelarDivida('${id}')`));
   if (_debtHasBem(d)) opts.push(_debtMenuOpt(d.vehicleId ? 'Abrir veículo' : 'Abrir patrimônio', 'open', `abrirBemDaDivida('${id}')`));
+  else opts.push(_debtMenuOpt('Vincular a um patrimônio', 'open', `vincularDividaMenu('${id}')`));
   opts.push(_debtMenuOpt('Excluir', 'trash', `excluirDivida('${id}')`, true));
   document.getElementById('debt-menu-opts').innerHTML = opts.join('');
   openOverlay('debt-menu-sheet');
@@ -7118,6 +7196,8 @@ function openVehForm(id) {
   } : null;
   const finOn = !!fin0 || _finFlowStartOn;
   _finFlowStartOn = false;
+  // Fluxo "criar bem a partir da dívida": financiamento já existe → não recriar.
+  const linkPending = !!_debtLinkPending;
   const freqSel = ['mensal','quinzenal','semanal','anual','irregular'].map(fr =>
     `<option value="${fr}" ${(fin0?.frequencia||'mensal')===fr?'selected':''}>${({mensal:'Mensal',quinzenal:'Quinzenal',semanal:'Semanal',anual:'Anual',irregular:'Irregular / sem periodicidade'})[fr]}</option>`).join('');
   cont.innerHTML = `
@@ -7163,6 +7243,7 @@ function openVehForm(id) {
       <label class="form-label">Observações</label>
       <textarea class="form-input" id="vf-notes" rows="2" placeholder="Notas sobre o veículo">${escHtml(v?.notes||'')}</textarea>
     </div>
+    ${linkPending ? `<div class="pf-fin-linknote">Este veículo será vinculado à dívida já existente. O financiamento não é recriado.</div>` : `
     <div class="pf-fin-toggle">
       <div class="pf-fin-toggle-txt">
         <span class="pf-fin-toggle-lbl">Este veículo é financiado</span>
@@ -7194,7 +7275,7 @@ function openVehForm(id) {
         <label class="form-label">Observações do financiamento</label>
         <textarea class="form-input" id="vff-obs" rows="2" placeholder="Anotações (taxa, seguro, etc.)">${escHtml(fin0?.observacoes||'')}</textarea>
       </div>
-    </div>
+    </div>`}
     <input type="hidden" id="vf-photo-data" value="${v?.photo||''}">
     <input type="hidden" id="vf-id" value="${v?.id||''}">
     <div class="veh-form-btns">
@@ -7208,6 +7289,7 @@ function saveVehicle() {
   if (!name) { gdToast('Nome obrigatório.'); return; }
   const existId = document.getElementById('vf-id')?.value;
   const id = existId || uid();
+  const linkPendingId = _debtLinkPending; // fluxo "criar bem a partir da dívida"
   // ── Financiamento inline: valida ANTES de mutar D.vehicles (evita estado parcial). ──
   const finOn = document.getElementById('vf-fin-on')?.checked;
   let finFields = null;
@@ -7259,6 +7341,17 @@ function saveVehicle() {
   let finDebt = null;
   if (finFields) finDebt = _patUpsertFinDebt({ vehicleId: id }, finFields);
   save();
+  // Fluxo "criar bem a partir da dívida": vincula a dívida EXISTENTE ao novo veículo,
+  // sem criar outra dívida (preserva debtId, saldo, parcelas, pagamentos e projeções).
+  if (linkPendingId && idx < 0) {
+    _debtLinkPending = null;
+    const ld = getDebt(linkPendingId);
+    if (ld && !_debtHasBem(ld)) { _relinkDebtToBem(ld, id); save(); }
+    _finFlowReturn = null;
+    _vehDetailId = id; _vehDetailMode = 'integrated'; renderVehPatDetail(id);
+    gdToast('Dívida vinculada a ' + name + '.', { type: 'success' });
+    return;
+  }
   // Retorno à Central de Dívidas quando o fluxo começou nela (bem novo financiado).
   const startedInDividas = _finFlowReturn === 'dividas';
   _finFlowReturn = null;
@@ -7983,7 +8076,7 @@ function patToggleCatFilter(tipo) {
 }
 
 function renderPatrimonioHome(preserveScroll) {
-  _finFlowReturn = null; // aterrissar na Home encerra qualquer fluxo iniciado em Dívidas
+  _finFlowReturn = null; _debtLinkPending = null; // aterrissar na Home encerra fluxos vindos de Dívidas
   _vehDetailId = null;
   _vehShowView('pat-home-view');
   if (!preserveScroll) {
@@ -8172,6 +8265,7 @@ function openPatForm(tipo, id) {
   } : null;
   const finOn = !!fin0 || _finFlowStartOn;
   _finFlowStartOn = false;
+  const linkPending = !!_debtLinkPending; // criar bem a partir da dívida: não recriar financiamento
   const freqSel = ['mensal','quinzenal','semanal','anual','irregular'].map(fr =>
     `<option value="${fr}" ${(fin0?.frequencia||'mensal')===fr?'selected':''}>${({mensal:'Mensal',quinzenal:'Quinzenal',semanal:'Semanal',anual:'Anual',irregular:'Irregular / sem periodicidade'})[fr]}</option>`).join('');
   const backAction = p ? `renderPatDetail('${p.id}')` : 'renderPatrimonioHome()';
@@ -8232,6 +8326,7 @@ function openPatForm(tipo, id) {
       <div class="form-group"><label class="form-label">Matrícula</label><input class="form-input" id="pf-matricula" value="${escHtml(d.matricula||'')}" placeholder="Nº da matrícula"></div>
       <div class="form-group"><label class="form-label">Cartório</label><input class="form-input" id="pf-cartorio" value="${escHtml(d.cartorio||'')}" placeholder="Cartório de registro"></div>
     </div>` : ''}
+    ${linkPending ? `<div class="pf-fin-linknote">Este bem será vinculado à dívida já existente. O financiamento não é recriado.</div>` : `
     <div class="pf-fin-toggle">
       <div class="pf-fin-toggle-txt">
         <span class="pf-fin-toggle-lbl">Este bem é financiado</span>
@@ -8264,7 +8359,7 @@ function openPatForm(tipo, id) {
         <textarea class="form-input" id="pff-obs" rows="2" placeholder="Anotações (taxa, seguro, etc.)">${escHtml(fin0?.observacoes||'')}</textarea>
       </div>
       ${(p && (p.financiamentos||[]).length > 1) ? `<div class="pf-fin-note">Este bem tem mais de um financiamento — os demais podem ser gerenciados no detalhe.</div>` : ''}
-    </div>
+    </div>`}
     <input type="hidden" id="pf-photo-data" value="${p?.foto||''}">
     <input type="hidden" id="pf-id" value="${p?.id||''}">
     <input type="hidden" id="pf-tipo" value="${t}">
@@ -8368,6 +8463,7 @@ function _patUpsertFinDebt(link, f) {
 function savePatrimonioForm() {
   const nome = (document.getElementById('pf-nome')?.value || '').trim();
   if (!nome) { gdToast('Nome obrigatório.'); return; }
+  const linkPendingId = _debtLinkPending; // fluxo "criar bem a partir da dívida"
   const valorRaw = document.getElementById('pf-valor')?.value;
   const _num = elId => {
     const raw = document.getElementById(elId)?.value;
@@ -8457,6 +8553,17 @@ function savePatrimonioForm() {
   } else {
     // Cadastro inicial: nenhum evento de reavaliação é criado
     const novo = createPatrimonio(Object.assign({ tipo }, fields));
+    // Fluxo "criar bem a partir da dívida": vincula a dívida EXISTENTE ao novo bem,
+    // sem criar outra dívida (preserva debtId, saldo, parcelas, pagamentos e projeções).
+    if (linkPendingId && novo) {
+      _debtLinkPending = null;
+      const ld = getDebt(linkPendingId);
+      if (ld && !_debtHasBem(ld)) { _relinkDebtToBem(ld, novo.id); save(); }
+      _finFlowReturn = null;
+      gdToast('Dívida vinculada a ' + nome + '.', { type: 'success' });
+      renderPatDetail(novo.id);
+      return;
+    }
     let novoDebt = null;
     if (finToSave && novo) {
       novoDebt = _patUpsertFinDebt({ patrimonioId: novo.id }, {
@@ -8788,6 +8895,7 @@ function _finCardHtml(f, ownerId, kind, readonly) {
         ? `<div class="pagfin-quitado">✓ Financiamento quitado</div>`
         : (readonly ? '' : `<button class="btn btn-primary pagfin-add-btn" onclick="openPagFinForm('${ownerId}','${f.id}','${kind}')">Registrar pagamento</button>`)}
       <div class="pagfin-hist">${pagsHtml}</div>
+      <button class="div-bem-link" style="margin-top:12px" onclick="openDebtDetail('${f.id}')">Ver dívida completa →</button>
     </div>`;
 }
 

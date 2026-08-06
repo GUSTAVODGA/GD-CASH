@@ -1013,6 +1013,17 @@
     </div>
   </div>
 
+  <!-- Vincular uma dívida existente a um patrimônio (sem recriar nada) -->
+  <div class="overlay" id="debt-link-sheet" onclick="if(event.target===this)closeOverlay('debt-link-sheet')">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Vincular a um patrimônio</div>
+      <div class="debt-triage-hint">Conecte esta dívida a um bem existente ou crie um novo a partir dela. Saldo, parcelas e pagamentos são preservados.</div>
+      <div id="debt-link-body" style="display:flex;flex-direction:column;gap:16px;margin:12px 0 14px"></div>
+      <button class="btn btn-secondary" style="width:100%" onclick="closeOverlay('debt-link-sheet')">Cancelar</button>
+    </div>
+  </div>
+
   <!-- Bottom sheet: ações de uma movimentação da reserva (Editar / Excluir) -->
   <div class="overlay" id="res-menu-sheet" onclick="if(event.target===this)closeOverlay('res-menu-sheet')">
     <div class="sheet">
