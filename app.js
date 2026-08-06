@@ -549,18 +549,33 @@ function renderMais() {
 // ══════════════════════════════════════════
 // PESQUISAR LANÇAMENTOS
 // ══════════════════════════════════════════
-var _srchState = { q:'', type:'all', period:'all', from:'', to:'' };
+var _srchState = { q:'', type:'all', period:'all', from:'', to:'', bem:'' };
+
+// Abre a Pesquisa já filtrada pelas despesas de um bem (opcionalmente do mês).
+function abrirDespesasDoBem(bemId, period) {
+  _srchState.bem = bemId || '';
+  _srchState.type = 'exp';
+  _srchState.period = period || 'month';
+  _srchState.q = '';
+  switchTab('pesquisa', 'patrimonio');
+  renderPesquisa();
+}
+function srchClearBem() { _srchState.bem = ''; renderPesquisaResults(); }
 
 // Normaliza para busca: minúsculas + sem acentos (não persiste nada).
 function _srchNorm(s) {
   return String(s == null ? '' : s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 }
 
-// Nome do veículo/patrimônio vinculado a um gasto, se houver.
+// Nome do veículo/patrimônio vinculado a um gasto, se houver (canônico + legado).
 function _srchLinkName(e) {
   if (e.vehicleId) {
     const v = (D.vehicles||[]).find(x => x.id === e.vehicleId);
     if (v) return v.name || '';
+  }
+  if (e.patrimonioId) {
+    const p = (D.patrimonios||[]).find(x => x.id === e.patrimonioId);
+    if (p) return p.nome || '';
   }
   const p = (D.patrimonios||[]).find(x => (x.linkedExpenses||[]).includes(e.id));
   return p ? (p.nome || '') : '';
@@ -573,7 +588,7 @@ function _srchCollect() {
     out.push({
       type:'exp', date: localDateKey(e.date), amount: e.amount,
       desc: e.description || '', tag: (e.category && String(e.category).trim()) ? e.category : 'Sem categoria',
-      link: _srchLinkName(e), editRef: { kind:'exp', id:e.id },
+      link: _srchLinkName(e), bemId: _expBemLegacyId(e), editRef: { kind:'exp', id:e.id },
     });
   });
   (D.incomeItems||[]).forEach(it => {
@@ -635,6 +650,7 @@ function _srchFilter() {
   return _srchCollect().filter(r => {
     if (_srchState.type === 'exp' && r.type !== 'exp') return false;
     if (_srchState.type === 'inc' && r.type !== 'inc') return false;
+    if (_srchState.bem && r.bemId !== _srchState.bem) return false; // filtro por patrimônio vinculado
     if (from && (!r.date || r.date < from)) return false;
     if (to && (!r.date || r.date > to)) return false;
     if (q) {
@@ -698,9 +714,12 @@ function renderPesquisaResults() {
   const expTotal = rows.filter(r => r.type === 'exp').reduce((s,r) => s+r.amount, 0);
   const magTotal = incTotal + expTotal;
   const periodLbl = _srchPeriodLabel();
+  const bemChip = _srchState.bem
+    ? `<div class="srch-bem-chip"><span>Despesas de: <b>${escHtml(_patNomeOf(_srchState.bem) || 'bem')}</b></span><button onclick="srchClearBem()" aria-label="Limpar filtro do patrimônio">✕</button></div>`
+    : '';
 
   if (n === 0) {
-    sumEl.innerHTML = `<div class="srch-sum-card"><div class="srch-sum-count">Nenhum lançamento encontrado.</div><div class="srch-sum-period">${escHtml(periodLbl)}</div></div>`;
+    sumEl.innerHTML = bemChip + `<div class="srch-sum-card"><div class="srch-sum-count">Nenhum lançamento encontrado.</div><div class="srch-sum-period">${escHtml(periodLbl)}</div></div>`;
     listEl.innerHTML = '';
     return;
   }
@@ -722,7 +741,7 @@ function renderPesquisaResults() {
       </div>`;
   }
   const avg = magTotal / n;
-  sumEl.innerHTML = `<div class="srch-sum-card">
+  sumEl.innerHTML = bemChip + `<div class="srch-sum-card">
       <div class="srch-sum-head"><span class="srch-sum-count">${n} ${n===1?'lançamento':'lançamentos'}</span><span class="srch-sum-period">${escHtml(periodLbl)}</span></div>
       ${valuesHtml}
       <div class="srch-sum-avg">Média por lançamento: ${R(avg)}</div>
@@ -1730,6 +1749,8 @@ function renderDayDetail() {
   const rv=document.getElementById('result-val');
   rv.textContent=R(dayBal); rv.className='result-val '+(dayBal>=0?'pos':'neg');
 
+  _populateBemSel('exp-bem-sel'); // "Relacionado a" (bens ativos), independente da categoria
+
   const addSec=document.getElementById('add-exp-section');
   addSec.style.opacity=isOff?'0.4':'1';
   addSec.style.pointerEvents=isOff?'none':'auto';
@@ -1865,32 +1886,108 @@ function _onPendCatChange() {
   }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// VÍNCULO DESPESA ⇄ PATRIMÔNIO (canônico; espelha D.debts: vehicleId/patrimonioId)
+// A categoria responde "com o que gastei"; o vínculo responde "com qual bem gastei".
+// Conceitos independentes. Sem nova entidade — o vínculo mora na própria despesa.
+// ══════════════════════════════════════════════════════════════════════════
+function _expBemId(e) { return (e && (e.vehicleId || e.patrimonioId)) || null; }
+// Id do bem para consulta/filtro (canônico OU índice legado veh/pat.linkedExpenses).
+function _expBemLegacyId(e) {
+  if (!e) return null;
+  if (e.vehicleId) return e.vehicleId;
+  if (e.patrimonioId) return e.patrimonioId;
+  const v = (D.vehicles || []).find(x => (x.linkedExpenses || []).includes(e.id)); if (v) return v.id;
+  const p = (D.patrimonios || []).find(x => (x.linkedExpenses || []).includes(e.id)); if (p) return p.id;
+  return null;
+}
+function _expBemSelValue(e) { if (!e) return ''; if (e.vehicleId) return 'veh:' + e.vehicleId; if (e.patrimonioId) return 'pat:' + e.patrimonioId; return ''; }
+// <option>s de "Relacionado a": bens ATIVOS (não encerrados). Preserva o vínculo atual
+// mesmo se o bem estiver encerrado (para não desvincular histórico ao editar).
+function _bemVinculoOptions(currentVal) {
+  let html = `<option value="">— Nenhum patrimônio —</option>`;
+  (D.vehicles || []).filter(v => _patLifecycleOf(v.id) === 'ativo').forEach(v => {
+    const val = 'veh:' + v.id;
+    html += `<option value="${val}"${currentVal === val ? ' selected' : ''}>${escHtml(v.name || 'Veículo')} · veículo</option>`;
+  });
+  (D.patrimonios || []).filter(p => p.tipo !== 'veiculo' && (p.status || 'ativo') === 'ativo').forEach(p => {
+    const val = 'pat:' + p.id; const t = { imovel: 'imóvel', outro: 'outro bem' }[p.tipo] || 'bem';
+    html += `<option value="${val}"${currentVal === val ? ' selected' : ''}>${escHtml(p.nome || 'Bem')} · ${t}</option>`;
+  });
+  if (currentVal && !html.includes(`value="${currentVal}"`)) {
+    const id = currentVal.slice(4);
+    html += `<option value="${currentVal}" selected>${escHtml(_patNomeOf(id) || 'Bem')} · encerrado</option>`;
+  }
+  return html;
+}
+function _populateBemSel(selId, currentVal) { const s = document.getElementById(selId); if (s) s.innerHTML = _bemVinculoOptions(currentVal || ''); }
+// Aplica/troca/remove o vínculo canônico numa despesa. Campos mutuamente exclusivos
+// (uma despesa nunca fica ligada a dois bens). Mantém veh.linkedExpenses (índice
+// legado). NÃO permite NOVO vínculo com bem encerrado. Retorna ids de bens afetados.
+function _expSetBemLink(expObj, selValue) {
+  const prev = _expBemSelValue(expObj);
+  if (selValue === prev) return []; // sem mudança → preserva (inclui links legados/encerrados)
+  const affected = new Set();
+  if (expObj.vehicleId) { affected.add(expObj.vehicleId); const pv = (D.vehicles || []).find(v => v.id === expObj.vehicleId); if (pv) pv.linkedExpenses = (pv.linkedExpenses || []).filter(x => x !== expObj.id); }
+  if (expObj.patrimonioId) affected.add(expObj.patrimonioId);
+  delete expObj.vehicleId; delete expObj.patrimonioId;
+  if (selValue) {
+    const kind = selValue.slice(0, 3), id = selValue.slice(4);
+    if (_patLifecycleOf(id) === 'ativo') {
+      if (kind === 'veh') { expObj.vehicleId = id; const v = (D.vehicles || []).find(x => x.id === id); if (v) { if (!v.linkedExpenses) v.linkedExpenses = []; if (!v.linkedExpenses.includes(expObj.id)) v.linkedExpenses.push(expObj.id); } affected.add(id); }
+      else if (kind === 'pat') { expObj.patrimonioId = id; affected.add(id); }
+    }
+  }
+  return [...affected];
+}
+// Despesas vinculadas a um bem (canônico + índice legado).
+function _expensesDoBem(id) {
+  const isVeh = _patIsVeiculo(id);
+  const rec = _patOwnerRec(id);
+  const patKey = rec ? rec.id : id;
+  const legacy = isVeh ? new Set(((D.vehicles || []).find(v => v.id === id) || {}).linkedExpenses || []) : new Set((rec && rec.linkedExpenses) || []);
+  return (D.expenses || []).filter(e => (isVeh ? (e.vehicleId === id) : (e.patrimonioId === patKey)) || legacy.has(e.id));
+}
+// 'YYYY-MM' do mês corrente (base local).
+function _ymNow() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
+// Custo do veículo no mês: uso/manutenção + financiamento, sem dupla contagem por
+// expenseId. Não considera projeções nem saldo devedor — só gasto realizado no mês.
+function _vehCustoMes(vehId, ym) {
+  ym = ym || _ymNow();
+  let uso = 0, fin = 0; const seen = new Set();
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  (D.expenses || []).forEach(e => {
+    if (seen.has(e.id) || String(e.date || '').slice(0, 7) !== ym) return;
+    if (e.meta && e.meta.source === 'debt') {
+      const d = e.meta.debtId ? getDebt(e.meta.debtId) : null;
+      if (d && d.vehicleId === vehId) { fin += e.amount || 0; seen.add(e.id); }
+      return; // pagamento de dívida nunca conta como uso/manutenção
+    }
+    if (e.vehicleId === vehId || (v && (v.linkedExpenses || []).includes(e.id))) { uso += e.amount || 0; seen.add(e.id); }
+  });
+  return { uso, fin, total: uso + fin };
+}
+
 function addExpense() {
   const date=selDate(), cat=document.getElementById('exp-cat').value;
   const val=parseFloat(document.getElementById('exp-val').value);
   const desc=document.getElementById('exp-desc').value.trim();
   if(!val||val<=0){gdToast('Informe um valor válido.', { type: 'error' });return;}
-  const vehSel = document.getElementById('exp-veh-sel');
-  const vehicleId = (vehSel && vehSel.style.display !== 'none') ? (vehSel.value || null) : null;
+  const bemSel = document.getElementById('exp-bem-sel');
+  const bemVal = bemSel ? (bemSel.value || '') : '';
   const expObj = {id:uid(),date,category:cat,amount:val,description:desc};
-  if (vehicleId) expObj.vehicleId = vehicleId;
   D.expenses.push(expObj);
-  if (vehicleId) {
-    const veh = (D.vehicles||[]).find(v => v.id === vehicleId);
-    if (veh) { if (!veh.linkedExpenses) veh.linkedExpenses=[]; if (!veh.linkedExpenses.includes(expObj.id)) veh.linkedExpenses.push(expObj.id); }
-  }
+  if (bemVal) _expSetBemLink(expObj, bemVal); // vínculo canônico (opcional, independente da categoria)
   document.getElementById('exp-val').value='';
   document.getElementById('exp-desc').value='';
+  if (bemSel) bemSel.value='';
   haptic(10); save(); refreshAfterDayEdit();
   notifyRegistered(val, desc || cat, cat);
 }
 
 function deleteExpense(id) {
-  const exp = D.expenses.find(e => e.id === id);
-  if (exp?.vehicleId) {
-    const veh = (D.vehicles||[]).find(v => v.id === exp.vehicleId);
-    if (veh) veh.linkedExpenses = (veh.linkedExpenses||[]).filter(eid => eid !== id);
-  }
+  // Remove o id do índice legado em qualquer veículo (o vínculo canônico some com a despesa).
+  (D.vehicles||[]).forEach(v => { if (v.linkedExpenses) v.linkedExpenses = v.linkedExpenses.filter(eid => eid !== id); });
   D.expenses=D.expenses.filter(e=>e.id!==id);
   // Se era uma despesa de baixa, remove o marcador órfão (o fixo volta a pendente/vencido).
   reconcileFixedPayments();
@@ -4541,7 +4638,7 @@ function switchTab(tab, origin) {
   if(tab==='metas')     renderGoals();
   if(tab==='fixos')      renderFixos();
   if(tab==='conversor')  loadConversorRates();
-  if(tab==='pesquisa')   renderPesquisa();
+  if(tab==='pesquisa')   { if (origin !== 'patrimonio') _srchState.bem = ''; renderPesquisa(); }
   if(tab==='ajustes')    renderAjustes();
   if(tab==='lembretes')  renderLembretes();
   if(tab==='pendencias') renderPendencias();
@@ -6080,6 +6177,7 @@ function qaSetType(type) {
   rec.setAttribute('aria-pressed', type === 'rec' ? 'true' : 'false');
   gas.setAttribute('aria-pressed', type === 'gas' ? 'true' : 'false');
   document.getElementById('qa-cat-row').style.display = type === 'gas' ? '' : 'none';
+  const bemRow = document.getElementById('qa-bem-row'); if (bemRow) bemRow.style.display = type === 'gas' ? '' : 'none';
   document.getElementById('qa-plat-row').style.display = type === 'rec' ? '' : 'none';
   document.getElementById('qa-suggest-row').style.display = 'none';
 }
@@ -6146,6 +6244,7 @@ function openQuickAdd(editRef) {
     qaType = 'rec';
     _qaApplyMode();
     qaSetType('rec');
+    _populateBemSel('qa-bem-sel', _pendVehicleId ? 'veh:' + _pendVehicleId : '');
     openOverlay('modal-quick-add');
     return;
   }
@@ -6178,6 +6277,10 @@ function openQuickAdd(editRef) {
   if (descEl) descEl.value = desc;
   if (pid) { const s = document.getElementById('qa-plat-sel'); if (s) s.value = pid; }
   if (cat) { const s = document.getElementById('qa-cat-sel'); if (s) s.value = cat; }
+  // "Relacionado a": pré-seleciona o vínculo atual da despesa em edição.
+  let _qaBemVal = '';
+  if (_qaEdit.kind === 'exp') { const _e = (D.expenses || []).find(x => x.id === _qaEdit.id); _qaBemVal = _expBemSelValue(_e); }
+  _populateBemSel('qa-bem-sel', _qaBemVal);
   openOverlay('modal-quick-add');
 }
 
@@ -6225,6 +6328,8 @@ function qaConfirm() {
           pay.paidDate = localDateKey(date) || date; // "Pago em DD/MM" reflete a nova data
         }
         e.date = date; e.category = cat; e.description = desc || cat; e.amount = amt;
+        // Vínculo com patrimônio (adicionar / trocar / remover) — independente da categoria.
+        _expSetBemLink(e, document.getElementById('qa-bem-sel')?.value || '');
         save(); checkBudgetAlerts(cat);
         refreshHomeFixosAlert();
       }
@@ -6255,16 +6360,11 @@ function qaConfirm() {
   } else {
     // ── CRIAÇÃO gasto ──
     const cat = document.getElementById('qa-cat-sel')?.value || (D.expCats[0] || 'Outros');
-    const thisVehicleId = _pendVehicleId;
     _pendVehicleId = null;
-    const expId = uid();
-    const expObj = { id: expId, date, category: cat, description: desc || cat, amount: amt };
-    if (thisVehicleId) expObj.vehicleId = thisVehicleId;
+    const expObj = { id: uid(), date, category: cat, description: desc || cat, amount: amt };
     D.expenses.push(expObj);
-    if (thisVehicleId) {
-      const veh = (D.vehicles||[]).find(v => v.id === thisVehicleId);
-      if (veh) { if (!veh.linkedExpenses) veh.linkedExpenses=[]; if (!veh.linkedExpenses.includes(expId)) veh.linkedExpenses.push(expId); }
-    }
+    // Vínculo com patrimônio escolhido em "Relacionado a" (opcional, canônico).
+    _expSetBemLink(expObj, document.getElementById('qa-bem-sel')?.value || '');
     save();
     checkBudgetAlerts(cat);
     notifyRegistered(amt, desc || cat, cat);
@@ -6309,6 +6409,8 @@ function _refreshAfterEntry() {
   if (document.getElementById('page-semana')?.classList.contains('active')) { renderSemana(); renderDayAccordion(); }
   if (document.getElementById('page-mes')?.classList.contains('active')) { renderMes(); }
   if (document.getElementById('page-pesquisa')?.classList.contains('active')) { renderPesquisaResults(); }
+  // Detalhe do veículo aberto → atualiza resumos (custo/despesas) imediatamente.
+  if (_vehDetailId && document.getElementById('pat-veh-detail-view')?.style.display !== 'none') { renderVehPatDetail(_vehDetailId); }
 }
 
 function notifyRegistered(amount, label, category) {
@@ -7542,8 +7644,8 @@ function openVehLinkExp(vehId) {
   _vehLinkExpTarget = vehId;
   const v = (D.vehicles || []).find(x => x.id === vehId);
   if (!v) return;
-  const linked = v.linkedExpenses || [];
-  const available = (D.expenses || []).filter(e => !linked.includes(e.id)).slice().sort((a,b) => b.date.localeCompare(a.date));
+  // Só oferece despesas ainda SEM vínculo (e que não sejam pagamentos de dívida).
+  const available = (D.expenses || []).filter(e => !_expBemLegacyId(e) && !(e.meta && e.meta.source === 'debt')).slice().sort((a,b) => b.date.localeCompare(a.date));
   const sel = document.getElementById('vle-exp-sel');
   if (!sel) return;
   sel.innerHTML = available.length
@@ -7558,17 +7660,18 @@ function saveVehLinkExp() {
   if (!v) return;
   const expId = document.getElementById('vle-exp-sel')?.value;
   if (!expId) { gdToast('Selecione uma despesa.'); return; }
-  if (!v.linkedExpenses) v.linkedExpenses = [];
-  if (!v.linkedExpenses.includes(expId)) { v.linkedExpenses.push(expId); save(); gdToast('Despesa vinculada.'); }
+  const exp = (D.expenses || []).find(e => e.id === expId);
+  if (exp) { _expSetBemLink(exp, 'veh:' + vehId); save(); gdToast('Despesa vinculada.'); } // vínculo canônico
   closeOverlay('modal-veh-link-exp');
   _refreshVehDetail(vehId);
 }
 
 function unlinkVehExp(vehId, expId) {
   if (_patEncerradoBloqueado(vehId)) return;
+  const exp = (D.expenses || []).find(e => e.id === expId);
+  if (exp) _expSetBemLink(exp, ''); // remove o vínculo canônico + índice legado
   const v = (D.vehicles || []).find(x => x.id === vehId);
-  if (!v) return;
-  v.linkedExpenses = (v.linkedExpenses || []).filter(id => id !== expId);
+  if (v) v.linkedExpenses = (v.linkedExpenses || []).filter(id => id !== expId); // compat p/ despesa inexistente
   save();
   _refreshVehDetail(vehId);
 }
@@ -9352,10 +9455,12 @@ function renderVehPatDetail(id) {
           ${readonly ? '' : `<button class="pat-mini-del" onclick="unlinkVehPend('${v.id}','${p.id}')" aria-label="Desvincular pendência">${_patTrashSvg()}</button>`}
         </div>`).join('');
 
-  // ── Despesas vinculadas ──
-  const exps = (v.linkedExpenses || []).map(eid => (D.expenses || []).find(e => e.id === eid)).filter(Boolean);
+  // ── Despesas vinculadas (canônico: vehicleId + índice legado; exclui pagamentos de dívida) ──
+  const exps = _expensesDoBem(v.id)
+    .filter(e => !(e.meta && e.meta.source === 'debt'))
+    .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const expHtml = exps.length === 0
-    ? _patEmptyState('despesa', 'Nenhuma despesa vinculada', 'Use “+ Vincular” para acompanhar o custo real deste veículo.')
+    ? _patEmptyState('despesa', 'Nenhuma despesa vinculada', 'Registre um gasto e escolha este veículo em “Relacionado a”. Ele aparece aqui e no custo do mês.')
     : exps.map(e => `
         <div class="pat-fin-item" style="cursor:default">
           <div class="pat-fin-body">
@@ -9367,6 +9472,16 @@ function renderVehPatDetail(id) {
             ${readonly ? '' : `<button class="pat-mini-del" onclick="unlinkVehExp('${v.id}','${e.id}')" aria-label="Desvincular despesa">${_patTrashSvg()}</button>`}
           </div>
         </div>`).join('');
+
+  // ── Custo deste mês (só veículo ativo): uso/manutenção + financiamento, sem dupla contagem ──
+  const custo = readonly ? null : _vehCustoMes(v.id);
+  const custoHtml = custo ? `
+    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Custo deste mês</div></div>
+    <div class="pat-list-group" style="margin-bottom:0"><div class="veh-custo-card">
+      <div class="veh-custo-row"><span>Uso e manutenção</span><span>${R(custo.uso)}</span></div>
+      <div class="veh-custo-row"><span>Financiamento</span><span>${R(custo.fin)}</span></div>
+      <div class="veh-custo-row veh-custo-total"><span>Total desembolsado</span><span>${R(custo.total)}</span></div>
+    </div></div>` : '';
 
   // ── Histórico: eventos legacy (v.history) + reavaliações (patrimônio) ──
   const histItems = [];
@@ -9447,6 +9562,8 @@ function renderVehPatDetail(id) {
 
     ${venda ? _patVendaSummaryHtml(venda) : ''}
 
+    ${custoHtml}
+
     ${finVehHtml}
 
     ${hasInfo ? `
@@ -9466,7 +9583,10 @@ function renderVehPatDetail(id) {
     ${(!readonly || exps.length) ? `
     <div class="pat-det-sec-head">
       <div class="sec-label" style="margin:0">Despesas</div>
-      ${readonly ? '' : `<button class="pat-link-add" onclick="openVehLinkExp('${v.id}')">+ Vincular</button>`}
+      <div style="display:flex;gap:12px;align-items:center">
+        ${exps.length ? `<button class="pat-link-add" onclick="abrirDespesasDoBem('${v.id}')">Ver despesas</button>` : ''}
+        ${readonly ? '' : `<button class="pat-link-add" onclick="openVehLinkExp('${v.id}')">+ Vincular</button>`}
+      </div>
     </div>
     <div class="pat-list-group" style="margin-bottom:0">${expHtml}</div>` : ''}
 

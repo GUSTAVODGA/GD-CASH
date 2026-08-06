@@ -3757,6 +3757,19 @@ button:focus-visible, [role="button"]:focus-visible {
 .div-card-vinc { display: inline-block; margin-top: 10px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--ac); font-size: 12px; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .div-card-vinc:active { background: var(--surface3); }
 
+/* Custo do veículo no mês */
+.veh-custo-card { padding: 4px 2px; }
+.veh-custo-row { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 2px; font-size: 14px; color: var(--tx2); }
+.veh-custo-row span:last-child { font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.veh-custo-total { border-top: 1px solid var(--border); margin-top: 2px; padding-top: 12px; }
+.veh-custo-total span { font-weight: 800 !important; color: var(--text) !important; font-size: 15px; }
+
+/* Chip do filtro por patrimônio na Pesquisa */
+.srch-bem-chip { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 14px; margin-bottom: 10px; background: var(--ac-t); border: 1px solid var(--ac-b); border-radius: 12px; font-size: 13px; color: var(--text); }
+.srch-bem-chip b { font-weight: 800; }
+.srch-bem-chip button { flex: none; width: 26px; height: 26px; border-radius: 8px; border: none; background: transparent; color: var(--tx2); font-size: 15px; cursor: pointer; }
+.srch-bem-chip button:active { background: var(--surface3); }
+
 /* Contraste reforçado no modo escuro — revisão final Etapa 2.
    Escopado ao módulo Patrimônio para não afetar outras abas. */
 :root[data-theme="dark"] #pat-home-cont .sec-label { color: rgba(232,237,255,.58); }

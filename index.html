@@ -1166,10 +1166,8 @@
         <input class="fi" type="number" id="exp-val" min="0" step="0.01" placeholder="Valor" style="flex:1">
       </div>
       <input class="fi" type="text" id="exp-desc" placeholder="Descrição (ex: Shell, Pizza, Spotify...)" style="margin-bottom:8px">
-      <select class="fi" id="exp-veh-sel" style="display:none;width:100%;margin-bottom:8px"></select>
-      <div id="exp-veh-link-row" style="display:none;margin-bottom:8px">
-        <button type="button" class="btn-text-sm" onclick="_showExpVehManual()">🚗 Vincular a veículo</button>
-      </div>
+      <label class="fl" for="exp-bem-sel" style="display:block;margin-bottom:4px">Relacionado a (opcional)</label>
+      <select class="fi" id="exp-bem-sel" style="width:100%;margin-bottom:8px"></select>
       <button class="btn btn-primary" onclick="addExpense()">+ Adicionar gasto</button>
     </div>
 
@@ -1464,6 +1462,11 @@
     <div class="fg" id="qa-cat-row" style="display:none">
       <label class="fl" for="qa-cat-sel">Categoria</label>
       <select class="fi" id="qa-cat-sel"></select>
+    </div>
+    <!-- Relacionado a (Gasto) — vínculo com patrimônio, independente da categoria -->
+    <div class="fg" id="qa-bem-row" style="display:none">
+      <label class="fl" for="qa-bem-sel">Relacionado a (opcional)</label>
+      <select class="fi" id="qa-bem-sel"></select>
     </div>
     <!-- Plataforma (Receita) -->
     <div class="fg" id="qa-plat-row">
