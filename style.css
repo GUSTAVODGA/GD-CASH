@@ -3757,6 +3757,11 @@ button:focus-visible, [role="button"]:focus-visible {
 .div-card-vinc { display: inline-block; margin-top: 10px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface2); color: var(--ac); font-size: 12px; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .div-card-vinc:active { background: var(--surface3); }
 
+/* Amortização anterior ao cadastro (informativo, não é pagamento do app) */
+.div-prior-card { padding: 12px 14px; margin-bottom: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; }
+.div-prior-main { font-size: 14px; font-weight: 700; color: var(--text); }
+.div-prior-sub { font-size: 12px; color: var(--tx2); margin-top: 3px; }
+
 /* Custo do veículo no mês */
 .veh-custo-card { padding: 4px 2px; }
 .veh-custo-row { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 2px; font-size: 14px; color: var(--tx2); }

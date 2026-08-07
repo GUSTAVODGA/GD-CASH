@@ -3434,6 +3434,15 @@ function _debtProximaParcelaNo(debt) {
   const pagas = _debtParcelasPagas(debt);
   return pagas >= N ? null : pagas + 1;
 }
+// Parcelas cobertas SOMENTE pela amortização anterior ao cadastro (sem pagamentos do app).
+function _debtParcelasDeAmort(debt) {
+  const N = _debtParcelasTotal(debt);
+  if (N <= 0) return 0;
+  const amort = _c(debt.amortizadoInicial);
+  let acc = 0, count = 0;
+  for (let k = 1; k <= N; k++) { acc += _debtParcelaCents(debt, k); if (amort >= acc) count++; else break; }
+  return count;
+}
 // Vencimento da parcela k: dataInicio + periodicidade·(k−1). Mensal clampa dia curto.
 function _debtDueDate(debt, k) {
   const base = parseDate(debt.dataInicio);
@@ -4123,8 +4132,17 @@ function openDebtDetail(id) {
   // Histórico de pagamentos (identidade por debtPaymentId; cada um desfazível).
   const pays = _debtPaymentsOf(d.id).slice()
     .sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')) || (b.parcelNo || 0) - (a.parcelNo || 0));
+  // Amortização anterior ao cadastro (valor pago antes do Avenco) — informativo, NÃO é um
+  // pagamento do app. Diferencia claramente "antes do cadastro" de "registrado no Avenco".
+  const temAmort = _c(d.amortizadoInicial) > 0;
+  const parcAmort = _debtParcelasDeAmort(d);
+  const priorHtml = temAmort ? `
+    <div class="div-prior-card">
+      <div class="div-prior-main">${R(d.amortizadoInicial)} pagos antes do cadastro no Avenco</div>
+      ${(temParcelas && parcAmort > 0) ? `<div class="div-prior-sub">Equivalente a ${parcAmort} ${parcAmort === 1 ? 'parcela considerada' : 'parcelas consideradas'} na projeção.</div>` : ''}
+    </div>` : '';
   const histHtml = pays.length === 0
-    ? '<div class="pagfin-empty">Nenhum pagamento registrado ainda.</div>'
+    ? `<div class="pagfin-empty">${temAmort ? 'Nenhum pagamento registrado no Avenco ainda.' : 'Nenhum pagamento registrado ainda.'}</div>`
     : pays.map(p => `
         <div class="pagfin-row">
           <div class="pagfin-row-body">
@@ -4170,6 +4188,7 @@ function openDebtDetail(id) {
       <button class="btn btn-secondary" style="width:100%;margin-top:8px" onclick="openDebtMenu('${d.id}')">Mais ações</button>
     </div>
     <div class="parcel-det-hist-lbl" style="margin-top:16px">Histórico de pagamentos</div>
+    ${priorHtml}
     <div class="pagfin-hist">${histHtml}</div>
     ${proxHtml}
     ${_debtHasBem(d) ? `<button class="div-bem-link" onclick="abrirBemDaDivida('${d.id}')">Vinculada a: ${escHtml(bem)} — abrir →</button>` : ''}
