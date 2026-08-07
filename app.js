@@ -3399,9 +3399,21 @@ function _debtProgress(debt) {
   if (base <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round(Math.max(0, _debtPagoCents(debt)) / base * 100)));
 }
+// ── FONTE ÚNICA da quantidade de parcelas (resolvedor de projeção) ──
+// Regra: havendo valor total e valor padrão da parcela, totalParcelas = ceil(total/padrão);
+// as parcelas anteriores usam o valor padrão e a ÚLTIMA absorve o resíduo (nunca zero,
+// soma exatamente = valor total). Sem valor padrão, cai no total cadastrado (fallback).
+// Corrige automaticamente dívidas com parcelasTotal cadastrado incorretamente, sem
+// tocar em saldo, pagamentos ou histórico (a verdade financeira segue sendo o saldo).
+function _debtParcelasTotal(debt) {
+  const vpC = _c(debt.valorParcela);
+  const voC = _c(debt.valorOriginal);
+  if (vpC > 0 && voC > 0) return Math.ceil(voC / vpC);
+  return Math.max(0, Math.round(Number(debt.parcelasTotal) || 0));
+}
 // Valor nominal da parcela k (1..N) em centavos; a última absorve o resíduo.
 function _debtParcelaCents(debt, k) {
-  const N = debt.parcelasTotal || 0;
+  const N = _debtParcelasTotal(debt);
   if (N <= 0) return 0;
   const vp = _c(debt.valorParcela);
   if (k >= N) return _c(debt.valorOriginal) - vp * (N - 1);
@@ -3409,7 +3421,7 @@ function _debtParcelaCents(debt, k) {
 }
 // Alocação de pagamentos: parcela k paga quando valorPago cobre a soma nominal 1..k.
 function _debtParcelasPagas(debt) {
-  const N = debt.parcelasTotal || 0;
+  const N = _debtParcelasTotal(debt);
   if (N <= 0) return 0;
   const pago = _debtPagoCents(debt);
   let acc = 0, count = 0;
@@ -3417,7 +3429,7 @@ function _debtParcelasPagas(debt) {
   return count;
 }
 function _debtProximaParcelaNo(debt) {
-  const N = debt.parcelasTotal || 0;
+  const N = _debtParcelasTotal(debt);
   if (N <= 0) return null;
   const pagas = _debtParcelasPagas(debt);
   return pagas >= N ? null : pagas + 1;
@@ -3465,7 +3477,7 @@ function _debtState(debt) {
     pago: _debtPago(debt),
     saldo: _debtSaldo(debt),
     progress: _debtProgress(debt),
-    parcelasTotal: debt.parcelasTotal || 0,
+    parcelasTotal: _debtParcelasTotal(debt),
     parcelasPagas: _debtParcelasPagas(debt),
     proximaNo,
     proximaVenc: proximaNo ? _debtDueDate(debt, proximaNo) : '',
@@ -3494,7 +3506,7 @@ function _mkVenc(debt, parcelNo, dueISO, nominalC, restanteC, today) {
     titulo: debt.titulo, tipo: debt.tipo,
     patrimonioId: debt.patrimonioId || null, vehicleId: debt.vehicleId || null, bemNome: _debtBemNome(debt),
     dueDate: dueISO || '', valorNominal: _r(nominalC), valorRestante: _r(Math.max(0, restanteC)),
-    parcelasTotal: debt.parcelasTotal || 0,
+    parcelasTotal: _debtParcelasTotal(debt),
     atrasada, status: atrasada ? 'atrasada' : (dueISO && dueISO === today ? 'hoje' : 'previsto'),
     origem: 'debt-projection',
     debt,
@@ -3507,7 +3519,7 @@ function _debtProjectVencimentos(debt, opts) {
   const o = opts || {};
   const today = todayStr();
   const items = [];
-  const N = debt.parcelasTotal || 0;
+  const N = _debtParcelasTotal(debt);
   if (N > 0) {
     const start = _debtProximaParcelaNo(debt);
     if (!start) return [];
@@ -3621,8 +3633,8 @@ function _debtRegistrarPagamento(debtId, opts) {
   const data = opts.data || todayStr();
   const parcelNo = opts.parcelNo || null;
   const categoria = opts.categoria || d.categoria || (D.expCats && D.expCats[0]) || 'Outros';
-  const descBase = d.tipo === 'parcelamento' && d.parcelasTotal
-    ? `${d.titulo} (parcela ${parcelNo || (_debtParcelasPagas(d) + 1)}/${d.parcelasTotal})`
+  const descBase = d.tipo === 'parcelamento' && _debtParcelasTotal(d)
+    ? `${d.titulo} (parcela ${parcelNo || (_debtParcelasPagas(d) + 1)}/${_debtParcelasTotal(d)})`
     : `${d.titulo}${d.credor ? ' — ' + d.credor : ''}`;
   const descricao = (opts.descricao && opts.descricao.trim()) || descBase;
   const expId = uid();
@@ -4447,7 +4459,7 @@ function salvarDivida() {
   const credor = (g('df-credor')?.value || '').trim();
   const obs = (g('df-obs')?.value || '').trim();
   const dataInicio = _brToIso(g('df-data')?.value) || '';
-  const parcelasTotal = Math.max(0, Math.round(Number(g('df-parcelas')?.value) || 0));
+  let parcelasTotal = Math.max(0, Math.round(Number(g('df-parcelas')?.value) || 0));
   const valorParcela = Math.max(0, Number(g('df-valorparcela')?.value) || 0);
   const periodicidade = g('df-freq')?.value || 'mensal';
   const juros = (g('df-juros') && g('df-juros').value !== '') ? Number(g('df-juros').value) : null;
@@ -4471,6 +4483,10 @@ function salvarDivida() {
     }
   }
   if (!(valorOriginal > 0)) { gdToast('Informe o valor.', { type: 'error' }); return; }
+  // Correção segura da quantidade de parcelas: com valor total e valor padrão, o total é
+  // derivado (ceil) e a última parcela absorve o resíduo. Não altera saldo/amortização/
+  // pagamentos — só a metadados de projeção (a verdade financeira continua sendo o saldo).
+  if (valorParcela > 0 && valorOriginal > 0) parcelasTotal = Math.ceil(_c(valorOriginal) / _c(valorParcela));
   if (amortizadoInicial < 0) amortizadoInicial = 0;
   if (_c(amortizadoInicial) > _c(valorOriginal)) { gdToast('O valor já pago não pode exceder o valor original.', { type: 'error' }); return; }
   let patrimonioId = null, vehicleId = null;
