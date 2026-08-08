@@ -6266,6 +6266,7 @@ function qaSetType(type) {
   gas.setAttribute('aria-pressed', type === 'gas' ? 'true' : 'false');
   document.getElementById('qa-cat-row').style.display = type === 'gas' ? '' : 'none';
   const bemRow = document.getElementById('qa-bem-row'); if (bemRow) bemRow.style.display = type === 'gas' ? '' : 'none';
+  const moreWrap = document.getElementById('qa-more-wrap'); if (moreWrap) moreWrap.style.display = (type === 'gas' && _qaReclassivel) ? '' : 'none';
   document.getElementById('qa-plat-row').style.display = type === 'rec' ? '' : 'none';
   document.getElementById('qa-suggest-row').style.display = 'none';
 }
@@ -6313,6 +6314,61 @@ function _restoreFab() {
   f.style.display = (id === 'page-inicio' || id === 'page-semana' || id === 'page-mes') ? '' : 'none';
 }
 
+// ── Fase B: reclassificação explícita de "Tipo de saída" (só despesa manual) ──
+// Uma despesa é reclassificável se NÃO tem origem estrutural protegida (debt/fixed).
+var _qaReclassivel = true;
+function _expIsReclassificavel(e) {
+  if (!e) return true; // criação: sempre manual
+  const src = e.meta && e.meta.source;
+  return src !== 'debt' && src !== 'fixed-payment';
+}
+// Grava/remove SOMENTE o override de natureza numa despesa manual. asset-acquisition
+// adiciona meta.nature; "consumo" (default) remove o override, preservando o resto.
+// Nunca toca valor, data, descrição, categoria, vínculo, source nem qualquer dado da dívida.
+function _expSetNature(expObj, nature) {
+  if (nature === 'asset-acquisition') {
+    if (!expObj.meta || typeof expObj.meta !== 'object') expObj.meta = {};
+    expObj.meta.nature = 'asset-acquisition';
+  } else if (expObj.meta && typeof expObj.meta === 'object') {
+    delete expObj.meta.nature;
+    if (Object.keys(expObj.meta).length === 0) delete expObj.meta; // não deixa meta vazio
+  }
+}
+// Valor atual do "Tipo de saída": 'consumo' (default) ou 'aquisicao'. Retorna sempre
+// 'consumo' quando o bloco está oculto (receita ou despesa protegida) → sem reclassificação.
+function _qaSaidaValue() {
+  const wrap = document.getElementById('qa-more-wrap');
+  if (!wrap || wrap.style.display === 'none') return 'consumo';
+  const r = document.querySelector('input[name="qa-saida"]:checked');
+  return (r && r.value === 'aquisicao') ? 'aquisicao' : 'consumo';
+}
+function qaToggleMore() {
+  const box = document.getElementById('qa-more');
+  const tog = document.getElementById('qa-more-toggle');
+  if (!box) return;
+  const open = box.style.display !== 'none';
+  box.style.display = open ? 'none' : '';
+  if (tog) tog.setAttribute('aria-expanded', open ? 'false' : 'true');
+}
+function qaOnSaidaChange() {
+  const aq = document.getElementById('qa-saida-aquisicao')?.checked;
+  const hint = document.getElementById('qa-saida-hint');
+  if (hint) hint.style.display = aq ? '' : 'none';
+}
+// Prepara o "Tipo de saída" ao abrir o formulário (radio + dica + expandir se preciso).
+function _qaInitSaida(nature) {
+  const isAq = nature === 'asset-acquisition';
+  const rc = document.getElementById('qa-saida-consumo');
+  const ra = document.getElementById('qa-saida-aquisicao');
+  if (rc) rc.checked = !isAq;
+  if (ra) ra.checked = isAq;
+  const box = document.getElementById('qa-more');
+  const tog = document.getElementById('qa-more-toggle');
+  if (box) box.style.display = isAq ? '' : 'none'; // já expandido quando é aquisição
+  if (tog) tog.setAttribute('aria-expanded', isAq ? 'true' : 'false');
+  qaOnSaidaChange();
+}
+
 function openQuickAdd(editRef) {
   _qaEdit = editRef || null;
   _qaSaving = false;
@@ -6330,7 +6386,9 @@ function openQuickAdd(editRef) {
     if (amtEl) amtEl.value = '';
     if (descEl) descEl.value = '';
     qaType = 'rec';
+    _qaReclassivel = true;           // criação é sempre despesa manual reclassificável
     _qaApplyMode();
+    _qaInitSaida('consumo');         // default: gasto do dia a dia
     qaSetType('rec');
     _populateBemSel('qa-bem-sel', _pendVehicleId ? 'veh:' + _pendVehicleId : '');
     openOverlay('modal-quick-add');
@@ -6358,6 +6416,7 @@ function openQuickAdd(editRef) {
   document.getElementById('qa-btn-rec').setAttribute('aria-pressed', type === 'rec' ? 'true' : 'false');
   document.getElementById('qa-btn-gas').setAttribute('aria-pressed', type === 'gas' ? 'true' : 'false');
   document.getElementById('qa-cat-row').style.display = type === 'gas' ? '' : 'none';
+  const bemRowE = document.getElementById('qa-bem-row'); if (bemRowE) bemRowE.style.display = type === 'gas' ? '' : 'none';
   document.getElementById('qa-plat-row').style.display = type === 'rec' ? '' : 'none';
 
   if (dateEl) dateEl.value = date || todayStr();
@@ -6365,10 +6424,20 @@ function openQuickAdd(editRef) {
   if (descEl) descEl.value = desc;
   if (pid) { const s = document.getElementById('qa-plat-sel'); if (s) s.value = pid; }
   if (cat) { const s = document.getElementById('qa-cat-sel'); if (s) s.value = cat; }
-  // "Relacionado a": pré-seleciona o vínculo atual da despesa em edição.
-  let _qaBemVal = '';
-  if (_qaEdit.kind === 'exp') { const _e = (D.expenses || []).find(x => x.id === _qaEdit.id); _qaBemVal = _expBemSelValue(_e); }
+  // "Relacionado a" + "Tipo de saída": pré-seleciona vínculo e natureza da despesa em edição.
+  let _qaBemVal = '', _eNature = 'consumo';
+  if (_qaEdit.kind === 'exp') {
+    const _e = (D.expenses || []).find(x => x.id === _qaEdit.id);
+    _qaBemVal = _expBemSelValue(_e);
+    _qaReclassivel = (type === 'gas') && _expIsReclassificavel(_e);
+    if (_e && _movementNature(_e) === 'asset-acquisition') _eNature = 'asset-acquisition';
+  } else {
+    _qaReclassivel = false;
+  }
   _populateBemSel('qa-bem-sel', _qaBemVal);
+  _qaInitSaida(_eNature);
+  const moreWrapE = document.getElementById('qa-more-wrap');
+  if (moreWrapE) moreWrapE.style.display = (type === 'gas' && _qaReclassivel) ? '' : 'none';
   openOverlay('modal-quick-add');
 }
 
@@ -6391,6 +6460,18 @@ function qaConfirm() {
   _qaSaving = true;
   const saveBtn = document.getElementById('qa-save-btn');
   if (saveBtn) saveBtn.disabled = true;
+
+  // Reclassificação (Fase B): "aquisição de patrimônio" EXIGE bem ativo vinculado.
+  // Pré-valida antes de qualquer mutação para não deixar edição pela metade.
+  const _saida = _qaSaidaValue();
+  if (_saida === 'aquisicao') {
+    const _bemSel = document.getElementById('qa-bem-sel')?.value || '';
+    const _bemId = _bemSel ? _bemSel.slice(4) : '';
+    if (!_bemSel || _patLifecycleOf(_bemId) !== 'ativo') {
+      gdToast('Para registrar como compra/entrada de patrimônio, selecione em "Relacionado a" um bem ativo.', { type: 'error' });
+      _qaSaving = false; if (saveBtn) saveBtn.disabled = false; return;
+    }
+  }
 
   const edit = _qaEdit;
   if (edit) {
@@ -6418,6 +6499,8 @@ function qaConfirm() {
         e.date = date; e.category = cat; e.description = desc || cat; e.amount = amt;
         // Vínculo com patrimônio (adicionar / trocar / remover) — independente da categoria.
         _expSetBemLink(e, document.getElementById('qa-bem-sel')?.value || '');
+        // Tipo de saída (só despesa manual reclassificável): grava/remove o override de natureza.
+        if (_expIsReclassificavel(e)) _expSetNature(e, _saida === 'aquisicao' ? 'asset-acquisition' : 'consumo');
         save(); checkBudgetAlerts(cat);
         refreshHomeFixosAlert();
       }
@@ -6453,6 +6536,8 @@ function qaConfirm() {
     D.expenses.push(expObj);
     // Vínculo com patrimônio escolhido em "Relacionado a" (opcional, canônico).
     _expSetBemLink(expObj, document.getElementById('qa-bem-sel')?.value || '');
+    // Tipo de saída: se "aquisição", grava o override (bem já validado como ativo acima).
+    if (_saida === 'aquisicao') _expSetNature(expObj, 'asset-acquisition');
     save();
     checkBudgetAlerts(cat);
     notifyRegistered(amt, desc || cat, cat);
