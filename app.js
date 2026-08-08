@@ -1968,6 +1968,59 @@ function _vehCustoMes(vehId, ym) {
   return { uso, fin, total: uso + fin };
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// MOTOR SEMÂNTICO (Fase A) — natureza financeira de uma movimentação.
+// Fonte ÚNICA para "o que esta movimentação representa?". Função PURA e DERIVADA:
+// não altera dados, não altera agregações e NÃO modifica o objeto recebido.
+// Nesta fase o resolvedor apenas EXISTE — nenhuma tela/soma o consome ainda.
+//
+// Precedência (verdade estrutural do sistema tem prioridade sobre override manual):
+//   1. Origem estrutural/canônica protegida:
+//        reservaHistory (type dep/ret)     → 'transfer'
+//        income  meta.source='asset-sale'  → 'income-extra'
+//        expense meta.source='debt'        → 'debt-payment'
+//        expense meta.source='fixed-payment' → 'consumo'
+//   2. Override manual (meta.nature) SOMENTE em despesa sem origem protegida.
+//   3. Receita com platformId              → 'income-operational'
+//   4. Defaults: despesa → 'consumo'; receita → 'income-operational'.
+// meta.nature NUNCA transforma pagamento de dívida em consumo, nem asset-sale em
+// receita operacional. Vínculo vehicleId/patrimonioId sozinho NÃO define natureza.
+// ══════════════════════════════════════════════════════════════════════════
+var MOVEMENT_NATURES = Object.freeze([
+  'consumo', 'asset-acquisition', 'debt-payment', 'transfer',
+  'income-operational', 'income-extra',
+]);
+function _isValidNature(n) { return typeof n === 'string' && MOVEMENT_NATURES.indexOf(n) !== -1; }
+// Naturezas aceitáveis como OVERRIDE manual de uma despesa (saída de caixa).
+// income-*/transfer não se aplicam a despesa manual → inválidas (fallback 'consumo').
+var _EXPENSE_NATURE_OVERRIDES = Object.freeze(['consumo', 'asset-acquisition', 'debt-payment']);
+function _isValidExpenseNatureOverride(n) { return _EXPENSE_NATURE_OVERRIDES.indexOf(n) !== -1; }
+
+function _movementNature(item) {
+  if (!item || typeof item !== 'object') return 'consumo';
+  // 1) Reserva (estrutura própria): sempre transferência.
+  if (item.type === 'dep' || item.type === 'ret') return 'transfer';
+  const meta = (item.meta && typeof item.meta === 'object') ? item.meta : null;
+  const source = meta ? meta.source : null;
+  // Discriminação receita × despesa: itens de receita carregam sempre a chave
+  // platformId (mesmo null, no caso de venda de patrimônio).
+  const isIncome = Object.prototype.hasOwnProperty.call(item, 'platformId') || source === 'asset-sale';
+  if (isIncome) {
+    // 1) Origem estrutural protegida (override manual não altera).
+    if (source === 'asset-sale') return 'income-extra';
+    // 3/4) Receita com plataforma / receita normal.
+    return 'income-operational';
+  }
+  // Despesa:
+  // 1) Origem estrutural/canônica protegida — precede qualquer override manual.
+  if (source === 'debt') return 'debt-payment';
+  if (source === 'fixed-payment') return 'consumo';
+  // 2) Override manual explícito, só quando não há origem estrutural protegida.
+  if (meta && _isValidExpenseNatureOverride(meta.nature)) return meta.nature;
+  // 4) Default de despesa manual.
+  return 'consumo';
+}
+
 function addExpense() {
   const date=selDate(), cat=document.getElementById('exp-cat').value;
   const val=parseFloat(document.getElementById('exp-val').value);
