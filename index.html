@@ -1465,7 +1465,7 @@
     </div>
     <!-- Relacionado a (Gasto) — vínculo com patrimônio, independente da categoria -->
     <div class="fg" id="qa-bem-row" style="display:none">
-      <label class="fl" for="qa-bem-sel">Relacionado a (opcional)</label>
+      <label class="fl" for="qa-bem-sel" id="qa-bem-lbl">Relacionado a (opcional)</label>
       <select class="fi" id="qa-bem-sel"></select>
     </div>
     <!-- Mais opções (Gasto manual): tipo de saída — só para reclassificar aquisição de patrimônio -->
@@ -1475,7 +1475,7 @@
         <div class="qa-saida-lbl">Tipo de saída</div>
         <label class="qa-radio"><input type="radio" name="qa-saida" id="qa-saida-consumo" value="consumo" checked onchange="qaOnSaidaChange()"><span>Gasto do dia a dia</span></label>
         <label class="qa-radio"><input type="radio" name="qa-saida" id="qa-saida-aquisicao" value="aquisicao" onchange="qaOnSaidaChange()"><span>Compra / entrada de patrimônio</span></label>
-        <div class="qa-saida-hint" id="qa-saida-hint" style="display:none">Selecione em “Relacionado a” o bem que recebeu esse valor — a compra precisa saber qual patrimônio foi adquirido.</div>
+        <div class="qa-saida-hint" id="qa-saida-hint" style="display:none">Selecione acima o bem que recebeu esse valor — a compra precisa saber qual patrimônio foi adquirido.</div>
       </div>
     </div>
     <!-- Plataforma (Receita) -->

@@ -6354,6 +6354,9 @@ function qaOnSaidaChange() {
   const aq = document.getElementById('qa-saida-aquisicao')?.checked;
   const hint = document.getElementById('qa-saida-hint');
   if (hint) hint.style.display = aq ? '' : 'none';
+  // Rótulo do vínculo reflete a obrigatoriedade: aquisição exige bem → sem "(opcional)".
+  const lbl = document.getElementById('qa-bem-lbl');
+  if (lbl) lbl.textContent = aq ? 'Patrimônio adquirido' : 'Relacionado a (opcional)';
 }
 // Prepara o "Tipo de saída" ao abrir o formulário (radio + dica + expandir se preciso).
 function _qaInitSaida(nature) {
