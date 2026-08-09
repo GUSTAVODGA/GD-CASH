@@ -387,6 +387,9 @@ function renderRecentTx() {
     type: 'inc', id: it.id, date: it.date,
     label: it.note || platMap[it.platformId]?.name || 'Receita',
     sub: platMap[it.platformId]?.name || '',
+    // Venda de patrimônio (asset-sale) é entrada de caixa extraordinária: rotula o
+    // "tipo" de forma honesta, sem alterar valor, agregação ou natureza.
+    typeLabel: (it.meta && it.meta.source === 'asset-sale') ? 'Venda de patrimônio' : 'Receita',
     amount: it.amount,
     editRef: { kind: 'item', id: it.id }
   }));
@@ -413,7 +416,7 @@ function renderRecentTx() {
       <div class="tx-icon ${tx.type === 'inc' ? 'tx-icon-inc' : 'tx-icon-exp'}">${tx.type === 'inc' ? '↑' : '↓'}</div>
       <div class="tx-info">
         <div class="tx-label">${escHtml(tx.label)}</div>
-        <div class="tx-sub">${tx.sub ? escHtml(tx.sub) + ' · ' : ''}${tx.type === 'inc' ? 'Receita' : 'Gasto'} · ${fmtShort(tx.date)}</div>
+        <div class="tx-sub">${tx.sub ? escHtml(tx.sub) + ' · ' : ''}${tx.type === 'inc' ? (tx.typeLabel || 'Receita') : 'Gasto'} · ${fmtShort(tx.date)}</div>
       </div>
       <div class="tx-amt ${tx.type === 'inc' ? 'pos' : 'neg'}">${tx.type === 'inc' ? '+' : '−'}${currSym} ${Math.abs(tx.amount).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
     </div>`;
@@ -596,6 +599,7 @@ function _srchCollect() {
     out.push({
       type:'inc', date: localDateKey(it.date), amount: it.amount,
       desc: it.note || '', tag: pl ? pl.name : 'Receita', link:'',
+      assetSale: !!(it.meta && it.meta.source === 'asset-sale'),
       pending: it.status === 'pending', editRef: { kind:'item', id:it.id },
     });
   });
@@ -750,7 +754,7 @@ function renderPesquisaResults() {
   listEl.innerHTML = rows.map(r => {
     const sign = r.type === 'inc' ? '+' : '−';
     const cls = r.type === 'inc' ? 'v-green' : 'v-red';
-    const typeLbl = r.type === 'inc' ? 'Receita' : 'Gasto';
+    const typeLbl = r.type === 'inc' ? (r.assetSale ? 'Venda de patrimônio' : 'Receita') : 'Gasto';
     const title = r.desc || r.tag;
     const linkHtml = r.link ? `<span class="srch-r-link">· ${escHtml(r.link)}</span>` : '';
     const pend = r.pending ? ' <span class="srch-r-pend">(pendente)</span>' : '';
@@ -761,7 +765,7 @@ function renderPesquisaResults() {
         </span>
         <span class="srch-r-body">
           <span class="srch-r-title">${escHtml(title)}${pend}</span>
-          <span class="srch-r-meta">${fmtShort(r.date)} · ${escHtml(r.tag)} · ${typeLbl} ${linkHtml}</span>
+          <span class="srch-r-meta">${fmtShort(r.date)} · ${r.assetSale ? '' : escHtml(r.tag) + ' · '}${typeLbl} ${linkHtml}</span>
         </span>
         <span class="srch-r-amt ${cls}">${sign}${R(r.amount)}</span>
       </button>`;
@@ -1629,14 +1633,17 @@ function _mesUpdateCenter(animate) {
   var center = document.getElementById('cat-donut-center');
   if (!valEl) return;
   if (_mesCatSel == null || !_mesCatItems[_mesCatSel]) {
-    if (topEl) topEl.textContent = 'Gastos do dia a dia';
+    // Rótulo padrão é a frase humana "Gastos do dia a dia": pode ocupar 2 linhas no
+    // miolo do donut (bdc-top--wrap) para não truncar, sem reduzir a tipografia.
+    if (topEl) { topEl.textContent = 'Gastos do dia a dia'; topEl.classList.add('bdc-top--wrap'); }
     if (_mesCatTotal > 0) animCount(valEl, _mesCatTotal, 450); else valEl.textContent = '—';
     if (lblEl) lblEl.textContent = _mesCatItems.length ? (_mesCatItems.length + (_mesCatItems.length === 1 ? ' categoria' : ' categorias')) : '';
     if (center) center.classList.remove('bdc-sel');
   } else {
     var it = _mesCatItems[_mesCatSel];
     var pct = _mesCatTotal ? Math.round(it.value / _mesCatTotal * 100) : 0;
-    if (topEl) topEl.textContent = it.label;
+    // Categoria selecionada: nome curto numa linha (mantém nowrap/ellipsis padrão).
+    if (topEl) { topEl.textContent = it.label; topEl.classList.remove('bdc-top--wrap'); }
     valEl.textContent = R(it.value);
     if (lblEl) lblEl.textContent = pct + '%';
     if (center) { center.classList.add('bdc-sel'); center.style.setProperty('--cat-color', it.color); }

@@ -603,6 +603,9 @@ main{background:var(--bg);min-height:100dvh}
 .big-donut-svg{width:162px;height:162px}
 .big-donut-center{position:absolute;text-align:center;pointer-events:none;max-width:104px}
 .bdc-top{font-size:9px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1px;transition:color .3s}
+/* Rótulo padrão longo ("Gastos do dia a dia"): quebra em até 2 linhas centradas no
+   miolo do donut em vez de truncar — mesma tipografia, sem ellipsis. */
+.bdc-top.bdc-top--wrap{white-space:normal;letter-spacing:.02em;line-height:1.05;text-overflow:clip}
 .bdc-val{font-size:18px;font-weight:900;letter-spacing:-.5px;color:var(--text);line-height:1.05}
 .bdc-lbl{font-size:9.5px;color:var(--text3);font-weight:700;letter-spacing:.02em;margin-top:2px;transition:color .3s}
 .bdc-sel .bdc-top{color:var(--cat-color,var(--ac))}
