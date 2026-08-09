@@ -1,0 +1,64 @@
+name: CI
+
+# A regressão precisa rodar sem depender de ninguém lembrar de rodá-la — nem de
+# uma sessão de assistente aberta. Por isso os dois gates disparam em push e em
+# pull request, para qualquer branch.
+on:
+  push:
+  pull_request:
+
+# Um push novo na mesma branch cancela a execução anterior: o que importa é o
+# estado atual do código, não a fila de estados intermediários.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Testes unitários (motores financeiros)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Este gate não usa browser nem rede: só Node e o app.js real carregado
+      # num contexto isolado. Roda em segundos.
+      - name: Rodar suíte unitária
+        run: npm run test:unit
+
+  e2e:
+    name: Testes E2E (fluxos e UI)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Só Chromium: é o único projeto configurado, e baixar os demais seria
+      # tempo de CI sem contrapartida.
+      - name: Instalar Chromium do Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Rodar suíte E2E
+        run: npm run test:e2e
+
+      - name: Publicar relatório em caso de falha
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
