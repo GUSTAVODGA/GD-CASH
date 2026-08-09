@@ -2068,6 +2068,33 @@ textarea.form-input{resize:none}
   .hc-stat { text-align: left; }
 }
 
+/* Detalhamento semântico das saídas (só aparece quando há patrimônio/dívida). */
+.hc-brk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--bd);
+}
+.hc-brk-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--tx2);
+  font-variant-numeric: tabular-nums;
+}
+.hc-brk-item b { color: var(--tx); font-weight: 700; }
+.hc-brk-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.hc-brk-dot.c { background: var(--rd); }
+.hc-brk-dot.p { background: #4f8cff; }
+.hc-brk-dot.d { background: #f0a020; }
+
 /* ── Rules & Sections ── */
 .hc-rule {
   height: 1px;

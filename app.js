@@ -1368,6 +1368,51 @@ function monthAggregate(off=0) {
 }
 function sumMonthIncome(off=0) { return monthAggregate(off).receitas; }
 function sumMonthExpenses(off=0) { return monthAggregate(off).gastos; }
+
+// ══════════════════════════════════════════════════════════════════════════
+// FONTE ÚNICA — RESUMO SEMÂNTICO DE UM PERÍODO (Fase C: caixa × consumo).
+// Decompõe o CAIXA (todas as entradas/saídas reais) por natureza, via _movementNature.
+// NÃO altera o total de caixa: totalCashIn === receitas e totalCashOut === gastos do
+// monthAggregate; cashResult === líquido. Reserva fica FORA (estrutura à parte).
+//   Entradas: operationalIncome (plataforma) + extraordinaryIncome (asset-sale)
+//   Saídas:   consumo + assetAcquisition + debtPayments
+// consumoByCategory soma SÓ consumo (base de "gastos por categoria" e orçamento).
+// `keys` é um Set de chaves de dia LOCAL (ex.: new Set(monthDates(off))).
+// ══════════════════════════════════════════════════════════════════════════
+function _periodMovementSummary(keys) {
+  let operationalIncome = 0, extraordinaryIncome = 0;
+  keys.forEach(d => {
+    D.platforms.forEach(p => {
+      const items = (D.incomeItems||[]).filter(it => localDateKey(it.date)===d && it.platformId===p.id);
+      if (items.length) items.filter(it=>it.status==='paid').forEach(it=>{ operationalIncome += it.amount||0; });
+      else operationalIncome += getDayIncome(d)[p.id]||0;
+    });
+    (D.incomeItems||[]).filter(it => it.status==='paid' && !it.platformId && it.meta && it.meta.source==='asset-sale' && localDateKey(it.date)===d)
+      .forEach(it=>{ extraordinaryIncome += it.amount||0; });
+  });
+  let consumo = 0, assetAcquisition = 0, debtPayments = 0;
+  const consumoByCategory = {};
+  (D.expenses||[]).forEach(e => {
+    if (!keys.has(localDateKey(e.date))) return;
+    const nat = _movementNature(e), amt = e.amount || 0;
+    if (nat === 'asset-acquisition') assetAcquisition += amt;
+    else if (nat === 'debt-payment') debtPayments += amt;
+    else { consumo += amt; const c = (e.category!=null && String(e.category).trim()) ? String(e.category) : 'Sem categoria'; consumoByCategory[c] = (consumoByCategory[c]||0) + amt; }
+  });
+  const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100; // arredonda a 2 casas (valores já em reais)
+  const totalCashIn = r2(operationalIncome + extraordinaryIncome);
+  const totalCashOut = r2(consumo + assetAcquisition + debtPayments);
+  return {
+    operationalIncome: r2(operationalIncome), extraordinaryIncome: r2(extraordinaryIncome), totalCashIn,
+    consumo: r2(consumo), assetAcquisition: r2(assetAcquisition), debtPayments: r2(debtPayments), totalCashOut,
+    cashResult: r2(totalCashIn - totalCashOut), consumoByCategory,
+  };
+}
+function _monthMovementSummary(off=0) { return _periodMovementSummary(new Set(monthDates(off))); }
+function _weekMovementSummary(off=0) { return _periodMovementSummary(new Set(weekDates(off))); }
+// Razão de consumo: consumo / receita OPERACIONAL (asset-sale nunca no denominador).
+// Retorna null quando não há receita operacional (evita percentual absurdo/infinito).
+function _consumptionRatio(sum) { return sum.operationalIncome > 0 ? (sum.consumo / sum.operationalIncome) : null; }
 function sumMonthPlat(pid,off=0) {
   return monthDates(off).reduce((s,d)=>s+getDayPlatIncome(d,pid),0);
 }
@@ -1417,7 +1462,10 @@ function getMonthData(off, opts) {
     return { id: p.id, name: p.name, amount: dates.reduce(function(s, dt) { return s + getDayPlatIncome(dt, p.id); }, 0) };
   }).filter(function(p) { return p.amount > 0; });
 
-  var mExps = D.expenses.filter(function(e) { return datesSet.has(e.date); });
+  // "expenses" aqui alimenta comparativo/insight de CONSUMO (Fase C): só consumo.
+  // Aquisição de patrimônio e pagamento de dívida são caixa, não consumo → fora daqui.
+  var mExpsAll = D.expenses.filter(function(e) { return datesSet.has(e.date); });
+  var mExps = mExpsAll.filter(function(e) { return _movementNature(e) === 'consumo'; });
   var exp = mExps.reduce(function(s, e) { return s + e.amount; }, 0);
   var catMap = {};
   mExps.forEach(function(e) { catMap[e.category] = (catMap[e.category] || 0) + e.amount; });
@@ -1553,7 +1601,7 @@ function renderCatRows(elId, items) {
   var total = items.reduce(function(s, it) { return s + it.value; }, 0);
   _mesCatTotal = total;
   var maxVal = items.length ? items[0].value : 0; // itens vêm ordenados desc
-  if (!total) { el.innerHTML = '<div class="empty-state">Nenhum gasto no mês</div>'; return; }
+  if (!total) { el.innerHTML = '<div class="empty-state">Nenhum gasto do dia a dia neste mês</div>'; return; }
   el.innerHTML = items.map(function(it, i) {
     var pct = Math.round(it.value / total * 100);
     var w = maxVal ? Math.max(3, Math.round(it.value / maxVal * 100)) : 0;
@@ -1581,7 +1629,7 @@ function _mesUpdateCenter(animate) {
   var center = document.getElementById('cat-donut-center');
   if (!valEl) return;
   if (_mesCatSel == null || !_mesCatItems[_mesCatSel]) {
-    if (topEl) topEl.textContent = 'Total gasto';
+    if (topEl) topEl.textContent = 'Gastos do dia a dia';
     if (_mesCatTotal > 0) animCount(valEl, _mesCatTotal, 450); else valEl.textContent = '—';
     if (lblEl) lblEl.textContent = _mesCatItems.length ? (_mesCatItems.length + (_mesCatItems.length === 1 ? ' categoria' : ' categorias')) : '';
     if (center) center.classList.remove('bdc-sel');
@@ -1950,22 +1998,31 @@ function _expensesDoBem(id) {
 }
 // 'YYYY-MM' do mês corrente (base local).
 function _ymNow() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }
-// Custo do veículo no mês: uso/manutenção + financiamento, sem dupla contagem por
-// expenseId. Não considera projeções nem saldo devedor — só gasto realizado no mês.
+// Custo do veículo no mês, separado por natureza (fonte única _movementNature),
+// sem dupla contagem por expenseId:
+//   uso       → gasto do dia a dia vinculado ao veículo (consumo);
+//   fin       → pagamento de dívida do próprio veículo (debt-payment);
+//   aquisicao → compra/entrada de patrimônio vinculada ao veículo (asset-acquisition).
+// Não considera projeções nem saldo devedor — só gasto realizado no mês.
 function _vehCustoMes(vehId, ym) {
   ym = ym || _ymNow();
-  let uso = 0, fin = 0; const seen = new Set();
+  let uso = 0, fin = 0, aquisicao = 0; const seen = new Set();
   const v = (D.vehicles || []).find(x => x.id === vehId);
+  const isLinked = (e) => e.vehicleId === vehId || (v && (v.linkedExpenses || []).includes(e.id));
   (D.expenses || []).forEach(e => {
     if (seen.has(e.id) || String(e.date || '').slice(0, 7) !== ym) return;
-    if (e.meta && e.meta.source === 'debt') {
-      const d = e.meta.debtId ? getDebt(e.meta.debtId) : null;
+    const nat = _movementNature(e);
+    if (nat === 'debt-payment') {
+      // Financiamento só entra se a dívida for do próprio veículo.
+      const d = (e.meta && e.meta.debtId) ? getDebt(e.meta.debtId) : null;
       if (d && d.vehicleId === vehId) { fin += e.amount || 0; seen.add(e.id); }
-      return; // pagamento de dívida nunca conta como uso/manutenção
+      return; // pagamento de dívida nunca conta como uso/manutenção nem aquisição
     }
-    if (e.vehicleId === vehId || (v && (v.linkedExpenses || []).includes(e.id))) { uso += e.amount || 0; seen.add(e.id); }
+    if (!isLinked(e)) return;
+    if (nat === 'asset-acquisition') { aquisicao += e.amount || 0; seen.add(e.id); }
+    else { uso += e.amount || 0; seen.add(e.id); }
   });
-  return { uso, fin, total: uso + fin };
+  return { uso, fin, aquisicao, total: uso + fin + aquisicao };
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -2070,7 +2127,9 @@ function renderMes() {
   animCount(document.getElementById('mes-resv'), resv);
   document.getElementById('hero-mes').className='hero-card '+(liq>=0?'pos':'neg');
 
-  const mExps=agg.lancamentos.gastos;
+  // "Gastos por categoria" = SÓ consumo (Fase C): aquisição de patrimônio e pagamento
+  // de dívida são saída de caixa, mas NÃO consumo — não entram nas barras/donut.
+  const mExps=agg.lancamentos.gastos.filter(e=>_movementNature(e)==='consumo');
   const catMap={}, catCount={}, catTop={}, catLast={};
   // Agregação por categoria REAL (string exata). Categoria vazia/ausente recebe
   // um rótulo claro ("Sem categoria") em vez de virar um "Outros" indistinguível.
@@ -2614,7 +2673,9 @@ function buildMonthSummary(off) {
   const inc = sumMonthIncome(off), exp = sumMonthExpenses(off), liq = inc - exp;
   if (inc === 0 && exp === 0) return null;
 
-  const prevInc = sumMonthIncome(off-1), prevExp = sumMonthExpenses(off-1);
+  // Ritmo/renda típica usam receita OPERACIONAL (asset-sale não distorce o "destaque").
+  const sum = _monthMovementSummary(off);
+  const prevInc = _monthMovementSummary(off-1).operationalIncome;
   const dates = monthDates(off);
   const now = new Date(); now.setHours(0,0,0,0);
   const isPast = off < 0;
@@ -2626,13 +2687,14 @@ function buildMonthSummary(off) {
   const daysWithData = dates.filter(dt => parseDate(dt)<=now && (sumDayIncome(dt)>0||getDayExpenses(dt).length>0)).length;
   const hasEnoughData = isPast || daysWithData >= 7 || pctPassed >= 25;
 
-  const catMap = {};
-  D.expenses.filter(e=>dates.includes(e.date)).forEach(e=>{ catMap[e.category]=(catMap[e.category]||0)+e.amount; });
+  // "Maior despesa" e percentuais de gasto = SÓ consumo (não a aquisição/dívida).
+  const catMap = sum.consumoByCategory;
   const topCat = Object.entries(catMap).sort((a,b)=>b[1]-a[1])[0];
-  const topCatPct = topCat && exp>0 ? Math.round((topCat[1]/exp)*100) : 0;
+  const topCatPct = topCat && sum.consumo>0 ? Math.round((topCat[1]/sum.consumo)*100) : 0;
 
-  const savingsRate = inc>0 ? Math.round((liq/inc)*100) : 0;
-  const incChange = prevInc>0 ? Math.round(((inc-prevInc)/prevInc)*100) : null;
+  // Disciplina = quanto da receita operacional NÃO foi consumida.
+  const savingsRate = sum.operationalIncome>0 ? Math.round(((sum.operationalIncome-sum.consumo)/sum.operationalIncome)*100) : 0;
+  const incChange = prevInc>0 ? Math.round(((sum.operationalIncome-prevInc)/prevInc)*100) : null;
   const parts = [];
 
   if (!isPast && !hasEnoughData) {
@@ -2652,7 +2714,7 @@ function buildMonthSummary(off) {
     else
       parts.push(`Mês pesado — gastos superaram a receita em <b>${R(Math.abs(liq))}</b>. Acontece, o importante é saber.`);
     if (topCat && topCatPct>=30)
-      parts.push(`<b>${topCat[0]}</b> foi a maior despesa: ${topCatPct}% de tudo que saiu.`);
+      parts.push(`<b>${topCat[0]}</b> foi o maior gasto do dia a dia: ${topCatPct}% do consumo.`);
     if (liq<0)
       parts.push(`Fique de olho em <b>${topCat?topCat[0]:'seus maiores gastos'}</b> no próximo mês.`);
     else if (savingsRate<10)
@@ -2660,12 +2722,12 @@ function buildMonthSummary(off) {
   } else {
     if (liq<0)
       parts.push(`Atenção: gastos já passaram a receita em <b>${R(Math.abs(liq))}</b>. Ainda dá tempo de equilibrar.`);
-    else if (incChange!==null && inc>=(prevInc*(pctPassed/100)*1.15))
+    else if (incChange!==null && sum.operationalIncome>=(prevInc*(pctPassed/100)*1.15))
       parts.push(`Ritmo acima do esperado — mais forte que no mesmo ponto do mês passado.`);
     else
       parts.push(`<b>${pctPassed}%</b> do mês passou. Resultado atual: <b>${R(liq)}</b>.`);
     if (topCat && topCatPct>=40)
-      parts.push(`<b>${topCat[0]}</b> está pesando bastante: ${topCatPct}% dos gastos do mês.`);
+      parts.push(`<b>${topCat[0]}</b> está pesando bastante: ${topCatPct}% do consumo do mês.`);
     if (incChange!==null && incChange<-20 && pctPassed>40)
       parts.push(`Receita <b>${Math.abs(incChange)}%</b> abaixo do mesmo ponto do mês passado.`);
     const urgentGoal=(D.goals||[]).find(g=>{
@@ -2702,6 +2764,7 @@ function _monthCatMap(off, throughDay) {
   var m = {};
   (D.expenses || []).forEach(function (e) {
     if (!dset[localDateKey(e.date)]) return;
+    if (_movementNature(e) !== 'consumo') return; // comparativo de categoria = só consumo
     var cat = (e.category != null && String(e.category).trim()) ? e.category : 'Sem categoria';
     m[cat] = (m[cat] || 0) + e.amount;
   });
@@ -5870,6 +5933,8 @@ function renderHomeNew() {
 
   const agg = monthAggregate(monthOffset);
   const inc = agg.receitas, exp = agg.gastos, liq = agg.liquido;
+  // Resumo semântico do mês (mesmos totais de caixa; apenas separa a composição das saídas).
+  const sum = _monthMovementSummary(monthOffset);
 
   const balEl = document.getElementById('home-balance');
   if (balEl) {
@@ -5882,6 +5947,21 @@ function renderHomeNew() {
   if (incEl) incEl.textContent = R(inc);
   if (expEl) expEl.textContent = R(exp);
 
+  // Detalhamento discreto das saídas: só aparece quando há saída que não é consumo.
+  const brkEl = document.getElementById('home-cash-breakdown');
+  if (brkEl) {
+    if (sum.assetAcquisition > 0 || sum.debtPayments > 0) {
+      const parts = [];
+      if (sum.consumo > 0)          parts.push(`<span class="hc-brk-item"><span class="hc-brk-dot c"></span>Gastos do dia a dia <b>${R(sum.consumo)}</b></span>`);
+      if (sum.assetAcquisition > 0) parts.push(`<span class="hc-brk-item"><span class="hc-brk-dot p"></span>Patrimônio <b>${R(sum.assetAcquisition)}</b></span>`);
+      if (sum.debtPayments > 0)     parts.push(`<span class="hc-brk-item"><span class="hc-brk-dot d"></span>Dívidas <b>${R(sum.debtPayments)}</b></span>`);
+      brkEl.innerHTML = parts.join('');
+      brkEl.style.display = '';
+    } else {
+      brkEl.style.display = 'none';
+    }
+  }
+
   // 2. Chart
   setTimeout(drawHomeChart, 40);
 
@@ -5891,7 +5971,7 @@ function renderHomeNew() {
   if (insightWrap && insightText) {
     if (inc > 0 || exp > 0) {
       insightWrap.style.display = '';
-      insightText.textContent = buildMonthInsight(inc, exp);
+      insightText.textContent = buildMonthInsight(sum);
     } else {
       insightWrap.style.display = 'none';
     }
@@ -6002,18 +6082,18 @@ function renderHomeNew() {
   }
 }
 
-function buildMonthInsight(inc, exp) {
-  const liq = inc - exp;
-  if (inc === 0 && exp === 0) return 'Nenhuma movimentação registrada este mês. Comece lançando sua primeira receita ou gasto.';
-  if (exp === 0)  return `Receita de ${R(inc)} registrada — nenhum gasto lançado até agora.`;
-  if (inc === 0)  return `${R(exp)} em gastos lançados. Nenhuma receita registrada ainda.`;
-  const ratio = exp / inc;
-  if (liq >= 0) {
-    if (ratio < 0.5) return `Mês excelente: só ${Math.round(ratio*100)}% da receita foi gasta. Você ficou com ${R(liq)} de resultado.`;
-    if (ratio < 0.8) return `Mês equilibrado: ${Math.round(ratio*100)}% da receita foi para gastos. Resultado de ${R(liq)}.`;
-    return `Mês apertado: ${Math.round(ratio*100)}% da receita foi consumida. Sobraram ${R(liq)}.`;
-  }
-  return `Atenção: os gastos superaram a receita em ${R(Math.abs(liq))} este mês.`;
+// Insight de CONSUMO: numerador = gastos do dia a dia (consumo); denominador =
+// receita OPERACIONAL (asset-sale nunca no denominador). Sem % absurdo se op=0.
+function buildMonthInsight(sum) {
+  const opInc = sum.operationalIncome, consumo = sum.consumo;
+  if (sum.totalCashIn === 0 && sum.totalCashOut === 0) return 'Nenhuma movimentação registrada este mês. Comece lançando sua primeira receita ou gasto.';
+  if (consumo === 0) return `Nenhum gasto do dia a dia lançado até agora este mês.`;
+  if (opInc === 0)   return `Você registrou ${R(consumo)} em gastos do dia a dia e ainda não registrou receita operacional neste mês.`;
+  const ratio = consumo / opInc;
+  if (ratio < 0.5) return `Mês tranquilo: você consumiu ${Math.round(ratio*100)}% da sua receita operacional.`;
+  if (ratio < 0.8) return `Consumo equilibrado: ${Math.round(ratio*100)}% da receita operacional foi para gastos do dia a dia.`;
+  if (ratio <= 1)  return `Consumo apertado: ${Math.round(ratio*100)}% da receita operacional foi consumida.`;
+  return `Atenção: seus gastos do dia a dia (${R(consumo)}) já passaram a receita operacional (${R(opInc)}) neste mês.`;
 }
 
 let _homeChartHash = '';
@@ -6643,8 +6723,10 @@ function scheduleDailyReminder() {
 function checkBudgetAlerts(cat) {
   if (!D.catBudgets || !D.catBudgets[cat]) return;
   const budget = D.catBudgets[cat];
+  // Orçamento/limite mede SÓ consumo: aquisição de patrimônio e pagamento de dívida
+  // são saída de caixa, mas não estouram o limite de consumo da categoria.
   const catSpent = (D.expenses || [])
-    .filter(e => monthDates(0).includes(e.date) && e.category === cat)
+    .filter(e => monthDates(0).includes(e.date) && e.category === cat && _movementNature(e) === 'consumo')
     .reduce((s, e) => s + e.amount, 0);
   const pct = Math.round(catSpent / budget * 100);
   if (pct >= 80 && pct < 100 && Notification.permission === 'granted') {
@@ -9655,7 +9737,8 @@ function renderVehPatDetail(id) {
     <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Custo deste mês</div></div>
     <div class="pat-list-group" style="margin-bottom:0"><div class="veh-custo-card">
       <div class="veh-custo-row"><span>Uso e manutenção</span><span>${R(custo.uso)}</span></div>
-      <div class="veh-custo-row"><span>Financiamento</span><span>${R(custo.fin)}</span></div>
+      <div class="veh-custo-row"><span>Financiamento</span><span>${R(custo.fin)}</span></div>${custo.aquisicao > 0 ? `
+      <div class="veh-custo-row"><span>Aquisição</span><span>${R(custo.aquisicao)}</span></div>` : ''}
       <div class="veh-custo-row veh-custo-total"><span>Total desembolsado</span><span>${R(custo.total)}</span></div>
     </div></div>` : '';
 

@@ -197,15 +197,17 @@
       </div>
       <div class="hc-hero-right">
         <div class="hc-stat">
-          <div class="hc-stat-label">Receitas</div>
+          <div class="hc-stat-label">Entradas</div>
           <div class="hc-stat-val hc-stat-inc" id="home-inc">—</div>
         </div>
         <div class="hc-stat hc-stat--exp">
-          <div class="hc-stat-label">Gastos</div>
+          <div class="hc-stat-label">Saídas</div>
           <div class="hc-stat-val hc-stat-exp" id="home-exp">—</div>
         </div>
       </div>
     </div>
+    <!-- Leitura semântica discreta das saídas (só aparece se houver saída fora de consumo) -->
+    <div id="home-cash-breakdown" class="hc-brk" style="display:none"></div>
   </div>
 
   <!-- Aviso compacto: gastos fixos vencidos e sem baixa no mês atual -->
@@ -232,8 +234,8 @@
         <span class="home-chart-empty-sub">Os dados do semestre aparecem após seus primeiros lançamentos</span>
       </div>
       <div class="home-chart-legend" id="home-chart-legend">
-        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--inc"></span>Receitas</span>
-        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--exp"></span>Gastos</span>
+        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--inc"></span>Entradas</span>
+        <span class="home-legend-item"><span class="home-legend-dot home-legend-dot--exp"></span>Saídas</span>
       </div>
     </div>
   </div>
@@ -311,8 +313,8 @@
       <span class="hero-val" id="ws-liq">$ 0,00</span>
     </div>
     <div class="hero-chips">
-      <div class="hero-chip"><span class="chip-dot dot-green"></span>Receita <b id="ws-inc">$ 0,00</b></div>
-      <div class="hero-chip"><span class="chip-dot dot-red"></span>Gastos <b id="ws-exp">$ 0,00</b></div>
+      <div class="hero-chip"><span class="chip-dot dot-green"></span>Entradas <b id="ws-inc">$ 0,00</b></div>
+      <div class="hero-chip"><span class="chip-dot dot-red"></span>Saídas <b id="ws-exp">$ 0,00</b></div>
     </div>
   </div>
 
@@ -406,11 +408,11 @@
       </div>
       <div class="mes-hero-right">
         <div class="mes-stat">
-          <div class="mes-stat-lbl">Receita</div>
+          <div class="mes-stat-lbl">Entradas</div>
           <div class="mes-stat-val mes-stat-inc" id="mes-inc">—</div>
         </div>
         <div class="mes-stat">
-          <div class="mes-stat-lbl">Gastos</div>
+          <div class="mes-stat-lbl">Saídas</div>
           <div class="mes-stat-val mes-stat-exp" id="mes-exp">—</div>
         </div>
       </div>
