@@ -2215,20 +2215,49 @@ function renderMesPrevisto(off) {
   const el = document.getElementById('mes-previsto'); if (!el) return;
   const ym = _monthYM(off);
   const { total, itens } = _debtPrevistoDoMes(ym);
-  if (!itens.length) { el.innerHTML = ''; return; }
-  const atrasados = itens.filter(v => v.atrasada).length;
+  const atraso = _debtAtrasoAnteriorAoMes(ym);
+  // O cartão só some quando não há NEM compromisso do mês NEM atraso anterior:
+  // um mês sem parcelas próprias ainda precisa avisar sobre o que ficou para trás.
+  if (!itens.length && !atraso.quantidade) { el.innerHTML = ''; return; }
+  // Contagem de atraso DENTRO do mês exibido (parcela já vencida que pertence a
+  // este mês). É diferente do atraso anterior, e as duas nunca se sobrepõem.
+  const atrasadosNoMes = itens.filter(v => v.atrasada).length;
   const rows = itens.slice().sort((a, b) => String(a.dueDate).localeCompare(String(b.dueDate))).map(_vencRowHtml).join('');
+  const sub = itens.length
+    ? `${itens.length} compromisso(s)${atrasadosNoMes ? ` · ${atrasadosNoMes} em atraso` : ''} — não entra no resultado realizado`
+    : 'Nenhum compromisso vence neste mês';
+  const plural = atraso.quantidade === 1 ? 'parcela' : 'parcelas';
+  const faixaAtraso = atraso.quantidade ? `
+      <button class="mes-prev-atraso" onclick="_irParaDividasEmAtraso()"
+        aria-label="${escHtml(`${atraso.quantidade} ${plural} em atraso de meses anteriores, total ${R(atraso.total)}, mais antiga em ${_fmtDataBR(atraso.maisAntiga)}. Abrir dívidas em atraso.`)}">
+        <span class="mes-prev-atraso-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </span>
+        <span class="mes-prev-atraso-main">
+          <span class="mes-prev-atraso-top">${atraso.quantidade} ${plural} em atraso · ${R(atraso.total)}</span>
+          <span class="mes-prev-atraso-sub">De meses anteriores · mais antiga ${_fmtDataBR(atraso.maisAntiga)}</span>
+        </span>
+        <span class="mes-prev-atraso-chev" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </span>
+      </button>` : '';
   el.innerHTML = `
     <div class="card av-card mes-prev-card">
       <div class="mes-prev-hd">
         <div>
           <div class="mes-prev-lbl">A vencer no mês <span class="mes-prev-tag">Previsto</span></div>
-          <div class="mes-prev-sub">${itens.length} compromisso(s)${atrasados ? ` · ${atrasados} em atraso` : ''} — não entra no resultado realizado</div>
+          <div class="mes-prev-sub">${sub}</div>
         </div>
         <div class="mes-prev-total">${R(total)}</div>
       </div>
-      <div class="home-venc-list mes-prev-list">${rows}</div>
+      ${faixaAtraso}
+      ${rows ? `<div class="home-venc-list mes-prev-list">${rows}</div>` : ''}
     </div>`;
+}
+// Atalho da faixa de atraso: abre a Central de Dívidas já no filtro existente.
+function _irParaDividasEmAtraso() {
+  switchTab('dividas', 'mes');
+  setDividasFiltro('atraso');
 }
 function changeMonth(dir) { monthOffset+=dir; renderMes(); }
 
@@ -3694,14 +3723,46 @@ function _debtProximosPorDivida() {
   out.sort((a, b) => String(a.dueDate || '~').localeCompare(String(b.dueDate || '~')));
   return out;
 }
-// Soma o restante das projeções de dívida com vencimento num mês (YYYY-MM). Só previsão.
+// Compromissos que vencem DENTRO do mês (YYYY-MM). Só previsão, nunca despesa.
+// A janela é fechada nos dois lados: uma parcela vencida em mês anterior pertence
+// ao mês dela, não a este — o atraso acumulado é reportado à parte, por
+// _debtAtrasoAnteriorAoMes. O filtro final repete a regra do mês de forma
+// explícita (a projeção pode devolver item sem data quando a dívida não tem
+// dataInicio válida, e ele não pertence a mês nenhum).
 function _debtPrevistoDoMes(ym) {
-  const from = ym + '-01';
   const m = /^(\d{4})-(\d{2})$/.exec(ym); if (!m) return { total: 0, itens: [] };
+  const from = ym + '-01';
   const last = new Date(+m[1], +m[2], 0).getDate();
   const to = `${ym}-${String(last).padStart(2, '0')}`;
-  const itens = _debtVencimentosNoPeriodo(null, to).filter(v => v.dueDate && v.dueDate <= to);
-  return { total: itens.reduce((s, v) => s + v.valorRestante, 0), itens };
+  const itens = _debtVencimentosNoPeriodo(from, to)
+    .filter(v => v.dueDate && v.dueDate >= from && v.dueDate <= to);
+  return { total: _r(itens.reduce((s, v) => s + _c(v.valorRestante), 0)), itens };
+}
+// Atraso acumulado ANTES do mês exibido — resumo único, nunca lista no Mês.
+// Duas condições, ambas necessárias:
+//   1) dueDate < hoje      → é atraso de verdade, medido contra o presente e não
+//                            contra o mês que está sendo olhado;
+//   2) dueDate < 1º do mês → não está listado no bloco do mês, o que garante que
+//                            nenhuma parcela apareça nos dois lugares.
+// Consequência desejada: ao abrir um mês futuro, parcelas intermediárias que
+// ainda não venceram não entram aqui (não são atraso) nem no bloco daquele mês
+// (não pertencem a ele) — elas pertencem aos seus próprios meses.
+function _debtAtrasoAnteriorAoMes(ym) {
+  const vazio = { quantidade: 0, total: 0, itens: [], maisAntiga: '' };
+  const m = /^(\d{4})-(\d{2})$/.exec(ym); if (!m) return vazio;
+  const inicioDoMes = ym + '-01';
+  const hoje = todayStr();
+  // Teto da janela: o dia anterior ao mais restritivo dos dois limites.
+  const limite = inicioDoMes < hoje ? inicioDoMes : hoje;
+  const itens = _debtVencimentosNoPeriodo(null, _addDaysISO(limite, -1))
+    .filter(v => v.dueDate && v.dueDate < hoje && v.dueDate < inicioDoMes);
+  if (!itens.length) return vazio;
+  return {
+    quantidade: itens.length,
+    total: _r(itens.reduce((s, v) => s + _c(v.valorRestante), 0)),
+    itens,
+    maisAntiga: itens[0].dueDate,   // _debtVencimentosNoPeriodo já ordena por data
+  };
 }
 // Data civil local + N dias (ISO), sem timezone UTC.
 function _addDaysISO(iso, n) {

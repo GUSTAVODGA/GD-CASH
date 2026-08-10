@@ -4114,6 +4114,33 @@ button:focus-visible, [role="button"]:focus-visible {
 .mes-prev-total { flex-shrink: 0; font-size: 18px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; }
 .mes-prev-list .home-venc-item { background: var(--surface2); }
 :root[data-theme="dark"] .mes-prev-sub { color: rgba(232,237,255,.58); }
+/* Faixa de atraso anterior (P2): resumo ÚNICO do que ficou para trás, nunca a
+   lista do backlog. Toca e abre a Central de Dívidas no filtro "Em atraso".
+   O tom vermelho é o mesmo do chip .venc-atraso, por alpha, para funcionar
+   igual em claro e escuro sem duplicar paleta. */
+.mes-prev-atraso {
+  width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
+  background: rgba(229,72,77,.12); border: 1px solid rgba(229,72,77,.22);
+  border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; cursor: pointer;
+  transition: transform var(--dur-fast, .12s) ease, background var(--dur-fast, .12s) ease;
+}
+.mes-prev-atraso:active { transform: scale(.99); background: rgba(229,72,77,.18); }
+.mes-prev-atraso-ico { flex-shrink: 0; display: flex; color: var(--red, #e5484d); }
+.mes-prev-atraso-main { flex: 1; min-width: 0; display: block; }
+.mes-prev-atraso-top {
+  display: block; font-size: 12.5px; font-weight: 800; color: var(--red, #e5484d);
+  line-height: 1.25; overflow-wrap: anywhere;
+}
+.mes-prev-atraso-sub {
+  display: block; font-size: 11px; color: var(--tx3); margin-top: 2px;
+  line-height: 1.25; overflow-wrap: anywhere;
+}
+.mes-prev-atraso-chev { flex-shrink: 0; display: flex; color: var(--tx3); }
+:root[data-theme="dark"] .mes-prev-atraso-sub { color: rgba(232,237,255,.58); }
+@media (max-width: 340px) {
+  .mes-prev-atraso { gap: 8px; padding: 9px 10px; }
+  .mes-prev-atraso-top { font-size: 12px; }
+}
 /* Semana — linha de compromisso PREVISTO (distinta de despesa realizada) */
 .dacc-venc { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .dacc-venc-ico { background: transparent !important; border: 1px dashed var(--border-strong, var(--border)); color: var(--tx3); }
