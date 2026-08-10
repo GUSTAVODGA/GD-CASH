@@ -7,6 +7,15 @@ on:
   push:
   pull_request:
 
+# Permissão mínima, no nível do workflow, valendo para os dois jobs: os gates só
+# fazem checkout, instalam dependências e rodam testes — nada aqui escreve no
+# repositório. Declarar explicitamente torna o arquivo autossuficiente: mesmo que
+# o padrão do repositório seja afrouxado, o GITHUB_TOKEN destes jobs continua
+# somente-leitura. Importa mais por ser repositório público, onde o workflow
+# também roda em pull_request.
+permissions:
+  contents: read
+
 # Um push novo na mesma branch cancela a execução anterior: o que importa é o
 # estado atual do código, não a fila de estados intermediários.
 concurrency:
