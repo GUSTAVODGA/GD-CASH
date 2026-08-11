@@ -3914,6 +3914,9 @@ let _obrigacoesNaTela = [];
 // (um toque em Salvar que chegue depois da troca de tela) para que ele não grave
 // uma despesa manual paralela. openQuickAdd/qaCancel zeram esse estado quando o
 // formulário for legitimamente reaberto. Nada persistido é apagado ou alterado.
+//
+// NÃO restaura o FAB aqui: quem sai do "+" está entrando na jornada especial,
+// e durante ela o FAB precisa continuar oculto (ver _jornadaCompromisso).
 function _sairDoLancamento() {
   _qaEdit = null;
   _pendVehicleId = null;
@@ -3922,11 +3925,54 @@ function _sairDoLancamento() {
   const ov = document.getElementById('modal-quick-add');
   if (!ov || !ov.classList.contains('open')) return;
   closeOverlay('modal-quick-add');
-  // O "+" esconde o FAB ao abrir e só o restaura nos seus próprios fechamentos.
-  // Saindo por aqui, o FAB precisa voltar ao estado da aba — senão ele some para
-  // sempre depois que o fluxo canônico terminar. Fica atrás do overlay (z-index
-  // 70 contra 100), exatamente como nos fluxos abertos direto da Home.
-  _restoreFab();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// JORNADA ESPECIAL: "+" → Compromissos em aberto → fluxo canônico
+//
+// O FAB mora em z-index 70, ABAIXO das folhas (100), e os botões de confirmar
+// ("Dar baixa", "Registrar") passam por cima da área dele. `closeOverlay` tira
+// `pointer-events` no mesmo instante, mas a folha ainda leva ~0,22s sumindo —
+// e nessa janela o toque que confirmou a operação chegava ao FAB, reabrindo
+// "Novo lançamento" vazio logo depois de uma quitação já registrada. Daí o
+// risco real: lançar a mesma saída uma segunda vez, à mão.
+//
+// A correção é uma flag efêmera: enquanto a jornada dura, o FAB fica oculto; e
+// ele só volta quando o último overlay TERMINOU de fechar e nenhum outro
+// assumiu. Nada disso é persistido nem toca em dado financeiro.
+// ══════════════════════════════════════════════════════════════════════════
+var _jornadaCompromisso = false;
+// Overlays que fazem parte da jornada (o "+" entra por causa da pendência, que
+// termina no formulário pré-preenchido).
+const JORNADA_OVERLAYS = Object.freeze(['modal-obrigacoes', 'debt-pay-sheet', 'modal-baixa', 'modal-quick-add']);
+
+var _fabTimerSeguro = null;
+// Restaura o FAB só quando ninguém mais possa recebê-lo por engano: espera o
+// FIM REAL da transição do overlay que fechou (transitionend), com uma única
+// rede de segurança para os casos em que ela não dispara (aba oculta,
+// prefers-reduced-motion, elemento já invisível). Se outra folha tiver assumido
+// nesse meio-tempo, não faz nada — a jornada continua.
+function _restaurarFabQuandoSeguro(overlayId) {
+  const el = overlayId ? document.getElementById(overlayId) : null;
+  function concluir() {
+    if (_fabTimerSeguro) { clearTimeout(_fabTimerSeguro); _fabTimerSeguro = null; }
+    if (el) el.removeEventListener('transitionend', aoFimDaTransicao);
+    if (document.querySelector('.overlay.open, .av-overlay.open')) return; // outra folha assumiu
+    _jornadaCompromisso = false;
+    _restoreFab();
+  }
+  function aoFimDaTransicao(ev) {
+    if (ev.target === el && ev.propertyName === 'opacity') concluir();
+  }
+  if (el) el.addEventListener('transitionend', aoFimDaTransicao);
+  if (_fabTimerSeguro) clearTimeout(_fabTimerSeguro);
+  _fabTimerSeguro = setTimeout(concluir, 400);
+}
+
+// Ponto único de encerramento da jornada. No-op fora dela.
+function _encerrarJornadaCompromisso(overlayId) {
+  if (!_jornadaCompromisso) return;
+  _restaurarFabQuandoSeguro(overlayId || null);
 }
 
 // Roteador único: uma porta de entrada para os três fluxos canônicos, em vez de
@@ -3993,6 +4039,7 @@ function renderObrigacoes() {
 // coexistam: sobrepostos, o "+" ficaria por cima (vem depois no DOM) e roubaria
 // os toques da folha.
 function abrirCompromissos() {
+  _jornadaCompromisso = true;   // antes de sair do "+": o FAB não pode reaparecer
   _sairDoLancamento();
   renderObrigacoes();
   openOverlay('modal-obrigacoes');
@@ -5061,6 +5108,9 @@ function closeOverlay(id) {
   document.body.style.top = '';
   document.body.style.width = '';
   window.scrollTo(0, _scrollY);
+  // Possível fim da jornada especial. A decisão é adiada até este overlay
+  // terminar de sumir — e só vale se nenhum outro tiver assumido.
+  if (_jornadaCompromisso && JORNADA_OVERLAYS.includes(id)) _restaurarFabQuandoSeguro(id);
 }
 // closeOverlayNav: fecha overlay e garante scroll=0 na nova página (iOS-safe)
 // Ao setar top='0' antes de remover position:fixed, o iOS restaura para y=0
@@ -6726,6 +6776,9 @@ function _qaApplyMode() {
 function _hideFabForSheet() { const f = document.getElementById('global-fab'); if (f) f.style.display = 'none'; }
 function _restoreFab() {
   const f = document.getElementById('global-fab'); if (!f) return;
+  // Durante a jornada especial o FAB fica oculto: ele vive sob as folhas e o
+  // toque que fecha uma delas cairia nele.
+  if (_jornadaCompromisso) { f.style.display = 'none'; return; }
   const active = document.querySelector('.page.active');
   const id = active ? active.id : '';
   f.style.display = (id === 'page-inicio' || id === 'page-semana' || id === 'page-mes') ? '' : 'none';
@@ -6958,7 +7011,7 @@ function qaCancel() {
   _qaLimparRascunho();  // cancelar o lançamento encerra o rascunho de vez
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   closeOverlay('modal-quick-add');
-  _restoreFab();
+  _restaurarFabQuandoSeguro('modal-quick-add');
 }
 
 function qaConfirm() {
@@ -7058,7 +7111,7 @@ function qaConfirm() {
   _qaEdit = null;
   _qaLimparRascunho();   // lançamento gravado: o rascunho cumpriu seu papel
   closeOverlay('modal-quick-add');
-  _restoreFab();
+  _restaurarFabQuandoSeguro('modal-quick-add');
   haptic(10);
   _refreshAfterEntry();
 }
@@ -7081,7 +7134,7 @@ function qaDelete() {
       }
       _qaEdit = null;
       closeOverlay('modal-quick-add');
-      _restoreFab();
+      _restaurarFabQuandoSeguro('modal-quick-add');
       _refreshAfterEntry();
     },
   });
@@ -7696,10 +7749,11 @@ function completePendencia(id) {
       confirmText: 'Registrar',
       cancelText: 'Não',
       onConfirm: () => openPendenciaAsExpense(p),
-      onCancel: () => gdToast('Pendência concluída!', { type: 'success' }),
+      onCancel: () => { gdToast('Pendência concluída!', { type: 'success' }); _encerrarJornadaCompromisso(null); },
     });
   } else {
     gdToast('Pendência concluída!', { type: 'success' });
+    _encerrarJornadaCompromisso(null);
   }
 }
 
@@ -7720,6 +7774,10 @@ function openPendenciaAsExpense(p) {
   qaType = 'rec'; // garante que a trava não bloqueie a mudança para 'gas'
   qaSetType('gas');
   document.getElementById('qa-suggest-row').style.display = 'none';
+  // Sem faixa de compromissos aqui: o formulário já veio de um compromisso, e
+  // deixar conteúdo de uma abertura anterior no slot seria pior ainda.
+  const slotCompr = document.getElementById('qa-compr-slot');
+  if (slotCompr) slotCompr.innerHTML = '';
   openOverlay('modal-quick-add');
 }
 
