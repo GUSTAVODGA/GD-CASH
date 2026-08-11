@@ -3771,6 +3771,103 @@ function _addDaysISO(iso, n) {
   return dateStr(dt);
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// COMPROMISSOS EM ABERTO — resolvedor único, puramente derivado.
+//
+// Reúne, numa lista só, o que está pendente de pagamento em três origens que
+// continuam SEPARADAS no dado: dívidas, gastos fixos e pendências. É um view
+// model efêmero: não vira coleção em D, não persiste, não chama save(), não
+// cria despesa nem pagamento, e não define natureza financeira — quem decide a
+// natureza continua sendo a função canônica que quitar cada item, depois.
+//
+// O campo `origem` é o que impede a armadilha de "unificar dados ao simplificar
+// a UX": ele carrega para o consumidor qual estrutura gerou o item, e `acao` diz
+// qual fluxo canônico deverá ser aberto. Nesta fase nada é executado — `acao` é
+// apenas um identificador estável.
+//
+// Nenhuma regra de negócio é reimplementada aqui: quem decide se um fixo está
+// em aberto é fxState; quem decide o próximo compromisso de uma dívida é
+// _debtProximosPorDivida (que já filtra ativas e devolve no máximo um por
+// dívida, nunca projetando dívida quitada).
+// ══════════════════════════════════════════════════════════════════════════
+const OBRIGACAO_ACOES = Object.freeze({
+  divida:    'debt-pay',            // → openDebtPay(id)
+  fixo:      'fixed-baixa',         // → openBaixa(id)
+  pendencia: 'pendencia-concluir',  // → completePendencia(id)
+});
+
+// Ordena: atrasadas primeiro; depois por vencimento; item sem vencimento vai
+// para o fim do seu grupo; empate resolvido pelo título.
+function _obrigacaoCompare(a, b) {
+  if (a.atrasada !== b.atrasada) return a.atrasada ? -1 : 1;
+  const av = a.vencimento || '', bv = b.vencimento || '';
+  if (!!av !== !!bv) return av ? -1 : 1;
+  if (av !== bv) return av < bv ? -1 : 1;
+  return String(a.titulo || '').localeCompare(String(b.titulo || ''), 'pt-BR', { sensitivity: 'base' });
+}
+
+function _obrigacoesEmAberto() {
+  const hoje = todayStr();
+  const itens = [];
+
+  // ── Dívidas: um compromisso por dívida (o 1º pendente já prioriza atrasada) ──
+  _debtProximosPorDivida().forEach(v => {
+    itens.push({
+      origem: 'divida',
+      id: v.debtId,
+      titulo: v.titulo || 'Dívida',
+      subtitulo: v.parcelNo ? `Parcela ${v.parcelNo}/${v.parcelasTotal}` : '',
+      valorSugerido: v.valorRestante,
+      valorEhEstimativa: false,      // valor derivado do saldo devedor
+      vencimento: v.dueDate || '',
+      atrasada: !!v.atrasada,
+      acao: OBRIGACAO_ACOES.divida,
+      parcelNo: v.parcelNo || null,  // contexto para o fluxo canônico
+    });
+  });
+
+  // ── Gastos fixos: só o que fxState considera em aberto no ciclo corrente ──
+  const ciclo = fxCurrentCycle();
+  (D.fixedExpenses || []).forEach(f => {
+    const estado = fxState(f, ciclo);   // 'paid'/'paused'/'preexisting' ficam de fora
+    if (estado.status !== 'pending' && estado.status !== 'overdue') return;
+    itens.push({
+      origem: 'fixo',
+      id: f.id,
+      titulo: f.name || 'Gasto fixo',
+      subtitulo: f.category || '',
+      valorSugerido: f.amount || 0,
+      valorEhEstimativa: false,      // valor contratado do fixo
+      vencimento: estado.dueDate || '',
+      atrasada: estado.status === 'overdue',
+      acao: OBRIGACAO_ACOES.fixo,
+      ciclo,                         // contexto para o fluxo canônico
+    });
+  });
+
+  // ── Pendências: abertas E com valor estimado (sem valor não é pagável) ──
+  (D.pendencias || []).forEach(p => {
+    if (p.status !== 'aberta') return;
+    const valor = Number(p.estimatedValue) || 0;
+    if (valor <= 0) return;
+    itens.push({
+      origem: 'pendencia',
+      id: p.id,
+      titulo: p.title || 'Pendência',
+      subtitulo: p.category || '',
+      valorSugerido: valor,
+      // O valor de uma pendência é ESTIMADO: o consumidor não pode apresentá-lo
+      // como exato nem somá-lo a um total sem sinalizar isso.
+      valorEhEstimativa: true,
+      vencimento: p.deadline || '',
+      atrasada: !!(p.deadline && p.deadline < hoje),
+      acao: OBRIGACAO_ACOES.pendencia,
+    });
+  });
+
+  return itens.sort(_obrigacaoCompare);
+}
+
 // ── Vencimentos na Home: atrasados + hoje + próximos (projeção; nunca despesa) ──
 const VENC_STATUS_META = { atrasada: { lbl: 'Em atraso', cls: 'atraso' }, hoje: { lbl: 'Hoje', cls: 'hoje' }, previsto: { lbl: 'A vencer', cls: 'previsto' } };
 function _vencRowHtml(v) {

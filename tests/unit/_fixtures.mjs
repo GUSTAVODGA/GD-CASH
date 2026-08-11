@@ -137,3 +137,40 @@ export function cenarioDivida(divida, pagamentos = []) {
   d.debtPayments = pagamentos;
   return d;
 }
+
+// ── Gastos fixos ──────────────────────────────────────────────────────────
+// `since` é a data a partir da qual a baixa passa a valer: vencimentos
+// anteriores a ela são "preexisting" (histórico, não acionável). O padrão fica
+// bem no passado para que o item seja acionável nos cenários comuns.
+export function fixoTeste(extra = {}) {
+  return {
+    id: 'fixo-teste',
+    name: 'Assinatura Teste',
+    amount: 99.9,
+    category: 'Categoria D',
+    dueDay: 10,
+    since: '2026-01-01',
+    ...extra,
+  };
+}
+
+/** Marcador de baixa de um fixo num ciclo (YYYY-MM). */
+export function baixaDeFixo(fixedId, ciclo, extra = {}) {
+  return { fixedId, cycle: ciclo, expenseId: 'exp-' + fixedId, paidDate: `${ciclo}-10`, ...extra };
+}
+
+// ── Pendências ────────────────────────────────────────────────────────────
+export function pendenciaTeste(extra = {}) {
+  return {
+    id: 'pendencia-teste',
+    title: 'Tarefa Teste',
+    category: 'pessoal',
+    priority: 'media',
+    deadline: null,
+    estimatedValue: 250,
+    note: '',
+    status: 'aberta',
+    createdAt: '2026-06-01',
+    ...extra,
+  };
+}
