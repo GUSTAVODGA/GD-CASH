@@ -724,7 +724,7 @@
 </button>
 
 <!-- Bottom sheet: escolher tipo de patrimônio -->
-<div class="overlay" id="pat-sheet" onclick="if(event.target===this)closePatSheet()">
+<div class="overlay" id="pat-sheet" onclick="if(event.target===this)patSheetDismiss()">
     <div class="sheet">
       <div class="sheet-handle"></div>
       <div class="sheet-title" style="font-size:17px;font-weight:800;color:var(--text);margin-bottom:16px">Adicionar patrimônio</div>
@@ -760,7 +760,7 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text3)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
         </button>
       </div>
-      <button class="btn btn-secondary" style="width:100%" onclick="closePatSheet()">Cancelar</button>
+      <button class="btn btn-secondary" style="width:100%" onclick="patSheetDismiss()">Cancelar</button>
     </div>
   </div>
 
@@ -1484,20 +1484,28 @@
       <label class="fl" for="qa-cat-sel">Categoria</label>
       <select class="fi" id="qa-cat-sel"></select>
     </div>
-    <!-- Relacionado a (Gasto) — vínculo com patrimônio, independente da categoria -->
+    <!-- Aquisição de patrimônio (Gasto manual): decisão explícita numa linha só.
+         Só aparece em gasto manual reclassificável — nunca em pagamento de
+         dívida ou baixa de fixo, onde a natureza é estrutural. -->
+    <div class="fg qa-aq-wrap" id="qa-aq-wrap" style="display:none">
+      <div class="qa-aq-row">
+        <span class="qa-aq-lbl" id="qa-aq-lbl">Foi para comprar um bem?</span>
+        <label class="pf-switch" id="qa-aq-switch">
+          <input type="checkbox" id="qa-saida-aquisicao" onchange="qaOnSaidaChange()" aria-labelledby="qa-aq-lbl">
+          <span class="pf-switch-track"><span class="pf-switch-thumb"></span></span>
+        </label>
+      </div>
+    </div>
+    <!-- Relacionado a / Qual bem? — vínculo canônico com patrimônio -->
     <div class="fg" id="qa-bem-row" style="display:none">
       <label class="fl" for="qa-bem-sel" id="qa-bem-lbl">Relacionado a (opcional)</label>
       <select class="fi" id="qa-bem-sel"></select>
-    </div>
-    <!-- Mais opções (Gasto manual): tipo de saída — só para reclassificar aquisição de patrimônio -->
-    <div class="fg" id="qa-more-wrap" style="display:none">
-      <button type="button" class="qa-more-toggle" id="qa-more-toggle" onclick="qaToggleMore()" aria-expanded="false">Mais opções</button>
-      <div id="qa-more" style="display:none">
-        <div class="qa-saida-lbl">Tipo de saída</div>
-        <label class="qa-radio"><input type="radio" name="qa-saida" id="qa-saida-consumo" value="consumo" checked onchange="qaOnSaidaChange()"><span>Gasto do dia a dia</span></label>
-        <label class="qa-radio"><input type="radio" name="qa-saida" id="qa-saida-aquisicao" value="aquisicao" onchange="qaOnSaidaChange()"><span>Compra / entrada de patrimônio</span></label>
-        <div class="qa-saida-hint" id="qa-saida-hint" style="display:none">Selecione acima o bem que recebeu esse valor — a compra precisa saber qual patrimônio foi adquirido.</div>
-      </div>
+      <!-- Saída para quem ligou o switch e ainda não tem nenhum bem cadastrado:
+           em vez de descobrir isso só no Salvar, cadastra daqui e volta. -->
+      <button type="button" class="qa-bem-add" id="qa-bem-add" style="display:none" onclick="qaCadastrarBem()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Cadastrar um bem
+      </button>
     </div>
     <!-- Plataforma (Receita) -->
     <div class="fg" id="qa-plat-row">

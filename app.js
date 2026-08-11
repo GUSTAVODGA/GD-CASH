@@ -5103,6 +5103,10 @@ function switchTab(tab, origin) {
   const page = document.getElementById('page-'+tab);
   if (!page) return;
   page.classList.add('active');
+  // Rascunho do lançamento só faz sentido enquanto o usuário está fora para
+  // cadastrar um bem. Ir para qualquer outra aba é sair do fluxo sem intenção
+  // de voltar — o rascunho morre aqui (a volta ao lançamento limpa antes).
+  if (tab !== 'patrimonio' && _qaRascunho) _qaLimparRascunho();
   // Rastreio de origem/aba principal para Voltar e engrenagem.
   if (MAIN_TABS.includes(tab)) _currentMainTab = tab;
   if (INTERNAL_TABS.includes(tab)) _navOrigin = MAIN_TABS.includes(origin) ? origin : 'mais';
@@ -6679,7 +6683,7 @@ function qaSetType(type) {
   gas.setAttribute('aria-pressed', type === 'gas' ? 'true' : 'false');
   document.getElementById('qa-cat-row').style.display = type === 'gas' ? '' : 'none';
   const bemRow = document.getElementById('qa-bem-row'); if (bemRow) bemRow.style.display = type === 'gas' ? '' : 'none';
-  const moreWrap = document.getElementById('qa-more-wrap'); if (moreWrap) moreWrap.style.display = (type === 'gas' && _qaReclassivel) ? '' : 'none';
+  const aqWrap = document.getElementById('qa-aq-wrap'); if (aqWrap) aqWrap.style.display = (type === 'gas' && _qaReclassivel) ? '' : 'none';
   document.getElementById('qa-plat-row').style.display = type === 'rec' ? '' : 'none';
   document.getElementById('qa-suggest-row').style.display = 'none';
 }
@@ -6747,41 +6751,38 @@ function _expSetNature(expObj, nature) {
     if (Object.keys(expObj.meta).length === 0) delete expObj.meta; // não deixa meta vazio
   }
 }
-// Valor atual do "Tipo de saída": 'consumo' (default) ou 'aquisicao'. Retorna sempre
-// 'consumo' quando o bloco está oculto (receita ou despesa protegida) → sem reclassificação.
+// Estado do switch "Foi para comprar um bem?": 'consumo' (default) ou 'aquisicao'.
+// Retorna sempre 'consumo' quando o bloco está oculto (receita ou despesa de origem
+// estrutural) → a natureza dessas nunca passa por aqui.
 function _qaSaidaValue() {
-  const wrap = document.getElementById('qa-more-wrap');
+  const wrap = document.getElementById('qa-aq-wrap');
   if (!wrap || wrap.style.display === 'none') return 'consumo';
-  const r = document.querySelector('input[name="qa-saida"]:checked');
-  return (r && r.value === 'aquisicao') ? 'aquisicao' : 'consumo';
+  return document.getElementById('qa-saida-aquisicao')?.checked ? 'aquisicao' : 'consumo';
 }
-function qaToggleMore() {
-  const box = document.getElementById('qa-more');
-  const tog = document.getElementById('qa-more-toggle');
-  if (!box) return;
-  const open = box.style.display !== 'none';
-  box.style.display = open ? 'none' : '';
-  if (tog) tog.setAttribute('aria-expanded', open ? 'false' : 'true');
+// Existe algum bem que possa RECEBER uma aquisição agora? Mesmo critério de
+// _bemVinculoOptions: só bens ativos entram.
+function _qaTemBemAtivo() {
+  return (D.vehicles || []).some(v => _patLifecycleOf(v.id) === 'ativo')
+      || (D.patrimonios || []).some(p => p.tipo !== 'veiculo' && (p.status || 'ativo') === 'ativo');
 }
 function qaOnSaidaChange() {
-  const aq = document.getElementById('qa-saida-aquisicao')?.checked;
-  const hint = document.getElementById('qa-saida-hint');
-  if (hint) hint.style.display = aq ? '' : 'none';
-  // Rótulo do vínculo reflete a obrigatoriedade: aquisição exige bem → sem "(opcional)".
+  const aq = !!document.getElementById('qa-saida-aquisicao')?.checked;
+  // O rótulo do vínculo reflete a obrigatoriedade: comprando um bem, ele deixa
+  // de ser opcional.
   const lbl = document.getElementById('qa-bem-lbl');
-  if (lbl) lbl.textContent = aq ? 'Patrimônio adquirido' : 'Relacionado a (opcional)';
+  if (lbl) lbl.textContent = aq ? 'Qual bem?' : 'Relacionado a (opcional)';
+  // Ligar o switch sem ter nenhum bem cadastrado seria um beco sem saída
+  // descoberto só no Salvar. O próprio campo passa a oferecer o cadastro.
+  const semBem = aq && !_qaTemBemAtivo();
+  const sel = document.getElementById('qa-bem-sel');
+  const add = document.getElementById('qa-bem-add');
+  if (sel) sel.style.display = semBem ? 'none' : '';
+  if (add) add.style.display = semBem ? '' : 'none';
 }
-// Prepara o "Tipo de saída" ao abrir o formulário (radio + dica + expandir se preciso).
+// Prepara o switch ao abrir o formulário.
 function _qaInitSaida(nature) {
-  const isAq = nature === 'asset-acquisition';
-  const rc = document.getElementById('qa-saida-consumo');
-  const ra = document.getElementById('qa-saida-aquisicao');
-  if (rc) rc.checked = !isAq;
-  if (ra) ra.checked = isAq;
-  const box = document.getElementById('qa-more');
-  const tog = document.getElementById('qa-more-toggle');
-  if (box) box.style.display = isAq ? '' : 'none'; // já expandido quando é aquisição
-  if (tog) tog.setAttribute('aria-expanded', isAq ? 'true' : 'false');
+  const cb = document.getElementById('qa-saida-aquisicao');
+  if (cb) cb.checked = nature === 'asset-acquisition';
   qaOnSaidaChange();
 }
 
@@ -6854,9 +6855,99 @@ function openQuickAdd(editRef) {
   }
   _populateBemSel('qa-bem-sel', _qaBemVal);
   _qaInitSaida(_eNature);
-  const moreWrapE = document.getElementById('qa-more-wrap');
-  if (moreWrapE) moreWrapE.style.display = (type === 'gas' && _qaReclassivel) ? '' : 'none';
+  const aqWrapE = document.getElementById('qa-aq-wrap');
+  if (aqWrapE) aqWrapE.style.display = (type === 'gas' && _qaReclassivel) ? '' : 'none';
   openOverlay('modal-quick-add');
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// RASCUNHO DO LANÇAMENTO — ida e volta para "Cadastrar um bem"
+//
+// Ligar "Foi para comprar um bem?" sem ter nenhum bem cadastrado levava a um
+// beco sem saída: o usuário só descobria a falta no Salvar. Agora ele sai daqui
+// para o cadastro canônico de patrimônio e volta com o que já tinha digitado.
+//
+// O rascunho é MEMÓRIA EFÊMERA DA UI: não entra em D, Firestore, localStorage
+// nem em coleção nova, e por isso não sobrevive a um reload — de propósito. Ele
+// morre ao salvar, ao cancelar o lançamento e ao sair do fluxo sem intenção de
+// voltar (troca de aba que não seja o próprio Patrimônio).
+//
+// Voltar do cadastro apenas SELECIONA o bem criado. Não grava a despesa, não
+// cria pagamento de dívida e não interpreta o valor do lançamento como entrada
+// ou amortização de um financiamento: aquisição e dívida continuam distintas.
+// ══════════════════════════════════════════════════════════════════════════
+var _qaRascunho = null;
+
+function _qaCapturarRascunho() {
+  const ativa = document.querySelector('.page.active');
+  return {
+    aba: ativa ? (ativa.id || '').replace(/^page-/, '') : 'inicio',
+    edicao: _qaEdit,
+    tipo: qaType,
+    valor: document.getElementById('qa-amt-input')?.value || '',
+    data: document.getElementById('qa-date')?.value || '',
+    categoria: document.getElementById('qa-cat-sel')?.value || '',
+    plataforma: document.getElementById('qa-plat-sel')?.value || '',
+    descricao: document.getElementById('qa-desc')?.value || '',
+    bem: document.getElementById('qa-bem-sel')?.value || '',
+    aquisicao: _qaSaidaValue() === 'aquisicao',
+  };
+}
+
+// Repõe os campos por cima do formulário já reaberto. `bemSel`, quando vem,
+// é o vínculo do bem recém-criado e tem precedência sobre o do rascunho.
+function _qaAplicarRascunho(r, bemSel) {
+  if (!r) return;
+  if (!r.edicao && r.tipo && r.tipo !== qaType) qaSetType(r.tipo);
+  const set = (id, v) => { const el = document.getElementById(id); if (el != null && el) el.value = v; };
+  set('qa-amt-input', r.valor);
+  if (r.data) set('qa-date', r.data);
+  if (r.descricao) set('qa-desc', r.descricao);
+  const catSel = document.getElementById('qa-cat-sel');
+  if (catSel && r.categoria && [...catSel.options].some(o => o.value === r.categoria)) catSel.value = r.categoria;
+  const platSel = document.getElementById('qa-plat-sel');
+  if (platSel && r.plataforma && [...platSel.options].some(o => o.value === r.plataforma)) platSel.value = r.plataforma;
+  // O select é repopulado para que o bem recém-criado exista como opção.
+  _populateBemSel('qa-bem-sel', bemSel || r.bem || '');
+  _qaInitSaida(r.aquisicao ? 'asset-acquisition' : 'consumo');
+}
+
+function _qaLimparRascunho() { _qaRascunho = null; }
+
+// Sai do lançamento PRESERVANDO o rascunho (ao contrário de qaCancel) e abre o
+// cadastro canônico de patrimônio — a mesma folha de tipo do botão "+" da aba.
+// Nenhum bem, dívida ou despesa é criado aqui.
+function qaCadastrarBem() {
+  _qaRascunho = _qaCapturarRascunho();
+  _qaEdit = null;
+  _pendVehicleId = null;
+  _qaSaving = true;                 // trava um Salvar atrasado enquanto estamos fora
+  const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = true;
+  closeOverlay('modal-quick-add');
+  _restoreFab();
+  switchTab('patrimonio', 'mais');  // renderPatrimonioHome limpa flags de OUTROS fluxos
+  openPatSheet();
+}
+
+// Volta ao lançamento. `bemSel` presente = bem criado; ausente = cancelamento.
+function _qaVoltarAoLancamento(bemSel) {
+  const r = _qaRascunho;
+  if (!r) return false;
+  _qaRascunho = null;               // limpa ANTES do switchTab (que descarta rascunho pendente)
+  switchTab(r.aba || 'inicio');
+  openQuickAdd(r.edicao || null);
+  _qaAplicarRascunho(r, bemSel);
+  return true;
+}
+// Cancelou o cadastro: volta com tudo como estava, sem bem novo e sem gravar nada.
+function qaVoltarSemBem() { _qaVoltarAoLancamento(''); }
+
+// Fechar a folha de tipo é cancelamento explícito. `closePatSheet` continua
+// existindo para os fechamentos que NÃO são cancelamento (escolha de tipo,
+// troca de aba), por isso o desvio mora aqui e não lá.
+function patSheetDismiss() {
+  closePatSheet();
+  if (_qaRascunho) qaVoltarSemBem();
 }
 
 // Fecha o formulário e limpa o estado de edição (Voltar/Cancelar → origem).
@@ -6864,6 +6955,7 @@ function qaCancel() {
   _qaEdit = null;
   _pendVehicleId = null;
   _qaSaving = false;
+  _qaLimparRascunho();  // cancelar o lançamento encerra o rascunho de vez
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   closeOverlay('modal-quick-add');
   _restoreFab();
@@ -6964,6 +7056,7 @@ function qaConfirm() {
   // NÃO reseta _qaSaving aqui: mantém o bloqueio até o formulário ser reaberto,
   // impedindo que um segundo toque (síncrono) grave um duplicado.
   _qaEdit = null;
+  _qaLimparRascunho();   // lançamento gravado: o rascunho cumpriu seu papel
   closeOverlay('modal-quick-add');
   _restoreFab();
   haptic(10);
@@ -7881,7 +7974,9 @@ function openVehForm(id) {
   _vehShowView('veh-form-view');
   const cont = document.getElementById('veh-form-cont');
   if (!cont) return;
-  const cancelAction = id ? `_refreshVehDetail('${id}')` : 'renderVehList()';
+  // Veio do lançamento para cadastrar um bem: Voltar é cancelamento e devolve
+  // o usuário ao lançamento com o rascunho intacto.
+  const cancelAction = id ? `_refreshVehDetail('${id}')` : (_qaRascunho ? 'qaVoltarSemBem()' : 'renderVehList()');
   // ── Financiamento inline (paridade com imóvel/outro; fonte única D.debts) ──
   const _vDebt = id ? _vehPrincipalDebt(id) : null;
   const fin0 = _vDebt ? {
@@ -8036,6 +8131,15 @@ function saveVehicle() {
   let finDebt = null;
   if (finFields) finDebt = _patUpsertFinDebt({ vehicleId: id }, finFields);
   save();
+  // Fluxo "cadastrar um bem a partir do lançamento": volta ao "+" com o veículo
+  // novo já selecionado. Um eventual financiamento criado acima permanece
+  // intacto e INDEPENDENTE — nenhum pagamento de dívida é gerado aqui, e o
+  // valor do lançamento não é lido como entrada nem amortização.
+  if (_qaRascunho && !linkPendingId && idx < 0) {
+    gdToast('Veículo cadastrado. Confira o lançamento e salve.', { type: 'success' });
+    _qaVoltarAoLancamento('veh:' + id);
+    return;
+  }
   // Fluxo "criar bem a partir da dívida": vincula a dívida EXISTENTE ao novo veículo,
   // sem criar outra dívida (preserva debtId, saldo, parcelas, pagamentos e projeções).
   if (linkPendingId && idx < 0) {
@@ -8964,7 +9068,8 @@ function openPatForm(tipo, id) {
   const linkPending = !!_debtLinkPending; // criar bem a partir da dívida: não recriar financiamento
   const freqSel = ['mensal','quinzenal','semanal','anual','irregular'].map(fr =>
     `<option value="${fr}" ${(fin0?.frequencia||'mensal')===fr?'selected':''}>${({mensal:'Mensal',quinzenal:'Quinzenal',semanal:'Semanal',anual:'Anual',irregular:'Irregular / sem periodicidade'})[fr]}</option>`).join('');
-  const backAction = p ? `renderPatDetail('${p.id}')` : 'renderPatrimonioHome()';
+  // Idem veículo: Voltar durante o fluxo do lançamento devolve o rascunho.
+  const backAction = p ? `renderPatDetail('${p.id}')` : (_qaRascunho ? 'qaVoltarSemBem()' : 'renderPatrimonioHome()');
   cont.innerHTML = `
     ${_pageHeader(backAction, `${p ? 'Editar' : 'Novo'} ${tipoLbl.toLowerCase()}`)}
     <div class="form-group">
@@ -9268,6 +9373,15 @@ function savePatrimonioForm() {
         dataInicio: finToSave.dataInicio, frequencia: finToSave.frequencia, observacoes: finToSave.observacoes,
       });
       save();
+    }
+    // Fluxo "cadastrar um bem a partir do lançamento": volta ao "+" com o bem
+    // novo já selecionado. Um financiamento criado acima permanece intacto e
+    // INDEPENDENTE — nenhum pagamento de dívida é gerado aqui, e o valor do
+    // lançamento não é lido como entrada nem amortização.
+    if (_qaRascunho && !linkPendingId) {
+      gdToast('Bem cadastrado. Confira o lançamento e salve.', { type: 'success' });
+      _qaVoltarAoLancamento('pat:' + novo.id);
+      return;
     }
     // Retorno à Central de Dívidas quando o fluxo começou nela (bem novo financiado).
     const startedInDividas = _finFlowReturn === 'dividas';

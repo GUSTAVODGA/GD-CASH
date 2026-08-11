@@ -1,9 +1,9 @@
 // Lançamento e reclassificação pelo formulário real.
 //
-// É o único caminho pelo qual a semântica da Fase B chega ao dado: o "Tipo de
-// saída" grava o override de natureza. Testar isso só no motor deixaria de fora
-// a parte que o usuário toca — e foi justamente na UI que o rótulo do vínculo
-// precisou de um corretivo depois da Fase B.
+// É o único caminho pelo qual a semântica da Fase B chega ao dado: o switch
+// "Foi para comprar um bem?" grava o override de natureza. Testar isso só no
+// motor deixaria de fora a parte que o usuário toca — e foi justamente na UI
+// que o rótulo do vínculo precisou de um corretivo depois da Fase B.
 import { test, expect } from '@playwright/test';
 import { abrirAppEmDemo, semearDados, lerEstado, esperarOverlay } from './_helpers.js';
 
@@ -72,10 +72,8 @@ test('reclassificar para aquisição tira o gasto do consumo sem tirar do caixa'
   await page.locator('#qa-amt-input').fill('8000');
   await page.locator('#qa-desc').fill('Aquisicao Teste');
 
-  // "Mais opções" → Tipo de saída → Compra / entrada de patrimônio
-  await page.locator('#qa-more-toggle').click();
-  await expect(page.locator('#qa-more')).toBeVisible();
-  await page.locator('#qa-saida-aquisicao').check();
+  // Switch explícito "Foi para comprar um bem?" — sem acordeão no caminho.
+  await page.locator('#qa-aq-switch').click();
   await page.locator('#qa-bem-sel').selectOption('pat:pat-teste');
   await page.locator('#qa-save-btn').click();
   await esperarOverlay(page, 'modal-quick-add', false);

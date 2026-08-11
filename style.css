@@ -3792,14 +3792,31 @@ button:focus-visible, [role="button"]:focus-visible {
 .div-prior-main { font-size: 14px; font-weight: 700; color: var(--text); }
 .div-prior-sub { font-size: 12px; color: var(--tx2); margin-top: 3px; }
 
-/* Quick-add: "Mais opções" → Tipo de saída (reclassificação de aquisição) */
-.qa-more-toggle { background: none; border: none; padding: 4px 0; color: var(--ac); font-size: 13px; font-weight: 700; cursor: pointer; -webkit-tap-highlight-color: transparent; }
-.qa-more-toggle:active { opacity: .7; }
-#qa-more { margin-top: 8px; padding: 12px 14px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; }
-.qa-saida-lbl { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--tx3); margin-bottom: 8px; }
-.qa-radio { display: flex; align-items: center; gap: 10px; padding: 8px 0; font-size: 14px; color: var(--text); cursor: pointer; }
-.qa-radio input { width: 18px; height: 18px; accent-color: var(--ac); flex: none; }
-.qa-saida-hint { font-size: 12px; line-height: 1.45; color: var(--tx2); margin-top: 4px; }
+/* Quick-add: "Foi para comprar um bem?" — uma linha, sem acordeão e sem card.
+   A densidade tem de ficar abaixo da do acordeão que este bloco substituiu. */
+.qa-aq-row {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 34px; padding: 2px 0;
+}
+.qa-aq-lbl {
+  flex: 1; min-width: 0; font-size: 14px; font-weight: 600;
+  color: var(--text); line-height: 1.3; overflow-wrap: anywhere;
+}
+/* Saída para quem ligou o switch sem ter bem cadastrado. */
+.qa-bem-add {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 11px 12px; border-radius: 12px; cursor: pointer;
+  background: color-mix(in srgb, var(--ac) 12%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--ac) 45%, transparent);
+  color: var(--ac); font-size: 13.5px; font-weight: 700;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--dur-fast, .12s) ease;
+}
+.qa-bem-add:active { background: color-mix(in srgb, var(--ac) 20%, transparent); }
+@media (max-width: 340px) {
+  .qa-aq-row { gap: 8px; }
+  .qa-aq-lbl { font-size: 13px; }
+}
 
 /* Custo do veículo no mês */
 .veh-custo-card { padding: 4px 2px; }
