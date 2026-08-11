@@ -944,6 +944,22 @@
     </div>
   </div>
 
+  <!-- Bottom sheet: compromissos em aberto (dívidas, fixos e pendências numa
+       lista só). O conteúdo é montado por renderObrigacoes() a partir do
+       resolvedor _obrigacoesEmAberto(); tocar num item sai desta folha e abre o
+       fluxo canônico da origem. Nada é criado aqui. -->
+  <div class="overlay" id="modal-obrigacoes" onclick="if(event.target===this)closeOverlay('modal-obrigacoes')">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="obr-hd">
+        <div class="sheet-title" style="margin-bottom:0">Compromissos em aberto</div>
+        <div class="obr-resumo" id="obr-resumo"></div>
+      </div>
+      <div id="obr-lista"></div>
+      <button class="btn btn-secondary" style="margin-top:12px" onclick="closeOverlay('modal-obrigacoes')">Fechar</button>
+    </div>
+  </div>
+
   <!-- Bottom sheet: registrar pagamento de uma dívida (fonte única) -->
   <div class="overlay" id="debt-pay-sheet" onclick="if(event.target===this)closeOverlay('debt-pay-sheet')">
     <div class="sheet">

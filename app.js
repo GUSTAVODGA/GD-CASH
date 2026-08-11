@@ -3868,6 +3868,109 @@ function _obrigacoesEmAberto() {
   return itens.sort(_obrigacaoCompare);
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// FOLHA "COMPROMISSOS EM ABERTO"
+//
+// Apresentação pura do resolvedor: renderObrigacoes() NÃO consulta D nem aplica
+// regra própria — tudo vem de _obrigacoesEmAberto(), recalculado a cada
+// abertura (sem cache, para que uma obrigação quitada suma na próxima vez).
+//
+// Tocar num item sai desta folha e abre o fluxo CANÔNICO da origem. Esta folha
+// nunca cria despesa, pagamento ou marcador.
+// ══════════════════════════════════════════════════════════════════════════
+const OBRIGACAO_ORIGEM_LBL = Object.freeze({
+  divida: 'Dívida', fixo: 'Gasto fixo', pendencia: 'Pendência',
+});
+// Lista da abertura corrente. Existe só para o clique achar o item pelo índice,
+// sem despejar id nem nome interno de fluxo no HTML.
+let _obrigacoesNaTela = [];
+
+// Sai do formulário de lançamento antes de abrir qualquer fluxo canônico.
+// Três garantias: nenhum overlay do "+" fica aberto por baixo; o estado de
+// criação/edição é descartado; e `_qaSaving = true` trava um qaConfirm atrasado
+// (um toque em Salvar que chegue depois da troca de tela) para que ele não grave
+// uma despesa manual paralela. openQuickAdd/qaCancel zeram esse estado quando o
+// formulário for legitimamente reaberto. Nada persistido é apagado ou alterado.
+function _sairDoLancamento() {
+  _qaEdit = null;
+  _pendVehicleId = null;
+  _qaSaving = true;
+  const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = true;
+  const ov = document.getElementById('modal-quick-add');
+  if (ov && ov.classList.contains('open')) closeOverlay('modal-quick-add');
+}
+
+// Roteador único: uma porta de entrada para os três fluxos canônicos, em vez de
+// lógica financeira espalhada por onclick.
+function _abrirObrigacao(item) {
+  if (!item || !item.origem) return;
+  _sairDoLancamento();
+  const folha = document.getElementById('modal-obrigacoes');
+  if (folha && folha.classList.contains('open')) closeOverlay('modal-obrigacoes');
+  if (item.origem === 'divida')    { openDebtPay(item.id); return; }
+  if (item.origem === 'fixo')      { darBaixaFixed(item.id); return; }
+  if (item.origem === 'pendencia') { completePendencia(item.id); return; }
+}
+// Ponte do clique: resolve o índice para o item da abertura corrente.
+function _tocarObrigacao(i) { _abrirObrigacao(_obrigacoesNaTela[Number(i)]); }
+
+function _obrigacaoRowHtml(item, i) {
+  const origemLbl = OBRIGACAO_ORIGEM_LBL[item.origem] || '';
+  const contexto = [origemLbl, item.subtitulo].filter(Boolean).join(' · ');
+  const data = item.vencimento ? _fmtDataBR(item.vencimento) : 'Sem prazo';
+  const aria = `${item.titulo}, ${origemLbl}, ${item.valorEhEstimativa ? 'valor estimado ' : ''}${R(item.valorSugerido)}, ${item.atrasada ? 'em atraso, ' : ''}${data}`;
+  return `<button class="home-venc-item obr-item" onclick="_tocarObrigacao(${i})" aria-label="${escHtml(aria)}">
+    <div class="home-venc-main">
+      <div class="home-venc-title" title="${escHtml(item.titulo)}">${escHtml(item.titulo)}</div>
+      <div class="home-venc-sub">${escHtml(contexto)}</div>
+    </div>
+    <div class="home-venc-end">
+      <div class="home-venc-val">${item.valorEhEstimativa ? '~ ' : ''}${R(item.valorSugerido)}</div>
+      <div class="home-venc-meta">
+        ${item.atrasada ? '<span class="venc-chip venc-atraso">Em atraso</span>' : ''}
+        ${item.valorEhEstimativa ? '<span class="venc-chip obr-chip-est">Estimado</span>' : ''}
+        <span class="home-venc-date">${data}</span>
+      </div>
+    </div>
+  </button>`;
+}
+
+function renderObrigacoes() {
+  const listaEl = document.getElementById('obr-lista');
+  const resumoEl = document.getElementById('obr-resumo');
+  if (!listaEl) return;
+  _obrigacoesNaTela = _obrigacoesEmAberto();
+  const itens = _obrigacoesNaTela;
+
+  if (!itens.length) {
+    if (resumoEl) resumoEl.textContent = '';
+    listaEl.innerHTML = `<div class="obr-vazio">
+      <div class="obr-vazio-tit">Tudo em dia</div>
+      <div class="obr-vazio-sub">Nenhum compromisso em aberto agora.</div>
+    </div>`;
+    return;
+  }
+
+  // Agregado honesto: havendo qualquer valor estimado, o total NÃO é
+  // apresentado como exato — a diferença entre devido e estimado é preservada.
+  const total = _r(itens.reduce((s, i) => s + _c(i.valorSugerido), 0));
+  const temEstimativa = itens.some(i => i.valorEhEstimativa);
+  const plural = itens.length === 1 ? 'compromisso' : 'compromissos';
+  if (resumoEl) resumoEl.textContent = `${itens.length} ${plural} · ${temEstimativa ? 'cerca de ' : ''}${R(total)}`;
+
+  listaEl.innerHTML = `<div class="home-venc-list obr-lista">${itens.map(_obrigacaoRowHtml).join('')}</div>`;
+}
+
+// Abre a folha. Nesta fase não há entrada na UI: só chamada direta.
+// Sai do formulário de lançamento ANTES de abrir, para que os dois nunca
+// coexistam: sobrepostos, o "+" ficaria por cima (vem depois no DOM) e roubaria
+// os toques da folha.
+function abrirCompromissos() {
+  _sairDoLancamento();
+  renderObrigacoes();
+  openOverlay('modal-obrigacoes');
+}
+
 // ── Vencimentos na Home: atrasados + hoje + próximos (projeção; nunca despesa) ──
 const VENC_STATUS_META = { atrasada: { lbl: 'Em atraso', cls: 'atraso' }, hoje: { lbl: 'Hoje', cls: 'hoje' }, previsto: { lbl: 'A vencer', cls: 'previsto' } };
 function _vencRowHtml(v) {

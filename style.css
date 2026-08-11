@@ -4118,6 +4118,19 @@ button:focus-visible, [role="button"]:focus-visible {
    lista do backlog. Toca e abre a Central de Dívidas no filtro "Em atraso".
    O tom vermelho é o mesmo do chip .venc-atraso, por alpha, para funcionar
    igual em claro e escuro sem duplicar paleta. */
+/* Folha "Compromissos em aberto" — reusa .home-venc-item/.venc-chip; só o
+   cabeçalho, o chip de estimativa e o estado vazio são próprios. */
+.obr-hd { margin-bottom: 12px; }
+.obr-resumo { font-size: 12px; color: var(--tx3); margin-top: 3px; }
+.obr-lista { max-height: 52vh; overflow-y: auto; }
+.obr-item { background: var(--surface2); }
+.obr-chip-est { color: var(--tx3); background: color-mix(in srgb, var(--tx3) 14%, transparent); }
+.obr-vazio { text-align: center; padding: 26px 12px; }
+.obr-vazio-tit { font-size: 15px; font-weight: 800; color: var(--tx); }
+.obr-vazio-sub { font-size: 12px; color: var(--tx3); margin-top: 4px; }
+:root[data-theme="dark"] .obr-resumo,
+:root[data-theme="dark"] .obr-vazio-sub { color: rgba(232,237,255,.58); }
+
 .mes-prev-atraso {
   width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
   background: rgba(229,72,77,.12); border: 1px solid rgba(229,72,77,.22);
