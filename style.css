@@ -4131,6 +4131,40 @@ button:focus-visible, [role="button"]:focus-visible {
 :root[data-theme="dark"] .obr-resumo,
 :root[data-theme="dark"] .obr-vazio-sub { color: rgba(232,237,255,.58); }
 
+/* Faixa de compromissos no formulário do "+".
+   Sem itens em aberto o slot desaparece por completo — nada de espaço, borda
+   ou placeholder — e o formulário fica idêntico ao que já existia. */
+#qa-compr-slot:empty { display: none; }
+.qa-compr {
+  width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
+  background: color-mix(in srgb, var(--bl) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bl) 26%, transparent);
+  border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; cursor: pointer;
+  transition: transform var(--dur-fast, .12s) ease, background var(--dur-fast, .12s) ease;
+}
+.qa-compr:active { transform: scale(.99); background: color-mix(in srgb, var(--bl) 18%, transparent); }
+.qa-compr-ico { flex-shrink: 0; display: flex; color: var(--bl); }
+.qa-compr-main { flex: 1; min-width: 0; display: block; }
+.qa-compr-top {
+  display: block; font-size: 12.5px; font-weight: 800; color: var(--bl);
+  line-height: 1.25; overflow-wrap: anywhere;
+}
+.qa-compr-sub {
+  display: block; font-size: 11px; color: var(--tx3); margin-top: 2px;
+  line-height: 1.25; overflow-wrap: anywhere;
+}
+.qa-compr-chev { flex-shrink: 0; display: flex; color: var(--tx3); }
+/* Havendo atraso, o mesmo tratamento de atenção já usado no bloco do Mês. */
+.qa-compr--atraso { background: rgba(229,72,77,.12); border-color: rgba(229,72,77,.22); }
+.qa-compr--atraso:active { background: rgba(229,72,77,.18); }
+.qa-compr--atraso .qa-compr-ico,
+.qa-compr--atraso .qa-compr-top { color: var(--red, #e5484d); }
+:root[data-theme="dark"] .qa-compr-sub { color: rgba(232,237,255,.58); }
+@media (max-width: 340px) {
+  .qa-compr { gap: 8px; padding: 9px 10px; }
+  .qa-compr-top { font-size: 12px; }
+}
+
 .mes-prev-atraso {
   width: 100%; display: flex; align-items: center; gap: 10px; text-align: left;
   background: rgba(229,72,77,.12); border: 1px solid rgba(229,72,77,.22);

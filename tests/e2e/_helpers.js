@@ -153,6 +153,43 @@ export async function esperarOverlay(page, id, aberto) {
 }
 
 /**
+ * Espera um elemento parar de se mover antes de medir geometria.
+ *
+ * As folhas entram deslizando (`transform: translateY`), então duas medidas
+ * tiradas durante a entrada pertencem a instantes diferentes e não podem ser
+ * comparadas entre si. `reducedMotion: 'reduce'` no config deveria zerar o
+ * movimento, mas a emulação feita no nível do contexto não chega ao browser em
+ * todos os ambientes — neste, `matchMedia('(prefers-reduced-motion: reduce)')`
+ * responde `false` mesmo com a opção ligada. Em vez de depender disso,
+ * esperamos a própria geometria estabilizar: dois frames seguidos no mesmo
+ * lugar.
+ */
+export async function esperarPosicaoEstavel(page, seletor) {
+  await page.locator(seletor).waitFor({ state: 'visible' });
+  // Sinal exato: enquanto a transição de `transform` estiver rodando ela
+  // aparece em `getAnimations()`. Comparar posições entre frames sozinho não
+  // basta — perto do fim da curva dois frames podem coincidir dentro da
+  // tolerância com o elemento ainda em movimento.
+  await page.waitForFunction(sel => {
+    const el = document.querySelector(sel);
+    if (!el) return false;
+    const anims = el.getAnimations ? el.getAnimations() : [];
+    return anims.every(a => a.playState === 'finished' || a.playState === 'idle');
+  }, seletor, { polling: 'raf' });
+  // E uma confirmação por geometria, para o caso de o movimento vir de outra
+  // fonte (um ancestral, um reflow tardio).
+  await page.waitForFunction(sel => {
+    const el = document.querySelector(sel);
+    if (!el) return false;
+    const topo = el.getBoundingClientRect().top;
+    const anterior = window.__topoAnterior;
+    window.__topoAnterior = topo;
+    return anterior !== undefined && topo === anterior;
+  }, seletor, { polling: 'raf' });
+  await page.evaluate(() => { delete window.__topoAnterior; });
+}
+
+/**
  * Mescla dados sintéticos no estado `D` e re-renderiza a aba indicada.
  *
  * `D` é declarado com `let` no escopo do script, então não é propriedade de

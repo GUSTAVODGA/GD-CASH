@@ -3868,6 +3868,29 @@ function _obrigacoesEmAberto() {
   return itens.sort(_obrigacaoCompare);
 }
 
+// Agregado derivado da lista — fonte ÚNICA para qualquer superfície que resuma
+// compromissos (folha e faixa do "+"). Não consulta D, não guarda estado e não
+// reimplementa regra financeira: só conta e soma o que o resolvedor devolveu.
+// `temEstimativa` existe para que nenhum consumidor apresente o total como exato
+// quando há pendência (valor estimado) na composição.
+function _obrigacoesResumo(itens) {
+  const lista = Array.isArray(itens) ? itens : [];
+  return {
+    quantidade: lista.length,
+    atrasados: lista.reduce((n, i) => n + (i && i.atrasada ? 1 : 0), 0),
+    total: _r(lista.reduce((s, i) => s + _c(i && i.valorSugerido), 0)),
+    temEstimativa: lista.some(i => i && i.valorEhEstimativa),
+  };
+}
+// Texto do total respeitando a honestidade do agregado.
+function _obrigacoesTotalTexto(resumo) {
+  return `${resumo.temEstimativa ? 'cerca de ' : ''}${R(resumo.total)}`;
+}
+// "1 compromisso" / "4 compromissos"
+function _obrigacoesContagemTexto(resumo) {
+  return `${resumo.quantidade} ${resumo.quantidade === 1 ? 'compromisso' : 'compromissos'}`;
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // FOLHA "COMPROMISSOS EM ABERTO"
 //
@@ -3897,7 +3920,13 @@ function _sairDoLancamento() {
   _qaSaving = true;
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = true;
   const ov = document.getElementById('modal-quick-add');
-  if (ov && ov.classList.contains('open')) closeOverlay('modal-quick-add');
+  if (!ov || !ov.classList.contains('open')) return;
+  closeOverlay('modal-quick-add');
+  // O "+" esconde o FAB ao abrir e só o restaura nos seus próprios fechamentos.
+  // Saindo por aqui, o FAB precisa voltar ao estado da aba — senão ele some para
+  // sempre depois que o fluxo canônico terminar. Fica atrás do overlay (z-index
+  // 70 contra 100), exatamente como nos fluxos abertos direto da Home.
+  _restoreFab();
 }
 
 // Roteador único: uma porta de entrada para os três fluxos canônicos, em vez de
@@ -3953,10 +3982,8 @@ function renderObrigacoes() {
 
   // Agregado honesto: havendo qualquer valor estimado, o total NÃO é
   // apresentado como exato — a diferença entre devido e estimado é preservada.
-  const total = _r(itens.reduce((s, i) => s + _c(i.valorSugerido), 0));
-  const temEstimativa = itens.some(i => i.valorEhEstimativa);
-  const plural = itens.length === 1 ? 'compromisso' : 'compromissos';
-  if (resumoEl) resumoEl.textContent = `${itens.length} ${plural} · ${temEstimativa ? 'cerca de ' : ''}${R(total)}`;
+  const resumo = _obrigacoesResumo(itens);
+  if (resumoEl) resumoEl.textContent = `${_obrigacoesContagemTexto(resumo)} · ${_obrigacoesTotalTexto(resumo)}`;
 
   listaEl.innerHTML = `<div class="home-venc-list obr-lista">${itens.map(_obrigacaoRowHtml).join('')}</div>`;
 }
@@ -3969,6 +3996,44 @@ function abrirCompromissos() {
   _sairDoLancamento();
   renderObrigacoes();
   openOverlay('modal-obrigacoes');
+}
+
+// ── Faixa do "+" ──────────────────────────────────────────────────────────
+// Atalho, nunca etapa: o "+" continua abrindo o formulário direto, e receita ou
+// gasto comum seguem no mesmo número de toques ignorando a faixa. Sem itens em
+// aberto, o slot fica literalmente vazio (`#qa-compr-slot:empty` some) e o
+// formulário fica idêntico ao de hoje. Recalcula do resolvedor a cada abertura:
+// sem cache e sem estado persistido, de modo que quitar um compromisso já se
+// reflete na próxima vez que o "+" abrir.
+function renderFaixaCompromissos() {
+  const slot = document.getElementById('qa-compr-slot');
+  if (!slot) return;
+  // Só na criação: em edição o formulário está preso a um registro existente
+  // (o toggle de tipo é travado) e um atalho para outro fluxo ali seria ruído.
+  const resumo = _qaEdit ? _obrigacoesResumo([]) : _obrigacoesResumo(_obrigacoesEmAberto());
+  if (!resumo.quantidade) { slot.innerHTML = ''; return; }
+
+  const atraso = resumo.atrasados > 0;
+  const topo = atraso
+    ? `${resumo.atrasados} ${resumo.atrasados === 1 ? 'atrasado' : 'atrasados'} · ${_obrigacoesContagemTexto(resumo)} em aberto`
+    : `${_obrigacoesContagemTexto(resumo)} em aberto`;
+  const valor = _obrigacoesTotalTexto(resumo);
+  const ico = atraso
+    ? '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
+    : '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>';
+  slot.innerHTML = `<button type="button" class="qa-compr${atraso ? ' qa-compr--atraso' : ''}" onclick="abrirCompromissos()"
+      aria-label="${escHtml(`${topo}, ${valor}. Abrir compromissos em aberto.`)}">
+    <span class="qa-compr-ico" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${ico}</svg>
+    </span>
+    <span class="qa-compr-main">
+      <span class="qa-compr-top">${escHtml(topo)}</span>
+      <span class="qa-compr-sub">${escHtml(valor)}</span>
+    </span>
+    <span class="qa-compr-chev" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </span>
+  </button>`;
 }
 
 // ── Vencimentos na Home: atrasados + hoje + próximos (projeção; nunca despesa) ──
@@ -6730,6 +6795,8 @@ function openQuickAdd(editRef) {
   const amtEl = document.getElementById('qa-amt-input');
   const descEl = document.getElementById('qa-desc');
   document.getElementById('qa-suggest-row').style.display = 'none';
+  // Antes de qualquer ramo: a faixa reflete o estado no instante da abertura.
+  renderFaixaCompromissos();
 
   if (!_qaEdit) {
     // ── Criação ──
