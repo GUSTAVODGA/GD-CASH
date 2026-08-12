@@ -100,29 +100,30 @@ chk('1. remetente correto → 1 item',
 }
 // 11 — PDF acima do limite
 {
-  // conteúdo grande o bastante para o DOC serializado (base64) passar do limite
-  const grande = pdf('grande.pdf', 'x'.repeat(700000));
+  // conteúdo grande o bastante para o DOC real (base64) passar do limite
+  const grande = pdf('grande.pdf', 'x'.repeat(800000));
   const ok = pdf('ok.pdf', 'pequeno');
   const r = B.processarLote([{ messageId: 'm11', from: DE, subject: 'NFe', attachments: [grande, ok] }], opts);
   const rej = r.ignoradas.find(i => i.motivo === 'arquivo_grande');
-  chk('11. arquivo acima do limite → rejeição controlada (motivo arquivo_grande, sem corte)', !!rej && rej.docBytes > B.ARQ_LIM.docMaxSeguro);
+  chk('11. arquivo acima do limite → rejeição controlada (motivo arquivo_grande, sem corte)', !!rej && rej.docBytes > B.ARQ_LIM.docSizeMax);
   chk('11. o PDF pequeno do mesmo e-mail vira item normalmente', r.itens.length === 1 && r.itens[0].arquivo.nome === 'ok.pdf');
-  chk('11. limite conservador fica abaixo do teto de 1 MiB', B.ARQ_LIM.docMaxSeguro < B.ARQ_LIM.firestoreDocMax && B.maxPdfBytes() > 0);
+  chk('11. limite conservador fica abaixo do teto de 1 MiB', B.ARQ_LIM.docSizeMax < B.ARQ_LIM.firestoreDocMax && B.maxPdfBytes() > 0);
 }
 
-// ── Limite conservador (seção 3): tamanho serializado completo ──
+// ── Limite conservador (seção 5): FÓRMULA REAL do Firestore ──
 {
-  const mkArq = (b64) => ({ notaPendenteId: 'nfe-' + 'a'.repeat(64), sha256: 'a'.repeat(64), mime: 'application/pdf', nome: 'nota.pdf', tamanhoBytes: 1000, dataBase64: b64, criadoEm: 1 });
-  const overhead = B.tamanhoDocSerializado(mkArq(''));
-  const N = B.ARQ_LIM.docMaxSeguro - overhead;
+  const ID = 'nfe-' + 'a'.repeat(64);
+  const mkArq = (b64) => ({ notaPendenteId: ID, sha256: 'a'.repeat(64), mime: 'application/pdf', nome: 'nota.pdf', tamanhoBytes: 1000, dataBase64: b64, criadoEm: 1 });
+  const N = B.maxBase64Len(ID);
   const noLimite = mkArq('A'.repeat(N));
   const umAcima = mkArq('A'.repeat(N + 1));
   const real = mkArq('A'.repeat(Math.ceil(283000 * 4 / 3)));  // PDF realista ~283 KB
-  chk('L1. PDF realista ~283KB → dentro do limite', B.arquivoDocDentroDoLimite(real) && B.tamanhoDocSerializado(real) < B.ARQ_LIM.firestoreDocMax);
-  chk('L2. arquivo EXATAMENTE no limite é aceito', B.arquivoDocDentroDoLimite(noLimite) && B.tamanhoDocSerializado(noLimite) === B.ARQ_LIM.docMaxSeguro);
-  chk('L3. um byte acima é rejeitado', !B.arquivoDocDentroDoLimite(umAcima));
-  chk('L4. metadados extras empurram acima → rejeitado', !B.arquivoDocDentroDoLimite(Object.assign({}, noLimite, { nome: 'x'.repeat(300) })));
-  chk('L5. documento final sempre abaixo do teto do Firestore', B.tamanhoDocSerializado(noLimite) < B.ARQ_LIM.firestoreDocMax);
+  chk('L1. PDF realista ~283KB → dentro do limite', B.arquivoDocDentroDoLimite(real, ID) && B.tamanhoDocArquivoReal(real, ID) < B.ARQ_LIM.firestoreDocMax);
+  chk('L2. arquivo EXATAMENTE no limite é aceito', B.arquivoDocDentroDoLimite(noLimite, ID) && B.tamanhoDocArquivoReal(noLimite, ID) === B.ARQ_LIM.docSizeMax);
+  chk('L3. um byte acima é rejeitado', !B.arquivoDocDentroDoLimite(umAcima, ID));
+  chk('L4. metadados extras (nome maior) empurram acima → rejeitado', !B.arquivoDocDentroDoLimite(Object.assign({}, noLimite, { nome: 'x'.repeat(300) }), ID));
+  chk('L5. documento final sempre abaixo do teto do Firestore', B.tamanhoDocArquivoReal(noLimite, ID) < B.ARQ_LIM.firestoreDocMax);
+  console.log('   [calc] teto=' + B.ARQ_LIM.firestoreDocMax + ' docSizeMax=' + B.ARQ_LIM.docSizeMax + ' overheadSemBase64=' + B.overheadSemBase64(ID) + ' maxBase64Len=' + N + ' maxPdfBytes=' + B.maxPdfBytes(ID));
 }
 
 // 12 — metadado compatível com novaNotaPendente() real

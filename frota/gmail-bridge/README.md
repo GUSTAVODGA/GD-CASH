@@ -136,40 +136,71 @@ O teste 12 comprova que `novaNotaPendente(metadado)` produz uma nota válida
 5. Nota **rejeitada** mantém o PDF.
 6. **Sem limpeza automática** ainda. *Política de retenção futura:* arquivos de
    `notaArquivos` órfãos (nota rejeitada há > N dias, ou confirmada e já migrada)
-   podem ser expurgados por rotina auditável; o anexo da despesa é a fonte
-   definitiva. Não implementada nesta etapa.
+   podem ser expurgados por rotina auditável. Não implementada nesta etapa.
+
+**Quem exclui a cópia transitória?** O **sócio autenticado**, pelo app, no ato
+da confirmação (a exclusão passa pelo catch-all dos sócios). O **robô não tem
+permissão** de excluir. A remoção só ocorre **depois** de o anexo permanente da
+despesa estar comprovadamente salvo (`addAnexoRecord` retornou sem erro). Se a
+remoção falhar, sobra **uma cópia extra** (anexo + `notaArquivos`), **nunca** se
+perde o documento; um retry não cria anexos duplicados (id de tx determinístico +
+dedup do anexo por conteúdo).
+
+**Fonte permanente após a confirmação:** o **anexo da despesa** (`anexos`, mesmo
+sistema atual). O metadado guarda `anexoTxId`. **Se a despesa for excluída**
+depois: o anexo **persiste** (a exclusão da tx é *soft delete*, não remove
+`anexos`); a nota **reabre** para revisão e o PDF continua **acessível** via
+`anexoTxId`. Nunca há confirmação silenciosa de despesa inexistente.
 
 ---
 
-## 4. Hash, idempotência, marcação e retry
+## 4. Gravação atômica, idempotência, marcação e retry
 
-- **Identidade do documento:** `idDocumento(sha256(pdf))` — endereçada por
-  **conteúdo** (SHA-256). Dois e-mails com o **mesmo PDF** produzem o mesmo
-  `id` → reconhecidos como o **mesmo documento** (sem duplicar). Nome e tamanho
-  são só metadados (arquivos diferentes podem ter o mesmo nome/tamanho, por isso
-  **não** entram na identidade).
-- **Referência por anexo/mensagem:** `refAnexo(messageId, sha256)` — usada na
-  **marcação por mensagem** no Gmail.
-- **Marcação:** **não** confiar só no label da thread (a thread pode receber
-  mensagens/anexos novos). Marca-se **por mensagem/anexo** (`refAnexo`), e a
-  **fonte de verdade primária é o armazenamento idempotente** por `idDocumento`.
-- **Retry após falha:** se o robô cair **depois** de gravar o item e **antes** de
-  marcar o Gmail, ao reprocessar ele recomputa o `sha256` → o item já existe (id
-  idêntico) → **não duplica**. Se cair **antes** de gravar, o retry cria o item
-  **uma única vez**. A dedup de negócio final (chave de acesso da NF-e) continua
-  no momento de **confirmar a despesa**, no app.
+- **Gravação ATÔMICA obrigatória:** o par (`notaArquivos/{id}` + `notasPendentes/
+  {id}`) é criado numa **única** operação `documents:commit` com **duas writes**,
+  cada uma com `currentDocument.exists=false`. Se qualquer parte falhar,
+  **nenhuma** das duas existe. Duas requisições sequenciais **não** são
+  atomicidade — não são usadas.
+- **Vínculo BILATERAL nas regras:** `getAfter()`/`existsAfter()` validam o par
+  na mesma operação — criar um sem o outro, ids/hashes divergentes, ou apontar
+  para um doc antigo de outra nota são **negados** (ver seção Regras).
+- **Identidade endereçada por conteúdo:** `id = 'nfe-' + sha256(pdf)`, e as regras
+  exigem `sha256 == hashDoId(id)`. Logo, **a existência de um id prova o
+  conteúdo**. Isso torna a idempotência **segura mesmo SEM leitura**: no retry, o
+  robô reenvia o mesmo commit com `exists=false`; se o par já existe, recebe
+  **FAILED_PRECONDITION** e trata como *já ingerido* — sem precisar ler para
+  confirmar que é o mesmo par (conteúdo diferente ⇒ sha diferente ⇒ id diferente,
+  nunca colide). **Não** se trata qualquer `ALREADY_EXISTS` como sucesso cego: só
+  é seguro porque o id é o hash do conteúdo.
+- **Marcação:** **não** confiar só no label da thread (ela pode receber anexos
+  novos). A proteção **primária** é o armazenamento idempotente por `id` de
+  conteúdo; a marcação da thread (`lagos-ingerido`) só acontece quando **tudo**
+  deu certo. Se metadado **ou** arquivo falhar, o e-mail **não** é marcado →
+  retry seguro no próximo ciclo.
+- A dedup de **negócio** final (chave de acesso da NF-e) continua no momento de
+  **confirmar a despesa**, no app.
 
 ---
 
 ## 5. Limites e arquivos
 
-- **Firestore:** ~**1 MiB por documento**, contando **todos** os campos.
-- Limite **calculado sobre o tamanho serializado COMPLETO** do documento de
-  arquivo (base64 + campos), não sobre o máximo teórico: **`docMaxSeguro`
-  = 900 000 bytes** (margem de ~145 KiB abaixo do teto), com `maxPdfBytes`
-  derivado ≈ **674 KB**. Testado: PDF realista ~283 KB (aceito), exatamente no
-  limite (aceito), um byte acima (rejeitado), metadados extras que empurram
-  acima (rejeitado), documento final sempre < 1 MiB.
+- **Teto do Firestore:** **1 048 576 bytes por documento**.
+- Limite pela **fórmula REAL do Firestore** (não JSON.stringify): `string =
+  bytes UTF-8 + 1`; `inteiro/timestamp = 8`; `null/bool = 1`; `mapa/array = 32 +
+  itens`; **nome do doc** = Σ(segmento+1) + 16; **total** = nomeDoc + Σ(campos) + 32.
+- **Cálculo exato** (id `notaArquivos/nfe-<64hex>`): overhead sem o valor do
+  base64 = **371 bytes**; margem de segurança **48 576 bytes** →
+  `docSizeMax` = **1 000 000**. Como um valor string de comprimento *L* soma
+  exatamente *L* bytes, `maxBase64Len = 1 000 000 − 371 =` **999 629** e
+  `maxPdfBytes = ⌊999 629 × ¾⌋ =` **749 721**. Todos os documentos finais ficam
+  ≤ 1 000 000 < 1 048 576 (folga de ~48 KiB até o teto).
+- **Testado:** PDF realista ~283 KB (aceito), exatamente no limite (aceito), um
+  byte acima (rejeitado), metadados extras que empurram acima (rejeitado),
+  documento final sempre < 1 MiB.
+- **Data URL vs base64 cru:** guardamos o **base64 CRU** em `dataBase64` (sem o
+  prefixo `data:application/pdf;base64,`, 28 bytes). O `mime` já é um campo, então
+  o prefixo é **redundante** e só aumenta o overhead — o app reconstrói o data URL
+  ao carregar. Reduz o documento e simplifica.
 - **Rejeição controlada:** arquivo acima do limite é **ignorado com motivo
   `arquivo_grande`** — **nunca** há corte silencioso; os demais PDFs do mesmo
   e-mail seguem normalmente. No app, a importação para a fila rejeita

@@ -63,7 +63,7 @@ const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || u
 const p = await (await b.newContext({ viewport: { width: 400, height: 860 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })).newPage();
 const errs = [];
 p.on('pageerror', e => errs.push('PE:' + e.message));
-p.on('console', m => { if (m.type() === 'error') { const t = m.text(); if (!/ERR_|Failed to load|status of 4|net::|jsdelivr|tesseract|pdf\.min|pdf\.worker|pdf\.local|OCR indispon|texto nativo|falha simulada/i.test(t)) errs.push('C:' + t); } });
+p.on('console', m => { if (m.type() === 'error') { const t = m.text(); if (!/ERR_|Failed to load|status of 4|net::|jsdelivr|tesseract|pdf\.min|pdf\.worker|pdf\.local|OCR indispon|texto nativo|falha simulada|migrar arquivo|falha remover/i.test(t)) errs.push('C:' + t); } });
 
 await p.goto(`http://localhost:${PORT}/index.html`); await p.waitForTimeout(800);
 await p.locator('.lp-card').first().tap(); await p.waitForTimeout(1000);
@@ -383,6 +383,47 @@ const del2 = await p.evaluate(async () => {
 });
 chk('5. excluir despesa comum não altera nenhuma nota', del2.notaIgual);
 chk('5. excluir tx da fila reabre a nota mas preserva o PDF', del2.reabriu && del2.pdf);
+
+console.log('\n== AUDITORIA CORRETIVA: ciclo do arquivo (sem duplicação permanente) ==');
+const cic = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; S.anexos = []; S.notaArquivos = []; demoSave();
+  const id = mkNota({ posto: 'Ciclo', valor: 60, data: '2026-09-01', chaveNota: '6'.repeat(44) });
+  const arqAntes = (S.notaArquivos || []).some(a => a.notaPendenteId === id);
+  await confirmarNota(id);
+  const n = getNota(id); const txId = n.txId;
+  const arqDepois = (S.notaArquivos || []).some(a => a.notaPendenteId === id);
+  const anexoNaTx = (S.anexos || []).some(a => a.parentId === txId);
+  return { arqAntes, arqDepois, anexoNaTx, arqIdNulo: n.arquivoId === null, anexoTxId: n.anexoTxId === txId };
+});
+chk('11. confirmar: arquivo transitório removido, anexo na despesa (1 cópia permanente)', cic.arqAntes && !cic.arqDepois && cic.anexoNaTx && cic.arqIdNulo && cic.anexoTxId);
+
+const remFalha = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; S.anexos = []; S.notaArquivos = []; demoSave();
+  const id = mkNota({ posto: 'RemFalha', valor: 80, data: '2026-09-03', chaveNota: '8'.repeat(44) });
+  const orig = S.notaArquivos;   // faz a REMOÇÃO do transitório falhar
+  S.notaArquivos = new Proxy(orig, { get(t, k) { if (k === 'filter') return () => { throw new Error('falha remover'); }; const v = t[k]; return typeof v === 'function' ? v.bind(t) : v; } });
+  await confirmarNota(id);
+  S.notaArquivos = orig;
+  const n = getNota(id); const txId = n.txId;
+  const arqVivo = (orig || []).some(a => a.notaPendenteId === id);
+  const anexoNaTx = (S.anexos || []).some(a => a.parentId === txId);
+  return { arqVivo, anexoNaTx, confirmada: n.status === 'confirmada' };
+});
+chk('12. falha ao remover o transitório → 2 cópias (anexo + arquivo), nada perdido', remFalha.arqVivo && remFalha.anexoNaTx && remFalha.confirmada);
+
+const posDel = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; S.anexos = []; S.notaArquivos = []; demoSave();
+  const id = mkNota({ posto: 'PosDel', valor: 90, data: '2026-09-04', chaveNota: '7'.repeat(44) });
+  await confirmarNota(id);
+  const txId = getNota(id).txId;
+  await softDeleteTx(txId); await new Promise(r => setTimeout(r, 40));
+  const n = getNota(id);
+  const pdf = await carregarPdfDaNota(n);
+  return { reaberta: n.status === 'precisa_revisao', temPdf: !!(pdf && pdf.data) };
+});
+chk('13. excluir a tx depois → nota reabre e o PDF continua acessível (via anexo)', posDel.reaberta && posDel.temPdf);
+chk('14. nenhum arquivo órfão (todo notaArquivos referenciado por uma nota)',
+  await p.evaluate(() => (S.notaArquivos || []).filter(a => !(S.notasPendentes || []).some(n => n.arquivoId === a.id)).length === 0));
 
 console.log('\n== 18. regressão: importador manual/Financeiro/KM/anexos ==');
 const reg = await p.evaluate(async () => {

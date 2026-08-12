@@ -3982,11 +3982,39 @@ function novoNotaArquivo(dados) {
     criadoEm: dados.criadoEm || Date.now(),
   };
 }
-// Limite CONSERVADOR do documento de arquivo (base64 + campos), com margem
-// larga sob o teto de 1 MiB do Firestore. Rejeição EXPLÍCITA, sem corte.
-const NOTA_ARQ_LIM = { firestoreDocMax: 1048576, docMaxSeguro: 900000 };
-function tamanhoDocArquivo(doc) { return new TextEncoder().encode(JSON.stringify(doc)).length; }
-function arquivoDentroDoLimite(doc) { return tamanhoDocArquivo(doc) <= NOTA_ARQ_LIM.docMaxSeguro; }
+// Limite CONSERVADOR pela FÓRMULA REAL do Firestore (nome do doc + nomes de
+// campo + valores + overhead), não por JSON.stringify. Rejeição EXPLÍCITA.
+const NOTA_ARQ_LIM = { firestoreDocMax: 1048576, docSizeMax: 1000000 };
+function _fsStr(s) { return new TextEncoder().encode(String(s)).length + 1; }
+function _fsVal(v) {
+  if (v === null || v === undefined) return 1;
+  if (typeof v === 'boolean') return 1;
+  if (typeof v === 'number') return 8;
+  if (typeof v === 'string') return _fsStr(v);
+  if (Array.isArray(v)) return 32 + v.reduce((s, x) => s + _fsVal(x), 0);
+  if (typeof v === 'object') return 32 + Object.keys(v).reduce((s, k) => s + _fsStr(k) + _fsVal(v[k]), 0);
+  return 0;
+}
+function tamanhoDocArquivo(doc, id) {
+  const nome = ['notaArquivos', id].reduce((s, seg) => s + _fsStr(seg), 0) + 16;
+  return nome + Object.keys(doc).reduce((s, k) => s + _fsStr(k) + _fsVal(doc[k]), 0) + 32;
+}
+function arquivoDentroDoLimite(doc, id) { return tamanhoDocArquivo(doc, id) <= NOTA_ARQ_LIM.docSizeMax; }
+// grava o PAR (arquivo + metadado) de forma ATÔMICA (batch no Firestore; em
+// demo, os dois juntos). Se qualquer parte falhar, nenhuma persiste.
+async function dataCommitPar(idA, arqDoc, idM, metaDoc) {
+  if (DEMO) {
+    S.notaArquivos = S.notaArquivos || [];
+    if (!S.notaArquivos.find(x => x.id === idA)) S.notaArquivos.push({ ...arqDoc, id: idA });
+    const i = S.notasPendentes.findIndex(x => x.id === idM);
+    if (i >= 0) S.notasPendentes[i] = { ...metaDoc, id: idM }; else S.notasPendentes.push({ ...metaDoc, id: idM });
+    demoSave(); renderAll(); return;
+  }
+  const batch = db.batch();
+  batch.set(db.collection('notaArquivos').doc(idA), arqDoc);
+  batch.set(db.collection('notasPendentes').doc(idM), metaDoc);
+  await batch.commit();
+}
 async function sha256Hex(str) {
   try {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(str || '')));
@@ -4000,8 +4028,13 @@ async function carregarArquivoNota(arquivoId) {
   try { const snap = await db.collection('notaArquivos').doc(arquivoId).get(); return snap.exists ? { ...snap.data(), id: snap.id } : null; }
   catch (e) { console.error('carregar arquivo nota', e); return null; }
 }
+// reconstrói o data URL a partir do base64 CRU + mime (que ficam em notaArquivos)
+function _dataUrl(mime, b64) {
+  if (/^data:/.test(b64 || '')) return b64;   // tolera formato antigo
+  return 'data:' + (mime || 'application/pdf') + ';base64,' + (b64 || '');
+}
 async function carregarPdfDaNota(n) {
-  if (n && n.arquivoId) { const a = await carregarArquivoNota(n.arquivoId); if (a && a.dataBase64) return { nome: a.nome, mime: a.mime, data: a.dataBase64 }; }
+  if (n && n.arquivoId) { const a = await carregarArquivoNota(n.arquivoId); if (a && a.dataBase64) return { nome: a.nome, mime: a.mime, data: _dataUrl(a.mime, a.dataBase64) }; }
   if (n && n.anexoTxId) { try { const list = await anexosDe(n.anexoTxId); if (list && list[0]) return { nome: list[0].nome, mime: list[0].mime, data: list[0].data }; } catch (e) {} }
   return null;
 }
@@ -4055,11 +4088,14 @@ async function importNotaParaFila(input) {
   const temTexto = textoUtil(leitura.texto);
   const info = leitura.texto ? parseNota(leitura.texto) : {};
   const notaId = newId();
-  const sha = await sha256Hex(anexo.data);
-  const tamanho = (anexo.data || '').length;
-  const arquivo = novoNotaArquivo({ notaPendenteId: notaId, sha256: sha, mime: anexo.mime, nome: anexo.nome, tamanhoBytes: tamanho, dataBase64: anexo.data });
+  // guarda o base64 CRU (sem o prefixo data:...;base64,) — o mime já é um campo,
+  // então o prefixo é redundante e reduz o overhead do documento.
+  const rawB64 = String(anexo.data || '').replace(/^data:[^,]*,/, '');
+  const sha = await sha256Hex(rawB64);
+  const tamanho = Math.floor(rawB64.length * 3 / 4);   // bytes do PDF cru
+  const arquivo = novoNotaArquivo({ notaPendenteId: notaId, sha256: sha, mime: anexo.mime, nome: anexo.nome, tamanhoBytes: tamanho, dataBase64: rawB64 });
   // rejeição EXPLÍCITA se o documento de arquivo passar do limite conservador
-  if (!arquivoDentroDoLimite(arquivo)) { toast('Essa nota é grande demais para a fila. Tire uma foto do documento ou reduza o PDF.'); return; }
+  if (!arquivoDentroDoLimite(arquivo, notaId)) { toast('Essa nota é grande demais para a fila. Tire uma foto do documento ou reduza o PDF.'); return; }
   const nota = novaNotaPendente({
     id: notaId, origem: 'manual',
     anexoNome: anexo.nome, anexoMime: anexo.mime, arquivoId: notaId,
@@ -4069,9 +4105,8 @@ async function importNotaParaFila(input) {
     erroLeitura: temTexto ? null : 'sem_texto_util',
   });
   try {
-    // grava o ARQUIVO primeiro, depois o METADADO (ordem exigida pelas regras)
-    await dataSet('notaArquivos', notaId, arquivo);
-    await dataSet('notasPendentes', notaId, nota);
+    // grava o PAR (arquivo + metadado) de forma ATÔMICA — nunca deixa órfão
+    await dataCommitPar(notaId, arquivo, notaId, nota);
     toast('Nota adicionada às "Notas para revisar"');
     goTab('lanc');
     setTimeout(() => { const el = $('notas-revisar'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);

@@ -10,20 +10,43 @@
 
 export const REMETENTE_ESPERADO = 'appisca.nfe@gmail.com';
 
-// Limite CONSERVADOR calculado sobre o tamanho serializado COMPLETO do
-// documento de arquivo (base64 + campos), com margem larga abaixo do teto de
-// 1 MiB do Firestore. Nada de usar o máximo teórico.
+// Limite CONSERVADOR calculado pela FÓRMULA REAL de tamanho do documento do
+// Firestore (nome do doc + nomes de campo + valores + overhead), não por
+// JSON.stringify. Fórmula oficial: string = bytes UTF-8 + 1; inteiro/timestamp
+// = 8; null/bool = 1; mapa/array = 32 + itens; nome do doc = Σ(segmento+1) + 16;
+// total = nomeDoc + Σ(campos) + 32.
 export const ARQ_LIM = {
   firestoreDocMax: 1048576,   // 1 MiB por documento (teto do Firestore)
-  docMaxSeguro: 900000,       // margem de ~145 KiB abaixo do teto
+  docSizeMax: 1000000,        // margem de 48 576 bytes (~47,4 KiB) sob o teto
 };
-// maxPdf derivado (informativo): base64 infla ~4/3; reservamos campos.
-export function maxPdfBytes(lim = ARQ_LIM) { return Math.floor((lim.docMaxSeguro - 1024) / 4) * 3; }
+function utf8Len(s) { return new TextEncoder().encode(String(s)).length; }
+function strSize(s) { return utf8Len(s) + 1; }
+function valSize(v) {
+  if (v === null || v === undefined) return 1;
+  if (typeof v === 'boolean') return 1;
+  if (typeof v === 'number') return 8;
+  if (typeof v === 'string') return strSize(v);
+  if (Array.isArray(v)) return 32 + v.reduce((s, x) => s + valSize(x), 0);
+  if (typeof v === 'object') return 32 + Object.keys(v).reduce((s, k) => s + strSize(k) + valSize(v[k]), 0);
+  return 0;
+}
+// tamanho REAL do documento no Firestore (bytes), incluindo o nome do documento.
+export function firestoreDocSize(fields, docPath) {
+  const nome = docPath.reduce((s, seg) => s + strSize(seg), 0) + 16;
+  const campos = Object.keys(fields).reduce((s, k) => s + strSize(k) + valSize(fields[k]), 0);
+  return nome + campos + 32;
+}
+export function tamanhoDocArquivoReal(arq, id) { return firestoreDocSize(arq, ['notaArquivos', id]); }
+export function arquivoDocDentroDoLimite(arq, id, lim = ARQ_LIM) { return tamanhoDocArquivoReal(arq, id) <= lim.docSizeMax; }
+// Tamanho do doc com dataBase64 vazio; um valor de comprimento L acrescenta
+// exatamente L bytes ao total (strSize('')=1 → strSize(L)=L+1).
+export function overheadSemBase64(id) { return tamanhoDocArquivoReal(montarArquivoBase(id), id); }
+export function maxBase64Len(id = 'nfe-' + 'a'.repeat(64), lim = ARQ_LIM) { return lim.docSizeMax - overheadSemBase64(id); }
+export function maxPdfBytes(id) { return Math.floor(maxBase64Len(id) * 3 / 4); }
 export function base64Bytes(pdfBytes) { return Math.ceil(pdfBytes / 3) * 4; }
-function utf8Len(s) { return new TextEncoder().encode(s).length; }
-// tamanho serializado real do documento (UTF-8 de JSON.stringify).
-export function tamanhoDocSerializado(doc) { return utf8Len(JSON.stringify(doc)); }
-export function arquivoDocDentroDoLimite(doc, lim = ARQ_LIM) { return tamanhoDocSerializado(doc) <= lim.docMaxSeguro; }
+function montarArquivoBase(id) {
+  return { notaPendenteId: id, sha256: 'a'.repeat(64), mime: 'application/pdf', nome: 'nota.pdf', tamanhoBytes: 999999, dataBase64: '', criadoEm: 1 };
+}
 
 // ── Remetente ────────────────────────────────────────────────────────────
 export function enderecoDoFrom(from) {
@@ -108,9 +131,9 @@ export function processarMensagem(msg, opts = {}) {
     const sha = sha256(att.bytes);
     const docId = idDocumento(sha);
     const arquivo = montarArquivo(msg, att, sha, docId, tamanho);
-    // rejeição CONTROLADA pelo tamanho serializado COMPLETO — nunca corta.
-    if (!arquivoDocDentroDoLimite(arquivo, lim)) {
-      res.ignoradas.push({ messageId: msg.messageId, anexo: att.fileName, motivo: 'arquivo_grande', bytes: tamanho, docBytes: tamanhoDocSerializado(arquivo), limite: lim.docMaxSeguro });
+    // rejeição CONTROLADA pelo tamanho REAL do documento no Firestore — nunca corta.
+    if (!arquivoDocDentroDoLimite(arquivo, docId, lim)) {
+      res.ignoradas.push({ messageId: msg.messageId, anexo: att.fileName, motivo: 'arquivo_grande', bytes: tamanho, docBytes: tamanhoDocArquivoReal(arquivo, docId), limite: lim.docSizeMax });
       continue;
     }
     res.marcacoes.push({ messageId: msg.messageId, anexo: att.fileName, sha256: sha, ref: refAnexo(msg.messageId, sha), docId });
