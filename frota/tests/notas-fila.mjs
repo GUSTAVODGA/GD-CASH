@@ -50,6 +50,14 @@ const PORT = server.address().port;
 let PASS = 0, FAIL = 0, SKIP = 0;
 const chk = (n, c, x = '') => { if (c) { PASS++; console.log('OK ✓ ' + n + (x ? ' | ' + x : '')); } else { FAIL++; console.log('*** FAIL *** ' + n + (x ? ' | ' + x : '')); } };
 const skip = n => { SKIP++; console.log('SKIP – ' + n); };
+// helpers de teste injetados na página (reaproveitados após cada reload)
+const injectHelpersInline = () => {
+  window.VID = S.vehicles[0].id;
+  window.mkNota = (lido, extra = {}) => { const n = novaNotaPendente(Object.assign({ origem: 'manual', anexoNome: 'x.pdf', anexoMime: 'application/pdf', anexoData: 'data:application/pdf;base64,AAAA', lido, status: 'precisa_revisao' }, extra)); S.notasPendentes.push(n); demoSave(); renderAll(); return n.id; };
+  window.confirmarNota = async (id, veic) => { revisarNotaPendente(id); document.getElementById('nc-veiculo').value = veic || window.VID; await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60)); };
+  window.txComb = () => S.tx.filter(t => !t.deleted && t.cat === 'combustivel');
+  window.getNota = id => S.notasPendentes.find(n => n.id === id);
+};
 
 const b = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined });
 const p = await (await b.newContext({ viewport: { width: 400, height: 860 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 })).newPage();
@@ -285,6 +293,92 @@ const del = await p.evaluate(async () => {
 chk('16. excluir tx → nota reabre (não afirma despesa válida)', del.reaberta);
 chk('16. restaurar tx → nota volta a vincular', del.relink);
 
+console.log('\n== AUDITORIA 3: fila vincula à tx manual SEM alterá-la ==');
+const linkManual = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; S.anexos = []; demoSave();
+  const chave = '1'.repeat(44);
+  abrirConferenciaNota({ valor: 70, data: '2026-08-09', litros: 7, placa: 'ABC1D23', km: 1234, chaveNota: chave });
+  document.getElementById('nc-veiculo').value = window.VID; document.getElementById('nc-valor').value = '70,00';
+  await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60));
+  const manual = txComb()[0]; const snap = JSON.stringify(manual); const nAnexo = (S.anexos || []).length;
+  const id = mkNota({ posto: 'Fila', valor: 999, data: '2026-01-01', litros: 99, placa: 'ZZZ9Z99', km: 88888, chaveNota: chave });
+  revisarNotaPendente(id); document.getElementById('nc-veiculo').value = window.VID;
+  document.getElementById('nc-valor').value = '999,00'; document.getElementById('nc-km').value = '88888';
+  await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60));
+  const manual2 = txComb().find(t => t.id === manual.id); const n = getNota(id);
+  return { nTx: txComb().length, inalterado: JSON.stringify(manual2) === snap, semAnexoNovo: (S.anexos || []).length === nAnexo, avisa: n.jaLancada === true, vinc: n.txId === manual.id };
+});
+chk('3. vincula à tx manual sem alterar valor/veículo/km/data e sem anexar', linkManual.nTx === 1 && linkManual.inalterado && linkManual.semAnexoNovo);
+chk('3. informa "já lançada" e guarda vínculo consistente', linkManual.avisa && linkManual.vinc);
+
+console.log('\n== AUDITORIA 4: fallback fiscal exige CNPJ+número+série ==');
+const fb = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; demoSave();
+  const a = mkNota({ posto: 'A', valor: 50, data: '2026-08-20', cnpjEmitente: '11.222.333/0001-44', numeroNota: '000.100', serieNota: '1' });
+  const b = mkNota({ posto: 'B', valor: 50, data: '2026-08-21', cnpjEmitente: '11.222.333/0001-44', numeroNota: '000.100', serieNota: '1' });
+  await confirmarNota(a); await confirmarNota(b);
+  const comFull = txComb().length;
+  S.tx = []; S.notasPendentes = []; demoSave();
+  const c = mkNota({ posto: 'C', valor: 60, data: '2026-08-22', cnpjEmitente: '11.222.333/0001-44', numeroNota: '000.200' });
+  const d = mkNota({ posto: 'D', valor: 60, data: '2026-08-22', cnpjEmitente: '11.222.333/0001-44', numeroNota: '000.200' });
+  await confirmarNota(c); await confirmarNota(d);
+  return { comFull, semSerie: txComb().length };
+});
+chk('4. conjunto fiscal completo (cnpj+nº+série) deduplica → 1 tx', fb.comFull === 1);
+chk('4. conjunto incompleto (sem série) NÃO gera identidade fraca → 2 tx', fb.semSerie === 2);
+
+console.log('\n== AUDITORIA 4: sem chave nem fiscal → não se bloqueiam ==');
+const noKey = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; demoSave();
+  await confirmarNota(mkNota({ posto: 'X', valor: 33, data: '2026-08-26' }));
+  await confirmarNota(mkNota({ posto: 'Y', valor: 33, data: '2026-08-26' }));
+  return { nTx: txComb().length };
+});
+chk('4. sem identidade fiscal, mesmo valor/data → 2 tx (não bloqueia)', noKey.nTx === 2);
+
+console.log('\n== AUDITORIA 4: mesma nota em 2 e-mails → 1 despesa ==');
+const emailDup = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; demoSave();
+  const chave = '2'.repeat(44);
+  const a = mkNota({ posto: 'E1', valor: 80, data: '2026-08-23', chaveNota: chave }, { origem: 'email', emailMessageId: 'm1', emailFrom: 'x@y' });
+  const b = mkNota({ posto: 'E2', valor: 80, data: '2026-08-23', chaveNota: chave }, { origem: 'email', emailMessageId: 'm2', emailFrom: 'x@y' });
+  await confirmarNota(a); await confirmarNota(b);
+  return { nTx: txComb().length, bLancada: getNota(b).jaLancada === true };
+});
+chk('4. mesma chave via 2 e-mails → 1 tx', emailDup.nTx === 1 && emailDup.bLancada);
+
+console.log('\n== AUDITORIA 4: rejeitar duplicada não afeta a original ==');
+const rejDup = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; demoSave();
+  const chave = '3'.repeat(44);
+  const orig = mkNota({ posto: 'Orig', valor: 40, data: '2026-08-24', chaveNota: chave });
+  await confirmarNota(orig);
+  const txId = getNota(orig).txId; const st = getNota(orig).status;
+  const dup = mkNota({ posto: 'Dup', valor: 40, data: '2026-08-24', chaveNota: chave });
+  abrirRejeicaoNota(dup); document.querySelector('input[name="nrej-motivo"][value="duplicada"]').checked = true;
+  await confirmarRejeicaoNota(); await new Promise(r => setTimeout(r, 40));
+  const o = getNota(orig);
+  return { origIntacta: o.status === st && o.txId === txId, txViva: !!S.tx.find(t => t.id === txId && !t.deleted), dupRej: getNota(dup).status === 'rejeitada' };
+});
+chk('4. rejeitar duplicada não altera a original nem sua tx', rejDup.origIntacta && rejDup.txViva && rejDup.dupRej);
+
+console.log('\n== AUDITORIA 5: excluir despesa comum não mexe em notas; PDF preservado ==');
+const del2 = await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; S.anexos = []; demoSave();
+  const id = mkNota({ posto: 'PDF', valor: 55, data: '2026-08-25', chaveNota: '4'.repeat(44) });
+  await confirmarNota(id); const txId = getNota(id).txId;
+  S.tx.push({ id: 'comum1', tipo: 'despesa', cat: 'outros', origem: 'frota', valor: 10, data: '2026-08-25', veiculo: window.VID }); demoSave();
+  const antes = JSON.stringify(getNota(id));
+  await softDeleteTx('comum1'); await new Promise(r => setTimeout(r, 40));
+  const notaIgual = JSON.stringify(getNota(id)) === antes;
+  const pdfAntes = getNota(id).anexoData;
+  await softDeleteTx(txId); await new Promise(r => setTimeout(r, 40));
+  const n = getNota(id);
+  return { notaIgual, reabriu: n.status === 'precisa_revisao', pdf: n.anexoData === pdfAntes && !!n.anexoData };
+});
+chk('5. excluir despesa comum não altera nenhuma nota', del2.notaIgual);
+chk('5. excluir tx da fila reabre a nota mas preserva o PDF', del2.reabriu && del2.pdf);
+
 console.log('\n== 18. regressão: importador manual/Financeiro/KM/anexos ==');
 const reg = await p.evaluate(async () => {
   S.tx = []; S.notasPendentes = []; S.anexos = []; S.vehicles[0].km = 0; demoSave();
@@ -323,6 +417,33 @@ await p.evaluate(() => document.documentElement.setAttribute('data-theme', 'ligh
 chk('17. captura clara gerada', fs.existsSync(shotLight));
 chk('17. captura escura gerada', fs.existsSync(shotDark));
 console.log('   capturas em: ' + SHOTS);
+
+console.log('\n== AUDITORIA 3: recuperação de falha parcial APÓS RECARREGAR ==');
+await p.evaluate(async () => {
+  S.tx = []; S.notasPendentes = []; S.anexos = []; demoSave();
+  const chave = '5'.repeat(44);
+  window.__recId = mkNota({ posto: 'Recuperar', valor: 77, data: '2026-08-27', chaveNota: chave });
+  await confirmarNota(window.__recId);      // cria tx + confirma
+  const n = getNota(window.__recId); window.__recTx = n.txId;
+  // simula "tx criada mas nota NÃO atualizou": persiste estado parcial (localStorage)
+  const { id, ...rest } = n;
+  await dataSet('notasPendentes', n.id, Object.assign(rest, { status: 'precisa_revisao', txId: null }));
+});
+const recId = await p.evaluate(() => window.__recId);
+const recTx = await p.evaluate(() => window.__recTx);
+await p.reload(); await p.waitForTimeout(900);
+if (await p.evaluate(() => document.getElementById('login-screen') && getComputedStyle(document.getElementById('login-screen')).display !== 'none')) { await p.locator('.lp-card').first().tap(); await p.waitForTimeout(700); }
+await p.waitForFunction(() => typeof revisarNotaPendente === 'function', { timeout: 6000 });
+await p.evaluate(injectHelpersInline);
+const rec = await p.evaluate(async ({ recId, recTx }) => {
+  const nAntes = getNota(recId);
+  const persistiu = !!nAntes && nAntes.status === 'precisa_revisao' && !nAntes.txId;
+  await confirmarNota(recId);
+  const n2 = getNota(recId);
+  return { persistiu, nTx: txComb().length, mesmaTx: n2.txId === recTx, status: n2.status };
+}, { recId, recTx });
+chk('3. estado parcial (tx sem nota atualizada) sobrevive ao reload', rec.persistiu);
+chk('3. confirmar após reload reconhece a tx e não duplica (1 tx)', rec.nTx === 1 && rec.mesmaTx && rec.status === 'confirmada');
 
 console.log(`\n=== RESULTADO: ${PASS} OK / ${FAIL} FAIL / ${SKIP} SKIP ===`);
 console.log('ERROS JS:', errs.length ? errs.join('\n') : 'nenhum ✓');

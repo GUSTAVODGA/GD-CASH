@@ -345,7 +345,10 @@ function salvarEmpresaDoc(patch) {
 
 function startListeners() {
   stopListeners();
-  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa', 'financiamentos', 'notasPendentes'].forEach(coll => {
+  // NOTA: 'notasPendentes' NÃO entra nos listeners de produção nesta etapa —
+  // a fila roda só em modo demo/teste. O listener (e as regras) serão ativados
+  // na etapa de integração real, não agora.
+  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa', 'financiamentos'].forEach(coll => {
     unsubs.push(db.collection(coll).onSnapshot(snap => {
       S[coll] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
       renderAll();
@@ -3954,7 +3957,9 @@ function chaveDedupNota(lido) {
   const cn = String(lido && lido.cnpjEmitente || '').replace(/\D/g, '');
   const num = String(lido && lido.numeroNota || '').replace(/\D/g, '');
   const ser = String(lido && lido.serieNota || '').replace(/\D/g, '');
-  if (num && cn) return 'alt:' + cn + '-' + num + (ser ? '-' + ser : '');
+  // fallback só quando o conjunto fiscal está COMPLETO (CNPJ + número + série).
+  // Um conjunto incompleto não gera identidade fraca capaz de bloquear outra nota.
+  if (cn && num && ser) return 'alt:' + cn + '-' + num + '-' + ser;
   return '';
 }
 function txPorChaveDedup(chave) {

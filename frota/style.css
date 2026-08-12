@@ -129,6 +129,10 @@ small { color: var(--txt3); }
 
 /* ═══════════ ESTRUTURA ═══════════ */
 #app { max-width: 560px; margin: 0 auto; padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
+/* O FAB flutuante só aparece no Financeiro e vai de ~84px a ~142px acima da
+   base. Reserva-se folga extra no fim desta página para NENHUMA ação/card ficar
+   coberto pelo FAB (a safe-area já entra no padding do #app). */
+#page-lanc { padding-bottom: 96px; }
 .page { display: none; animation: fadeUp .3s ease both; }
 .page.active { display: block; }
 .page-head {
