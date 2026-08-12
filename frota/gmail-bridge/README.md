@@ -100,28 +100,44 @@ privilégio mínimo real por coleção, dispensa Blaze e tem raio de dano mínim
 
 ---
 
-## 3. Formato final do payload (compatível com `novaNotaPendente()`)
+## 3. Modelo final SEPARADO (Etapa 4) — dois documentos por PDF
 
+O base64 NÃO fica no metadado. Cada PDF vira **dois** documentos com o **mesmo
+id** (`nfe-<sha256>`), gravados nesta ordem (o metadado exige o arquivo):
+
+`notaArquivos/{id}` — só o arquivo (lido sob demanda; a lista/listener nunca o baixa):
 ```jsonc
-{
-  "id": "nfe-<sha256_do_pdf>",   // idempotente (endereçado por conteúdo)
-  "status": "recebida",
-  "origem": "email",
-  "anexoNome": "nota.pdf",
-  "anexoMime": "application/pdf",
-  "anexoData": "data:application/pdf;base64,….",
-  "emailMessageId": "<gmail messageId>",
-  "emailFrom": "Auto Posto Pisca Pisca <appisca.nfe@gmail.com>",
-  "emailAssunto": "<assunto, uso só como proteção adicional>",
-  "lido": {},                    // sem OCR no servidor: o app preenche na revisão
-  "txId": null, "motivoRejeicao": null, "erroLeitura": null,
-  "sha256": "<hex>", "ingestadoEm": <ts|null>
-}
+{ "notaPendenteId": "nfe-<sha256>", "sha256": "<hex>", "mime": "application/pdf",
+  "nome": "nota.pdf", "tamanhoBytes": 283000,
+  "dataBase64": "data:application/pdf;base64,….", "criadoEm": <ts> }
+```
+`notasPendentes/{id}` — metadado leve (SEM base64):
+```jsonc
+{ "status": "recebida", "origem": "email", "recebidoEm": <ts>,
+  "emailMessageId": "<gmail messageId>", "emailFrom": "… <appisca.nfe@gmail.com>",
+  "emailAssunto": "<assunto, só proteção adicional>", "sha256": "<hex>",
+  "lido": {}, "arquivoId": "nfe-<sha256>", "tamanhoBytes": 283000,
+  "txId": null, "motivoRejeicao": null, "erroLeitura": null }
 ```
 
-O teste 12 comprova que `novaNotaPendente(payload)` produz uma nota válida
-(preserva `id`/`origem`/anexo/e-mail, `status:'recebida'`, `lido` objeto,
-`txId:null`).
+O teste 12 comprova que `novaNotaPendente(metadado)` produz uma nota válida
+(preserva `id`/`origem`/`arquivoId`/e-mail, `status:'recebida'`, **sem** base64).
+
+### Ciclo do PDF sem duplicação permanente (app)
+
+1. **recebido** — o arquivo existe em `notaArquivos`; o metadado o referencia.
+2. **confirmado** — ao confirmar, a despesa recebe o PDF pelo anexo atual
+   (`addAnexoRecord`, compatibilidade mantida).
+3. **migração** — só **depois** de comprovar que a despesa tem o anexo, a cópia
+   transitória (`notaArquivos`) é removida e o metadado passa a referenciar o
+   anexo da tx (`anexoTxId`). Fica **uma** cópia permanente.
+4. Falha intermediária **não perde** o PDF (permanece em `notaArquivos`); retry
+   é idempotente (não duplica arquivo nem despesa).
+5. Nota **rejeitada** mantém o PDF.
+6. **Sem limpeza automática** ainda. *Política de retenção futura:* arquivos de
+   `notaArquivos` órfãos (nota rejeitada há > N dias, ou confirmada e já migrada)
+   podem ser expurgados por rotina auditável; o anexo da despesa é a fonte
+   definitiva. Não implementada nesta etapa.
 
 ---
 
@@ -148,11 +164,16 @@ O teste 12 comprova que `novaNotaPendente(payload)` produz uma nota válida
 ## 5. Limites e arquivos
 
 - **Firestore:** ~**1 MiB por documento**, contando **todos** os campos.
-- **base64** infla ~4/3. Adotamos **`maxPdfBytes` = 700 KB** de PDF cru
-  (≈ 933 KB em base64) → cabe em 1 MiB com folga para `email*`, `lido`, `sha` etc.
-- **Rejeição controlada:** PDF acima do limite é **ignorado com motivo
-  `pdf_grande`** — **nunca** há corte silencioso; os demais PDFs do mesmo e-mail
-  seguem normalmente.
+- Limite **calculado sobre o tamanho serializado COMPLETO** do documento de
+  arquivo (base64 + campos), não sobre o máximo teórico: **`docMaxSeguro`
+  = 900 000 bytes** (margem de ~145 KiB abaixo do teto), com `maxPdfBytes`
+  derivado ≈ **674 KB**. Testado: PDF realista ~283 KB (aceito), exatamente no
+  limite (aceito), um byte acima (rejeitado), metadados extras que empurram
+  acima (rejeitado), documento final sempre < 1 MiB.
+- **Rejeição controlada:** arquivo acima do limite é **ignorado com motivo
+  `arquivo_grande`** — **nunca** há corte silencioso; os demais PDFs do mesmo
+  e-mail seguem normalmente. No app, a importação para a fila rejeita
+  explicitamente com aviso.
 - **Firestore × Storage:** guardar o PDF **no Firestore** (base64) mantém tudo
   num lugar só, no plano gratuito, coberto pelas mesmas Rules — bom para
   arquivos pequenos e baixo volume. O **Firebase Storage** seria melhor para
@@ -163,7 +184,24 @@ O teste 12 comprova que `novaNotaPendente(payload)` produz uma nota válida
   comprime/recusa arquivos grandes. Reavaliar o Storage só se o volume crescer
   muito ou os PDFs passarem a ser grandes.
 
-Arquivos desta etapa:
-- `bridge.mjs` — funções puras da ponte (não carregadas pelo app).
+Arquivos:
+- `bridge.mjs` — funções puras da ponte (par metadado+arquivo, limites). Não
+  carregado pelo app.
+- `firestore.rules` — **regras PROPOSTAS** (Emulator-only; NÃO aplicar no
+  Console). Robô por UID fixo, só cria os dois documentos da fila.
+- `appsscript-template.gs` — **template** do Apps Script (sem segredos, não
+  executado; Firebase Auth como usuário final; retry idempotente).
 - `README.md` — este projeto.
-- `../tests/gmail-bridge.mjs` — 12 casos sintéticos reproduzíveis.
+- `../tests/gmail-bridge.mjs` — casos sintéticos (remetente, PDF/XML, dedup,
+  retry, limite, compat com `novaNotaPendente`).
+- `../tests/rules.emulator.mjs` — prova de permissões rodando DE VERDADE no
+  Firestore Emulator (robô/sócio/comum/anônimo).
+
+## Rodar a prova do Emulator (sem Firebase real)
+
+```bash
+# num diretório com firebase-tools + @firebase/rules-unit-testing + firebase:
+firebase emulators:exec --only firestore --project lagos-test \
+  "node <repo>/frota/tests/rules.emulator.mjs"
+```
+As regras vêm de `firestore.rules`. Nada real é acessado.

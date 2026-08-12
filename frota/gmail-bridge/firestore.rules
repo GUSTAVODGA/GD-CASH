@@ -1,0 +1,73 @@
+// REGRAS PROPOSTAS — validar SOMENTE no Firebase Emulator (Etapa 4).
+// NÃO aplicar no Console. Os sócios mantêm o acesso vigente (catch-all).
+// O robô é identificado por UID FIXO (não por nome/e-mail apresentado) e só
+// pode CRIAR os dois documentos da fila; nunca ler/atualizar/excluir, nunca
+// tocar em tx/veículos/km/financiamentos/anexos ou qualquer outra coleção.
+//
+// Limites (espelham gmail-bridge/bridge.mjs):
+//   docMaxSeguro = 900000  (base64 do arquivo, margem sob o teto de 1 MiB)
+//   maxPdfBytes  = 674232  (tamanho declarado do PDF)
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSocio() {
+      return request.auth != null && request.auth.token.email in [
+        'lagosoperacional+luispaulo@gmail.com',
+        'lagosoperacional+ygor@gmail.com',
+        'lagosoperacional+thadeu@gmail.com'
+      ];
+    }
+    // UID fixo configurável do robô (trocar no deploy real).
+    function roboUid() { return 'ROBO_NOTAS_UID'; }
+    function isRobo() { return request.auth != null && request.auth.uid == roboUid(); }
+
+    function hexSha(s) { return s is string && s.matches('^[0-9a-f]{64}$'); }
+    function idValido(id) { return id.matches('^nfe-[0-9a-f]{64}$'); }
+
+    function arqValido(id, d) {
+      return d.keys().hasOnly(['notaPendenteId', 'sha256', 'mime', 'nome', 'tamanhoBytes', 'dataBase64', 'criadoEm'])
+        && idValido(id)
+        && d.notaPendenteId == id
+        && hexSha(d.sha256)
+        && d.mime == 'application/pdf'
+        && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 200
+        && d.tamanhoBytes is int && d.tamanhoBytes > 0 && d.tamanhoBytes <= 674232
+        && d.dataBase64 is string && d.dataBase64.size() > 0 && d.dataBase64.size() <= 900000;
+    }
+    function metaValido(id, d) {
+      return d.keys().hasOnly(['status', 'origem', 'recebidoEm', 'emailMessageId', 'emailFrom', 'emailAssunto', 'sha256', 'lido', 'arquivoId', 'tamanhoBytes', 'txId', 'motivoRejeicao', 'erroLeitura'])
+        && idValido(id)
+        && d.status == 'recebida'                 // estado inicial permitido; nunca 'confirmada'
+        && d.origem == 'email'
+        && hexSha(d.sha256)
+        && d.arquivoId == id                      // vínculo estrutural
+        && d.lido is map
+        && d.tamanhoBytes is int && d.tamanhoBytes > 0 && d.tamanhoBytes <= 674232
+        && d.txId == null                         // o robô NUNCA escolhe txId
+        && d.motivoRejeicao == null
+        && d.erroLeitura == null
+        && d.emailMessageId is string
+        && d.emailFrom is string
+        // vínculo COERENTE metadado↔arquivo: o arquivo já existe e tem o mesmo sha
+        && exists(/databases/$(database)/documents/notaArquivos/$(id))
+        && get(/databases/$(database)/documents/notaArquivos/$(id)).data.sha256 == d.sha256;
+    }
+
+    // === Sócios: acesso vigente mantido (catch-all atual, inalterado) ===
+    match /{document=**} {
+      allow read, write: if isSocio();
+    }
+
+    // === Robô: SÓ cria os dois documentos da fila ===
+    // (criar o ARQUIVO primeiro; o metadado exige que ele já exista)
+    match /notaArquivos/{id} {
+      allow create: if isRobo() && arqValido(id, request.resource.data);
+      // sem read/update/delete para o robô
+    }
+    match /notasPendentes/{id} {
+      allow create: if isRobo() && metaValido(id, request.resource.data);
+    }
+  }
+}

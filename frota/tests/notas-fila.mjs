@@ -53,8 +53,8 @@ const skip = n => { SKIP++; console.log('SKIP – ' + n); };
 // helpers de teste injetados na página (reaproveitados após cada reload)
 const injectHelpersInline = () => {
   window.VID = S.vehicles[0].id;
-  window.mkNota = (lido, extra = {}) => { const n = novaNotaPendente(Object.assign({ origem: 'manual', anexoNome: 'x.pdf', anexoMime: 'application/pdf', anexoData: 'data:application/pdf;base64,AAAA', lido, status: 'precisa_revisao' }, extra)); S.notasPendentes.push(n); demoSave(); renderAll(); return n.id; };
-  window.confirmarNota = async (id, veic) => { revisarNotaPendente(id); document.getElementById('nc-veiculo').value = veic || window.VID; await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60)); };
+  window.mkNota = (lido, extra = {}) => { const id = newId(); (S.notaArquivos = S.notaArquivos || []).push({ id, notaPendenteId: id, sha256: 'x', mime: 'application/pdf', nome: 'x.pdf', tamanhoBytes: 20, dataBase64: 'data:application/pdf;base64,AAAA', criadoEm: 1 }); const n = novaNotaPendente(Object.assign({ id, origem: 'manual', anexoNome: 'x.pdf', anexoMime: 'application/pdf', arquivoId: id, lido, status: 'precisa_revisao' }, extra)); S.notasPendentes.push(n); demoSave(); renderAll(); return n.id; };
+  window.confirmarNota = async (id, veic) => { await revisarNotaPendente(id); document.getElementById('nc-veiculo').value = veic || window.VID; await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60)); };
   window.txComb = () => S.tx.filter(t => !t.deleted && t.cat === 'combustivel');
   window.getNota = id => S.notasPendentes.find(n => n.id === id);
 };
@@ -77,11 +77,13 @@ await p.evaluate(() => {
   window.VID = S.vehicles[0].id;
   // helper: cria nota pendente sintética
   window.mkNota = (lido, extra = {}) => {
-    const n = novaNotaPendente(Object.assign({ origem: 'manual', anexoNome: 'x.pdf', anexoMime: 'application/pdf', anexoData: 'data:application/pdf;base64,AAAA', lido, status: 'precisa_revisao' }, extra));
+    const id = newId();
+    (S.notaArquivos = S.notaArquivos || []).push({ id, notaPendenteId: id, sha256: 'x', mime: 'application/pdf', nome: 'x.pdf', tamanhoBytes: 20, dataBase64: 'data:application/pdf;base64,AAAA', criadoEm: 1 });
+    const n = novaNotaPendente(Object.assign({ id, origem: 'manual', anexoNome: 'x.pdf', anexoMime: 'application/pdf', arquivoId: id, lido, status: 'precisa_revisao' }, extra));
     S.notasPendentes.push(n); demoSave(); renderAll(); return n.id;
   };
   window.confirmarNota = async (id, veic) => {
-    revisarNotaPendente(id);
+    await revisarNotaPendente(id);
     document.getElementById('nc-veiculo').value = veic || window.VID;
     await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60));
   };
@@ -120,7 +122,7 @@ await p.evaluate(() => { S.notasPendentes = []; S.tx = []; demoSave(); renderAll
 console.log('\n== 3-4. revisar/corrigir e confirmar → exatamente 1 despesa ==');
 const conf = await p.evaluate(async () => {
   const id = mkNota({ posto: 'Posto Bom', valor: 100, data: '2026-08-05', litros: 12.5, placa: 'ABC1D23', km: 5000, chaveNota: '12345678901234567890556677889900112233445566' });
-  revisarNotaPendente(id);
+  await revisarNotaPendente(id);
   const preencheu = document.getElementById('nc-valor').value && document.getElementById('nc-veiculo').value === window.VID;
   // Luiz corrige o valor antes de confirmar
   document.getElementById('nc-valor').value = '150,00';
@@ -136,7 +138,7 @@ console.log('\n== 5. duplo toque cria só 1 tx ==');
 const dbl = await p.evaluate(async () => {
   S.tx = []; S.notasPendentes = []; S.anexos = []; demoSave();
   const id = mkNota({ posto: 'Dbl', valor: 80, data: '2026-08-06', chaveNota: '22223333444455556666777788889999000011112222' });
-  revisarNotaPendente(id); document.getElementById('nc-veiculo').value = window.VID;
+  await revisarNotaPendente(id); document.getElementById('nc-veiculo').value = window.VID;
   const a = confirmarNotaAbast(); const b2 = confirmarNotaAbast(); // duplo toque
   await Promise.all([a, b2]); await new Promise(r => setTimeout(r, 80));
   return { nTx: txComb().length };
@@ -150,15 +152,15 @@ await p.waitForFunction(() => typeof revisarNotaPendente === 'function', { timeo
 // re-injeta helpers perdidos no reload
 await p.evaluate(() => {
   window.VID = S.vehicles[0].id;
-  window.mkNota = (lido, extra = {}) => { const n = novaNotaPendente(Object.assign({ origem: 'manual', anexoNome: 'x.pdf', anexoMime: 'application/pdf', anexoData: 'data:application/pdf;base64,AAAA', lido, status: 'precisa_revisao' }, extra)); S.notasPendentes.push(n); demoSave(); renderAll(); return n.id; };
-  window.confirmarNota = async (id, veic) => { revisarNotaPendente(id); document.getElementById('nc-veiculo').value = veic || window.VID; await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60)); };
+  window.mkNota = (lido, extra = {}) => { const id = newId(); (S.notaArquivos = S.notaArquivos || []).push({ id, notaPendenteId: id, sha256: 'x', mime: 'application/pdf', nome: 'x.pdf', tamanhoBytes: 20, dataBase64: 'data:application/pdf;base64,AAAA', criadoEm: 1 }); const n = novaNotaPendente(Object.assign({ id, origem: 'manual', anexoNome: 'x.pdf', anexoMime: 'application/pdf', arquivoId: id, lido, status: 'precisa_revisao' }, extra)); S.notasPendentes.push(n); demoSave(); renderAll(); return n.id; };
+  window.confirmarNota = async (id, veic) => { await revisarNotaPendente(id); document.getElementById('nc-veiculo').value = veic || window.VID; await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60)); };
   window.txComb = () => S.tx.filter(t => !t.deleted && t.cat === 'combustivel');
   window.getNota = id => S.notasPendentes.find(n => n.id === id);
 });
 const rel = await p.evaluate(async () => {
   const antes = txComb().length;
   const n = S.notasPendentes.find(x => x.status === 'confirmada');
-  revisarNotaPendente(n.id); // deve recusar (já confirmada, tx viva)
+  await revisarNotaPendente(n.id); // deve recusar (já confirmada, tx viva)
   await new Promise(r => setTimeout(r, 60));
   const modalAberto = document.getElementById('modal-nota-conf').classList.contains('open');
   return { antes, depois: txComb().length, modalAberto };
@@ -214,7 +216,7 @@ const f10 = await p.evaluate(async () => {
   const id = mkNota({ posto: 'Falha1', valor: 60, data: '2026-08-11', chaveNota: '77778888999900001111222233334444555566667777' });
   const orig = S.tx;
   S.tx = new Proxy(orig, { get(t, k) { if (k === 'push') return () => { throw new Error('falha simulada'); }; const v = t[k]; return typeof v === 'function' ? v.bind(t) : v; } });
-  revisarNotaPendente(id); document.getElementById('nc-veiculo').value = window.VID;
+  await revisarNotaPendente(id); document.getElementById('nc-veiculo').value = window.VID;
   await confirmarNotaAbast().catch(() => {}); await new Promise(r => setTimeout(r, 60));
   S.tx = orig; // restaura
   const n = S.notasPendentes.find(x => x.id === id);
@@ -265,7 +267,7 @@ console.log('\n== 15. placa sem veículo correspondente ==');
 const semVeic = await p.evaluate(async () => {
   S.tx = []; S.notasPendentes = []; demoSave();
   const id = mkNota({ posto: 'SemVeic', valor: 45, data: '2026-08-15', placa: 'ZZZ9Z99', chaveNota: '10101010101010101010551010101010101010101010' });
-  revisarNotaPendente(id);
+  await revisarNotaPendente(id);
   const veicVazio = document.getElementById('nc-veiculo').value === '';
   await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 40)); // sem veículo → bloqueia
   const bloqueou = txComb().length === 0 && getNota(id).status === 'precisa_revisao';
@@ -302,7 +304,7 @@ const linkManual = await p.evaluate(async () => {
   await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60));
   const manual = txComb()[0]; const snap = JSON.stringify(manual); const nAnexo = (S.anexos || []).length;
   const id = mkNota({ posto: 'Fila', valor: 999, data: '2026-01-01', litros: 99, placa: 'ZZZ9Z99', km: 88888, chaveNota: chave });
-  revisarNotaPendente(id); document.getElementById('nc-veiculo').value = window.VID;
+  await revisarNotaPendente(id); document.getElementById('nc-veiculo').value = window.VID;
   document.getElementById('nc-valor').value = '999,00'; document.getElementById('nc-km').value = '88888';
   await confirmarNotaAbast(); await new Promise(r => setTimeout(r, 60));
   const manual2 = txComb().find(t => t.id === manual.id); const n = getNota(id);
@@ -364,17 +366,20 @@ chk('4. rejeitar duplicada não altera a original nem sua tx', rejDup.origIntact
 
 console.log('\n== AUDITORIA 5: excluir despesa comum não mexe em notas; PDF preservado ==');
 const del2 = await p.evaluate(async () => {
-  S.tx = []; S.notasPendentes = []; S.anexos = []; demoSave();
+  S.tx = []; S.notasPendentes = []; S.anexos = []; S.notaArquivos = []; demoSave();
   const id = mkNota({ posto: 'PDF', valor: 55, data: '2026-08-25', chaveNota: '4'.repeat(44) });
   await confirmarNota(id); const txId = getNota(id).txId;
   S.tx.push({ id: 'comum1', tipo: 'despesa', cat: 'outros', origem: 'frota', valor: 10, data: '2026-08-25', veiculo: window.VID }); demoSave();
   const antes = JSON.stringify(getNota(id));
   await softDeleteTx('comum1'); await new Promise(r => setTimeout(r, 40));
   const notaIgual = JSON.stringify(getNota(id)) === antes;
-  const pdfAntes = getNota(id).anexoData;
+  // o PDF vive no anexo da tx (a cópia transitória da fila foi migrada); ele
+  // deve PERSISTIR mesmo após a tx ir para a lixeira.
+  const pdfAntes = (S.anexos || []).some(a => a.parentId === txId);
   await softDeleteTx(txId); await new Promise(r => setTimeout(r, 40));
   const n = getNota(id);
-  return { notaIgual, reabriu: n.status === 'precisa_revisao', pdf: n.anexoData === pdfAntes && !!n.anexoData };
+  const pdfDepois = (S.anexos || []).some(a => a.parentId === txId);
+  return { notaIgual, reabriu: n.status === 'precisa_revisao', pdf: pdfAntes && pdfDepois };
 });
 chk('5. excluir despesa comum não altera nenhuma nota', del2.notaIgual);
 chk('5. excluir tx da fila reabre a nota mas preserva o PDF', del2.reabriu && del2.pdf);

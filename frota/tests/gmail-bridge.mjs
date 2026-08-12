@@ -50,7 +50,7 @@ chk('1. remetente correto → 1 item',
 // 4 — PDF + XML
 {
   const r = B.processarLote([{ messageId: 'm4', from: DE, subject: 'NFe', attachments: [xml('nota.xml'), pdf('nota.pdf', 'PDF-4')] }], opts);
-  chk('4. PDF + XML → 1 item (XML ignorado, sem virar item)', r.itens.length === 1 && r.itens[0].anexoMime === 'application/pdf');
+  chk('4. PDF + XML → 1 item (XML ignorado, sem virar item)', r.itens.length === 1 && r.itens[0].arquivo.mime === 'application/pdf');
 }
 // 5 — múltiplos PDFs (conteúdos diferentes)
 {
@@ -100,19 +100,37 @@ chk('1. remetente correto → 1 item',
 }
 // 11 — PDF acima do limite
 {
-  const grande = pdf('grande.pdf', 'x', B.LIMITES.maxPdfBytes + 1);   // size acima do limite
+  // conteúdo grande o bastante para o DOC serializado (base64) passar do limite
+  const grande = pdf('grande.pdf', 'x'.repeat(700000));
   const ok = pdf('ok.pdf', 'pequeno');
   const r = B.processarLote([{ messageId: 'm11', from: DE, subject: 'NFe', attachments: [grande, ok] }], opts);
-  const rej = r.ignoradas.find(i => i.motivo === 'pdf_grande');
-  chk('11. PDF acima do limite → rejeição controlada (motivo pdf_grande, sem corte)', !!rej && rej.bytes === B.LIMITES.maxPdfBytes + 1);
-  chk('11. o PDF pequeno do mesmo e-mail vira item normalmente', r.itens.length === 1 && r.itens[0].anexoNome === 'ok.pdf');
-  chk('11. limite de base64 coerente com 1 MiB', B.base64Bytes(B.LIMITES.maxPdfBytes) < B.LIMITES.firestoreDocBytes);
+  const rej = r.ignoradas.find(i => i.motivo === 'arquivo_grande');
+  chk('11. arquivo acima do limite → rejeição controlada (motivo arquivo_grande, sem corte)', !!rej && rej.docBytes > B.ARQ_LIM.docMaxSeguro);
+  chk('11. o PDF pequeno do mesmo e-mail vira item normalmente', r.itens.length === 1 && r.itens[0].arquivo.nome === 'ok.pdf');
+  chk('11. limite conservador fica abaixo do teto de 1 MiB', B.ARQ_LIM.docMaxSeguro < B.ARQ_LIM.firestoreDocMax && B.maxPdfBytes() > 0);
 }
 
-// 12 — payload compatível com novaNotaPendente() real
-const payload = B.montarPayload(
+// ── Limite conservador (seção 3): tamanho serializado completo ──
+{
+  const mkArq = (b64) => ({ notaPendenteId: 'nfe-' + 'a'.repeat(64), sha256: 'a'.repeat(64), mime: 'application/pdf', nome: 'nota.pdf', tamanhoBytes: 1000, dataBase64: b64, criadoEm: 1 });
+  const overhead = B.tamanhoDocSerializado(mkArq(''));
+  const N = B.ARQ_LIM.docMaxSeguro - overhead;
+  const noLimite = mkArq('A'.repeat(N));
+  const umAcima = mkArq('A'.repeat(N + 1));
+  const real = mkArq('A'.repeat(Math.ceil(283000 * 4 / 3)));  // PDF realista ~283 KB
+  chk('L1. PDF realista ~283KB → dentro do limite', B.arquivoDocDentroDoLimite(real) && B.tamanhoDocSerializado(real) < B.ARQ_LIM.firestoreDocMax);
+  chk('L2. arquivo EXATAMENTE no limite é aceito', B.arquivoDocDentroDoLimite(noLimite) && B.tamanhoDocSerializado(noLimite) === B.ARQ_LIM.docMaxSeguro);
+  chk('L3. um byte acima é rejeitado', !B.arquivoDocDentroDoLimite(umAcima));
+  chk('L4. metadados extras empurram acima → rejeitado', !B.arquivoDocDentroDoLimite(Object.assign({}, noLimite, { nome: 'x'.repeat(300) })));
+  chk('L5. documento final sempre abaixo do teto do Firestore', B.tamanhoDocSerializado(noLimite) < B.ARQ_LIM.firestoreDocMax);
+}
+
+// 12 — metadado compatível com novaNotaPendente() real
+const _sha12 = sha256(Buffer.from('PDF-12'));
+const _doc12 = B.idDocumento(_sha12);
+const payload = Object.assign({ id: _doc12 }, B.montarMetadado(
   { messageId: 'm12', from: DE, subject: 'NFe 123', recebidoEm: 1234 },
-  pdf('nota.pdf', 'PDF-12'), sha256(Buffer.from('PDF-12')), B.idDocumento(sha256(Buffer.from('PDF-12'))));
+  pdf('nota.pdf', 'PDF-12'), _sha12, _doc12, 5));
 
 const CHROME = process.env.CHROMIUM_PATH;
 if (!CHROME) {
@@ -131,9 +149,9 @@ if (!CHROME) {
     await p.goto(`http://localhost:${PORT}/index.html`); await p.waitForTimeout(700);
     await p.locator('.lp-card').first().tap(); await p.waitForTimeout(900);
     await p.waitForFunction(() => typeof novaNotaPendente === 'function', { timeout: 8000 });
-    const n = await p.evaluate((pl) => { const nota = novaNotaPendente(pl); return { id: nota.id, origem: nota.origem, status: nota.status, temAnexo: !!nota.anexoData, mime: nota.anexoMime, msgId: nota.emailMessageId, from: nota.emailFrom, assunto: nota.emailAssunto, lidoObj: typeof nota.lido === 'object', txId: nota.txId }; }, payload);
-    chk('12. novaNotaPendente(payload) preserva id/origem/anexo/e-mail e é válido',
-      n.id === payload.id && n.origem === 'email' && n.status === 'recebida' && n.temAnexo && n.mime === 'application/pdf' && n.msgId === 'm12' && n.lidoObj && n.txId === null);
+    const n = await p.evaluate((pl) => { const nota = novaNotaPendente(pl); return { id: nota.id, origem: nota.origem, status: nota.status, arquivoId: nota.arquivoId, semBase64: !('anexoData' in nota), msgId: nota.emailMessageId, from: nota.emailFrom, assunto: nota.emailAssunto, lidoObj: typeof nota.lido === 'object', txId: nota.txId }; }, payload);
+    chk('12. novaNotaPendente(metadado) preserva id/origem/arquivoId/e-mail, SEM base64',
+      n.id === payload.id && n.origem === 'email' && n.status === 'recebida' && n.arquivoId === payload.id && n.semBase64 && n.msgId === 'm12' && n.lidoObj && n.txId === null);
     await b.close(); server.close(); fs.rmSync(tmp, { recursive: true, force: true });
   } catch (e) { console.log('SKIP – 12. compat novaNotaPendente (' + e.message + ')'); SKIP++; }
 }

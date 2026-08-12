@@ -32,7 +32,14 @@ let me = null; // { uid, email, nome }
 
 // Estado compartilhado (espelho do Firestore ou do localStorage no demo)
 // (anexos ficam fora dos listeners: são carregados sob demanda, por item)
-let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [], empresa: [], financiamentos: [], notasPendentes: [] };
+let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [], empresa: [], financiamentos: [], notasPendentes: [], notaArquivos: [] };
+
+// Integração da fila de notas (Gmail → notasPendentes) — DESLIGADA por padrão.
+// Quando true (etapa de integração real, com o usuário-robô e as regras
+// aplicadas), o app passa a ESCUTAR só os METADADOS de notasPendentes; o
+// arquivo (notaArquivos) nunca é escutado — é lido sob demanda. permission-denied
+// nesse listener não quebra o Financeiro (cada onSnapshot tem tratador próprio).
+const INTEGRACAO_NOTAS = false;
 let unsubs = [];
 
 // Estado de UI
@@ -345,14 +352,16 @@ function salvarEmpresaDoc(patch) {
 
 function startListeners() {
   stopListeners();
-  // NOTA: 'notasPendentes' NÃO entra nos listeners de produção nesta etapa —
-  // a fila roda só em modo demo/teste. O listener (e as regras) serão ativados
-  // na etapa de integração real, não agora.
-  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa', 'financiamentos'].forEach(coll => {
+  // Coleções sincronizadas em produção. 'notaArquivos' (o PDF) NUNCA é escutada
+  // — é carregada sob demanda ao revisar/confirmar. 'notasPendentes' (metadados
+  // leves) só entra quando INTEGRACAO_NOTAS estiver ligada (etapa futura).
+  const colls = ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa', 'financiamentos'];
+  if (INTEGRACAO_NOTAS) colls.push('notasPendentes');
+  colls.forEach(coll => {
     unsubs.push(db.collection(coll).onSnapshot(snap => {
       S[coll] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
       renderAll();
-    }, err => console.error('listener ' + coll, err)));
+    }, err => console.error('listener ' + coll, err)));   // permission-denied aqui não quebra o resto
   });
   unsubs.push(db.collection('profiles').onSnapshot(snap => {
     S.profiles = {};
@@ -3841,7 +3850,7 @@ async function confirmarNotaAbast() {
     } else {
       toast('Esta nota já foi lançada.');
     }
-    notaConfInfo = null; notaFilaId = null; _salvandoNota = false;
+    pendingAnexo = null; notaConfInfo = null; notaFilaId = null; _salvandoNota = false;
     return;
   }
 
@@ -3863,8 +3872,11 @@ async function confirmarNotaAbast() {
   try {
     await dataSet('tx', idAlvo, t);
     // nota anexada ao lançamento e vinculada ao veículo (aparece na ficha da van)
+    let anexoOk = false;
     if (anexo && !jaExiste) {
-      try { await addAnexoRecord('tx', idAlvo, { ...anexo, veiculoId: veiculo }); } catch (e) { console.error(e); }
+      try { await addAnexoRecord('tx', idAlvo, { ...anexo, veiculoId: veiculo }); anexoOk = true; } catch (e) { console.error(e); }
+    } else if (jaExiste) {
+      try { anexoOk = (await anexosDe(idAlvo)).length > 0; } catch (e) {}
     }
     pendingAnexo = null;
     // o abastecimento entra como leitura; espelha no cadastro como base
@@ -3877,6 +3889,10 @@ async function confirmarNotaAbast() {
         toast('Lançamento salvo, mas a nota não atualizou. Toque em Revisar de novo para concluir.');
         notaConfInfo = null; notaFilaId = null; _salvandoNota = false; return;
       }
+      // ciclo anti-duplicação: só remove a cópia transitória da fila DEPOIS de
+      // comprovar que a despesa tem o PDF (anexo criado). Falha aqui não perde o
+      // arquivo (fica em notaArquivos); retry não duplica.
+      if (anexoOk) await migrarArquivoDaNota(filaId);
     }
     const partes = ['Abastecimento salvo ✓'];
     if (km > kmAntes && kmAntes > 0) partes.push('rodou ' + fmtKm(km - kmAntes) + ' desde o último registro');
@@ -3932,6 +3948,7 @@ function mapLidoNota(info) {
     .forEach(k => { if (info[k] !== undefined) o[k] = info[k]; });
   return o;
 }
+// METADADO leve — nunca guarda o base64 do PDF (fica em notaArquivos).
 function novaNotaPendente(dados) {
   return {
     id: dados.id || newId(),
@@ -3940,15 +3957,63 @@ function novaNotaPendente(dados) {
     origem: dados.origem || 'manual',
     anexoNome: dados.anexoNome || null,
     anexoMime: dados.anexoMime || null,
-    anexoData: dados.anexoData || null,
+    arquivoId: dados.arquivoId || null,     // referência ao PDF em notaArquivos
+    anexoTxId: dados.anexoTxId || null,     // após confirmar, o PDF vive no anexo da tx
     emailMessageId: dados.emailMessageId || null,
     emailFrom: dados.emailFrom || null,
     emailAssunto: dados.emailAssunto || null,
+    sha256: dados.sha256 || null,
+    tamanhoBytes: dados.tamanhoBytes || null,
     lido: dados.lido || {},
     txId: dados.txId || null,
     motivoRejeicao: dados.motivoRejeicao || null,
     erroLeitura: dados.erroLeitura || null,
   };
+}
+// ARQUIVO — só o PDF e seus metadados (coleção separada, lida sob demanda).
+function novoNotaArquivo(dados) {
+  return {
+    notaPendenteId: dados.notaPendenteId || null,
+    sha256: dados.sha256 || null,
+    mime: dados.mime || 'application/pdf',
+    nome: dados.nome || 'nota.pdf',
+    tamanhoBytes: dados.tamanhoBytes || 0,
+    dataBase64: dados.dataBase64 || null,
+    criadoEm: dados.criadoEm || Date.now(),
+  };
+}
+// Limite CONSERVADOR do documento de arquivo (base64 + campos), com margem
+// larga sob o teto de 1 MiB do Firestore. Rejeição EXPLÍCITA, sem corte.
+const NOTA_ARQ_LIM = { firestoreDocMax: 1048576, docMaxSeguro: 900000 };
+function tamanhoDocArquivo(doc) { return new TextEncoder().encode(JSON.stringify(doc)).length; }
+function arquivoDentroDoLimite(doc) { return tamanhoDocArquivo(doc) <= NOTA_ARQ_LIM.docMaxSeguro; }
+async function sha256Hex(str) {
+  try {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(str || '')));
+    return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+  } catch (e) { return String(Date.now()) + '-' + Math.random().toString(16).slice(2); }
+}
+// carrega o PDF SÓ quando necessário (revisar/visualizar/confirmar)
+async function carregarArquivoNota(arquivoId) {
+  if (!arquivoId) return null;
+  if (DEMO) return (S.notaArquivos || []).find(a => a.id === arquivoId) || null;
+  try { const snap = await db.collection('notaArquivos').doc(arquivoId).get(); return snap.exists ? { ...snap.data(), id: snap.id } : null; }
+  catch (e) { console.error('carregar arquivo nota', e); return null; }
+}
+async function carregarPdfDaNota(n) {
+  if (n && n.arquivoId) { const a = await carregarArquivoNota(n.arquivoId); if (a && a.dataBase64) return { nome: a.nome, mime: a.mime, data: a.dataBase64 }; }
+  if (n && n.anexoTxId) { try { const list = await anexosDe(n.anexoTxId); if (list && list[0]) return { nome: list[0].nome, mime: list[0].mime, data: list[0].data }; } catch (e) {} }
+  return null;
+}
+// ciclo anti-duplicação: só remove a cópia transitória DEPOIS que a despesa tem
+// o anexo. Se falhar aqui, o PDF NÃO se perde (fica em notaArquivos).
+async function migrarArquivoDaNota(notaId) {
+  const n = (S.notasPendentes || []).find(x => x.id === notaId);
+  if (!n || !n.arquivoId) return;
+  try {
+    await dataDelete('notaArquivos', n.arquivoId);
+    await dataSet('notasPendentes', notaId, { ...stripId(n), arquivoId: null });
+  } catch (e) { console.error('migrar arquivo da nota', e); }
 }
 // chave determinística p/ deduplicação — NUNCA usa valor/data (evita bloquear
 // notas diferentes com mesmo valor/dia). Prioriza a chave de acesso da NF-e.
@@ -3989,15 +4054,24 @@ async function importNotaParaFila(input) {
   } catch (e) { console.error(e); toast('Não consegui abrir esse arquivo.'); return; }
   const temTexto = textoUtil(leitura.texto);
   const info = leitura.texto ? parseNota(leitura.texto) : {};
+  const notaId = newId();
+  const sha = await sha256Hex(anexo.data);
+  const tamanho = (anexo.data || '').length;
+  const arquivo = novoNotaArquivo({ notaPendenteId: notaId, sha256: sha, mime: anexo.mime, nome: anexo.nome, tamanhoBytes: tamanho, dataBase64: anexo.data });
+  // rejeição EXPLÍCITA se o documento de arquivo passar do limite conservador
+  if (!arquivoDentroDoLimite(arquivo)) { toast('Essa nota é grande demais para a fila. Tire uma foto do documento ou reduza o PDF.'); return; }
   const nota = novaNotaPendente({
-    origem: 'manual',
-    anexoNome: anexo.nome, anexoMime: anexo.mime, anexoData: anexo.data,
+    id: notaId, origem: 'manual',
+    anexoNome: anexo.nome, anexoMime: anexo.mime, arquivoId: notaId,
+    sha256: sha, tamanhoBytes: tamanho,
     lido: mapLidoNota(info),
     status: 'precisa_revisao',
     erroLeitura: temTexto ? null : 'sem_texto_util',
   });
   try {
-    await dataSet('notasPendentes', nota.id, nota);
+    // grava o ARQUIVO primeiro, depois o METADADO (ordem exigida pelas regras)
+    await dataSet('notaArquivos', notaId, arquivo);
+    await dataSet('notasPendentes', notaId, nota);
     toast('Nota adicionada às "Notas para revisar"');
     goTab('lanc');
     setTimeout(() => { const el = $('notas-revisar'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
@@ -4005,20 +4079,23 @@ async function importNotaParaFila(input) {
 }
 
 // abre o modal de conferência já existente para revisar uma nota da fila
-function revisarNotaPendente(id) {
+async function revisarNotaPendente(id) {
   const n = (S.notasPendentes || []).find(x => x.id === id);
   if (!n) return;
   if (!exigirEdicao()) return;
   if (n.status === 'confirmada' && notaTemTxViva(n)) { toast('Esta nota já foi confirmada.'); return; }
   notaFilaId = id;
-  pendingAnexo = n.anexoData ? { nome: n.anexoNome || 'nota', mime: n.anexoMime || 'application/pdf', data: n.anexoData } : null;
+  const pdf = await carregarPdfDaNota(n);   // arquivo lido SÓ agora, sob demanda
+  pendingAnexo = pdf ? { nome: pdf.nome || 'nota', mime: pdf.mime || 'application/pdf', data: pdf.data } : null;
   abrirConferenciaNota({ ...(n.lido || {}) });
 }
 
 async function marcarNotaConfirmada(notaId, txId, jaLancada) {
   const n = (S.notasPendentes || []).find(x => x.id === notaId);
   if (!n) return;
-  const patch = { ...stripId(n), status: 'confirmada', txId, confirmadoEm: Date.now(), motivoRejeicao: null, erroLeitura: null };
+  // anexoTxId liga a nota ao anexo da despesa (permite reabrir/reler o PDF mesmo
+  // depois de removida a cópia transitória de notaArquivos).
+  const patch = { ...stripId(n), status: 'confirmada', txId, anexoTxId: txId, confirmadoEm: Date.now(), motivoRejeicao: null, erroLeitura: null };
   if (jaLancada) patch.jaLancada = true;
   await dataSet('notasPendentes', notaId, patch);
 }
