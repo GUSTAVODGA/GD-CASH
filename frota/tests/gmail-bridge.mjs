@@ -28,7 +28,7 @@ function pdf(name, conteudo, sizeOverride) {
   return { fileName: name, mimeType: 'application/pdf', bytes, base64: bytes.toString('base64'), size: sizeOverride != null ? sizeOverride : bytes.length };
 }
 function xml(name) { const bytes = Buffer.from('<nfeProc><NFe/></nfeProc>'); return { fileName: name, mimeType: 'text/xml', bytes, base64: bytes.toString('base64'), size: bytes.length }; }
-const DE = 'Auto Posto Pisca Pisca <appisca.nfe@gmail.com>';
+const DE = 'Auto Posto Exemplo <appisca.nfe@gmail.com>';
 
 // 1
 chk('1. remetente correto → 1 item',
