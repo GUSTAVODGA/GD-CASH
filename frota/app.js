@@ -3633,7 +3633,7 @@ function parseNota(txtRaw) {
   }
 
   // ── ODÔMETRO / KM ── só aceita rótulo explícito do veículo ("KM:"/"ODÔMETRO").
-  // NUNCA um "KM" solto de endereço/rodovia (ex.: "ROD AMARAL PEIXOTO KM 88").
+  // NUNCA um "KM" solto de endereço/rodovia (ex.: "ROD EXEMPLO KM 88" → 88).
   const kmM = t.match(/OD[ÔO]METRO\s*[:.]?\s*(\d[\d.]*)/)
            || t.match(/HOD[ÔO]METRO\s*[:.]?\s*(\d[\d.]*)/)
            || t.match(/HOR[ÍI]METRO\s*[:.]?\s*(\d[\d.]*)/)
@@ -3694,15 +3694,24 @@ function parseNota(txtRaw) {
 // Chave de acesso da NF-e: exatamente 44 dígitos, só números (remove espaços,
 // pontos e quebras que o DANFE insere). Retorna a string de 44 dígitos ou null.
 function extrairChaveNota(t) {
-  let bloco = null;
+  // 1) caminho confiável: dígitos logo após o rótulo "CHAVE DE ACESSO".
   const m = t.match(/CHAVE\s+DE\s+ACESSO\s*[:.]?\s*([\d\s.]{44,90})/);
-  if (m) bloco = m[1];
-  if (!bloco) {
-    const g = t.match(/(?:\d[ .]?){44,}/);
-    if (g) bloco = g[0];
+  if (m) {
+    const only = m[1].replace(/\D/g, '');
+    if (only.length >= 44) return only.slice(0, 44);
   }
-  const only = (bloco || '').replace(/\D/g, '');
-  return only.length >= 44 ? only.slice(0, 44) : null;
+  // 2) fallback SEM o rótulo: só aceita 44 dígitos que PAREÇAM chave de NF-e/NFC-e
+  // (modelo 55 ou 65 nas posições 21-22). Evita engolir 44 dígitos quaisquer.
+  const g = t.match(/(?:\d[ .]?){44,}/);
+  if (g) {
+    const only = g[0].replace(/\D/g, '');
+    if (only.length >= 44) {
+      const chave = only.slice(0, 44);
+      const modelo = chave.slice(20, 22);
+      if (modelo === '55' || modelo === '65') return chave;
+    }
+  }
+  return null;
 }
 
 // Anexa a nota ao lançamento ABERTO e usa a leitura só pra preencher campos vazios
