@@ -3498,6 +3498,71 @@ async function ocrTexto(dataUrl) {
   await worker.terminate();
   return data.text || '';
 }
+// OCR com teto de tempo — nunca trava a importação se o motor demorar/falhar.
+async function ocrComTimeout(imagem) {
+  try {
+    return await Promise.race([
+      ocrTexto(imagem),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado')), 25000)),
+    ]);
+  } catch (e) { console.error('OCR indisponível', e); return ''; }
+}
+// Extrai a CAMADA DE TEXTO nativa de um PDF (determinístico, sem OCR).
+async function pdfTextoNativo(file) {
+  await ensurePdfjs();
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  let full = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const tc = await page.getTextContent();
+    full += tc.items.map(it => it.str).join('\n') + '\n';
+  }
+  return full;
+}
+// Normaliza o texto extraído (colapsa espaços/nbsp, tira linhas vazias e apara).
+function normalizarTextoNota(t) {
+  return String(t || '')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t\u00A0]+/g, ' ')
+    .split('\n').map(l => l.trim()).filter(Boolean).join('\n')
+    .trim();
+}
+// A camada de texto é "útil" quando tem tamanho mínimo e traz dígitos
+// (valores/datas). PDF só de imagem devolve texto vazio → cai no OCR.
+function textoUtil(t) {
+  const s = normalizarTextoNota(t);
+  return s.replace(/\s/g, '').length >= 30 && /\d/.test(s);
+}
+// Fluxo ÚNICO de leitura de uma nota (PDF ou imagem):
+// 1) PDF → camada de texto nativa; 2) normaliza; 3) se houver texto útil, usa
+// direto; 4) só renderiza + OCR quando NÃO há camada de texto útil.
+// Retorna { texto, fonte:'texto'|'ocr', imagem }.
+async function lerTextoNota(file) {
+  const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+  if (ehPdf) {
+    let nativo = '';
+    try { nativo = await pdfTextoNativo(file); } catch (e) { console.error('texto nativo PDF', e); }
+    if (textoUtil(nativo)) return { texto: normalizarTextoNota(nativo), fonte: 'texto', imagem: null };
+    const imagem = await pdfPrimeiraPagina(file);
+    return { texto: await ocrComTimeout(imagem), fonte: 'ocr', imagem };
+  }
+  const imagem = await fileToJpegDataURL(file, 1600);
+  return { texto: await ocrComTimeout(imagem), fonte: 'ocr', imagem };
+}
+// Monta o anexo preservando o comportamento atual: PDF pequeno vira o próprio
+// PDF; PDF grande vira JPG da 1ª página; imagem vira JPG comprimido. Só
+// renderiza a página quando realmente precisa (PDF grande sem imagem pronta).
+async function montarAnexoNota(file, imagem) {
+  const ehPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
+  if (ehPdf) {
+    const raw = await fileToRawDataURL(file);
+    if (raw.length <= 950000) return { nome: file.name || 'nota.pdf', mime: 'application/pdf', data: raw };
+    const img = imagem || await pdfPrimeiraPagina(file);
+    return { nome: (file.name || 'nota') + '.jpg', mime: 'image/jpeg', data: img };
+  }
+  return { nome: file.name || 'nota.jpg', mime: 'image/jpeg', data: await fileToJpegDataURL(file, 1200) };
+}
 
 // meses por extenso (pt-BR), abreviados ou completos — usa as 3 primeiras letras
 const MESES_PT = { JAN: '01', FEV: '02', MAR: '03', ABR: '04', MAI: '05', JUN: '06', JUL: '07', AGO: '08', SET: '09', OUT: '10', NOV: '11', DEZ: '12' };
@@ -3538,21 +3603,21 @@ function acharDataNota(t) {
   return undefined;
 }
 
-// extrai valor, litros, data, placa, odômetro e posto do texto da nota
-function parseNota(txt) {
+// extrai valor, litros, data, placa, odômetro e posto do texto da nota, além de
+// campos fiscais ADITIVOS (cnpjEmitente, numeroNota, serieNota, combustivel,
+// precoLitro, chaveNota). Nenhum campo novo altera os consumidores atuais.
+function parseNota(txtRaw) {
+  const txt = normalizarTextoNota(txtRaw);
   const t = txt.toUpperCase();
   const out = {};
 
   // ── PLACA ── prioriza o rótulo "PLACA:"; o fallback usa fronteira de palavra
-  // para NÃO casar com o fim de "CENTRO" + o CEP (ex.: "CENTRO 28970" → "TRO2897")
+  // para NÃO casar com o fim de "CENTRO" + o CEP (ex.: "CENTRO 28970" → "TRO2897").
+  // Cobre placas antigas e Mercosul (inclusive nas informações complementares).
   const placaRe = '[A-Z]{3}[-\\s]?\\d[A-Z0-9]\\d{2}';
   let pm = t.match(new RegExp('PLACA\\s*[:.]?\\s*(' + placaRe + ')'));
   if (!pm) pm = t.match(new RegExp('\\b(' + placaRe + ')\\b'));
   if (pm) out.placa = pm[1].replace(/[\s-]/g, '');
-
-  // ── LITROS ── (quando a nota traz; a nota promissória do posto pode não ter)
-  const lm = t.match(/(\d{1,3}[.,]\d{1,3})\s*(?:L\b|LT\b|LTS\b|LITROS?)/);
-  if (lm) out.litros = parseValor(lm[1]);
 
   // ── DATA ── usa a data de EMISSÃO e NUNCA a de vencimento da promissória
   // ("Em 20 de julho de 2026 pagarei…"). Se só existir a de vencimento, deixa
@@ -3567,15 +3632,77 @@ function parseNota(txt) {
     if (todos.length) out.valor = Math.max(...todos);
   }
 
-  // ── ODÔMETRO / KM ── aceita "Odômetro: 2805,00" (ignora as casas decimais)
-  const km = t.match(/(?:OD[ÔO]METRO|HOD[ÔO]METRO|HOR[ÍI]METRO|\bKM\b)\s*[:.]?\s*([\d.]+)(?:,\d+)?/);
-  if (km) { const n = parseInt(km[1].replace(/\./g, ''), 10); if (n > 0) out.km = n; }
+  // ── ODÔMETRO / KM ── só aceita rótulo explícito do veículo ("KM:"/"ODÔMETRO").
+  // NUNCA um "KM" solto de endereço/rodovia (ex.: "ROD AMARAL PEIXOTO KM 88").
+  const kmM = t.match(/OD[ÔO]METRO\s*[:.]?\s*(\d[\d.]*)/)
+           || t.match(/HOD[ÔO]METRO\s*[:.]?\s*(\d[\d.]*)/)
+           || t.match(/HOR[ÍI]METRO\s*[:.]?\s*(\d[\d.]*)/)
+           || t.match(/\bKM\s*:\s*(\d[\d.]*)/);
+  if (kmM) { const n = parseInt(kmM[1].replace(/\./g, ''), 10); if (n > 0) out.km = n; }
+
+  // ── LITROS + PREÇO/LITRO ── layout de produto da DANFE: unidade LT, quantidade
+  // com até 4 casas (34,1100) e, quando presente, o valor unitário (7,5900).
+  const litM = t.match(/\b(?:LT|LTS|LITROS?)\b\s+(\d{1,4}[.,]\d{2,4})(?:\s+(\d{1,3}[.,]\d{2,4}))?/);
+  if (litM) {
+    out.litros = parseValor(litM[1]);
+    if (litM[2]) out.precoLitro = parseValor(litM[2]);
+  }
+  // fallback (layout antigo: quantidade seguida do rótulo de litro)
+  if (!out.litros) {
+    const l2 = t.match(/(\d{1,3}[.,]\d{1,3})\s*(?:L\b|LT\b|LTS\b|LITROS?)/);
+    if (l2) out.litros = parseValor(l2[1]);
+  }
+  // preço/litro derivado quando não vier explícito
+  if (!out.precoLitro && out.valor && out.litros) out.precoLitro = centavos(out.valor / out.litros);
+  // validação TOLERANTE — não inventa nem substitui valores; só sinaliza coerência
+  // (total ≈ litros × preço). Serve para indicar confiança / necessidade de revisão.
+  if (out.valor && out.litros && out.precoLitro) {
+    const esperado = out.litros * out.precoLitro;
+    const tol = Math.max(0.10, out.valor * 0.02);
+    out.conferenciaOk = Math.abs(esperado - out.valor) <= tol;
+  }
 
   // ── POSTO ── primeira linha curta que menciona POSTO/COMBUSTÍVEIS
   const linha = txt.split('\n').map(l => l.trim()).filter(Boolean)
     .find(l => l.length >= 5 && l.length <= 45 && /POSTO|COMBUST[ÍI]VEIS|COMBUSTIVEL/i.test(l));
   if (linha) out.posto = linha.replace(/\s{2,}/g, ' ');
+
+  // ── CAMPOS FISCAIS NOVOS (aditivos) ──
+  const cn = t.match(/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/);       // 1º CNPJ = emitente
+  if (cn) out.cnpjEmitente = cn[1];
+  const num = t.match(/N[ºO°.]\s*([\d.]{6,})/);
+  if (num) out.numeroNota = num[1];
+  const ser = t.match(/S[ÉE]RIE\s*[:.]?\s*(\d{1,3})/);
+  if (ser) out.serieNota = ser[1];
+  const cb = t.match(/(GASOLINA(?:\s+ADITIVADA|\s+COMUM|\s+PODIUM)?|ETANOL|[ÁA]LCOOL|DIESEL(?:\s*S-?\s?\d{2,3})?|GNV|ARLA\s*32)/);
+  if (cb) out.combustivel = cb[1].replace(/\s+/g, ' ').trim();
+
+  // ── CHAVE DE ACESSO da NF-e (44 dígitos, só números) ──
+  const chave = extrairChaveNota(t);
+  if (chave) out.chaveNota = chave;
+  else if (out.cnpjEmitente || out.numeroNota) {
+    // sem chave válida: devolve os componentes para uma futura chave alternativa
+    out.chaveAlt = {
+      cnpjEmitente: out.cnpjEmitente ? out.cnpjEmitente.replace(/\D/g, '') : '',
+      numeroNota: out.numeroNota ? out.numeroNota.replace(/\D/g, '') : '',
+      serieNota: out.serieNota || '',
+    };
+  }
   return out;
+}
+
+// Chave de acesso da NF-e: exatamente 44 dígitos, só números (remove espaços,
+// pontos e quebras que o DANFE insere). Retorna a string de 44 dígitos ou null.
+function extrairChaveNota(t) {
+  let bloco = null;
+  const m = t.match(/CHAVE\s+DE\s+ACESSO\s*[:.]?\s*([\d\s.]{44,90})/);
+  if (m) bloco = m[1];
+  if (!bloco) {
+    const g = t.match(/(?:\d[ .]?){44,}/);
+    if (g) bloco = g[0];
+  }
+  const only = (bloco || '').replace(/\D/g, '');
+  return only.length >= 44 ? only.slice(0, 44) : null;
 }
 
 // Anexa a nota ao lançamento ABERTO e usa a leitura só pra preencher campos vazios
@@ -3586,18 +3713,11 @@ async function importNota(input) {
   const formAberto = $('modal-tx').classList.contains('open');
   if (!formAberto) openTxForm();
   toast('Lendo a nota… pode levar alguns segundos');
-  let imagem = null, texto = '', anexo = null;
+  // Fluxo único: PDF → texto nativo primeiro; OCR só quando não há camada útil.
+  let leitura, anexo = null;
   try {
-    if (file.type === 'application/pdf') {
-      imagem = await pdfPrimeiraPagina(file);
-      const raw = await fileToRawDataURL(file);
-      anexo = raw.length <= 950000
-        ? { nome: file.name || 'nota.pdf', mime: 'application/pdf', data: raw }
-        : { nome: (file.name || 'nota') + '.jpg', mime: 'image/jpeg', data: imagem };
-    } else {
-      imagem = await fileToJpegDataURL(file, 1600);
-      anexo = { nome: file.name || 'nota.jpg', mime: 'image/jpeg', data: await fileToJpegDataURL(file, 1200) };
-    }
+    leitura = await lerTextoNota(file);
+    anexo = await montarAnexoNota(file, leitura.imagem);
   } catch (e) {
     console.error(e);
     toast('Não consegui abrir esse arquivo.');
@@ -3605,13 +3725,7 @@ async function importNota(input) {
   }
   pendingAnexo = anexo;
   $('tx-anexo-chip').style.display = '';
-  try {
-    texto = await Promise.race([
-      ocrTexto(imagem),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('tempo esgotado')), 25000)),
-    ]);
-  } catch (e) { console.error('OCR indisponível', e); }
-  const info = texto ? parseNota(texto) : {};
+  const info = leitura.texto ? parseNota(leitura.texto) : {};
 
   // nota de abastecimento lida: abre a tela de conferência antes de salvar
   const leuAlgo = info.valor || info.litros || info.placa || info.km || info.data;
