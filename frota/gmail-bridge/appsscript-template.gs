@@ -126,14 +126,24 @@ function ingerirNotasDoPosto() {
         };
 
         try {
-          commitParAtomico_(projectId, idToken, docId, arqFields, metaFields);   // 'criado' ou 'ja_existe' = ok
+          // 'criado' ou 'ja_existe' encerram ESTE anexo (idempotência por hash);
+          // 'ja_existe' vem de FAILED_PRECONDITION e é seguro porque a criação é
+          // atômica + endereçada por conteúdo (o par já existe por completo).
+          commitParAtomico_(projectId, idToken, docId, arqFields, metaFields);
         } catch (e) {
-          // erro real (rede/servidor): NÃO marca o e-mail; retry seguro no próximo ciclo
+          // ERRO REAL (rede/servidor): NÃO conclui este PDF nem marca a mensagem;
+          // log DIAGNOSTICÁVEL sem segredos (só docId + mensagem de erro). O robô
+          // NÃO tenta reparar por gravação isolada (as regras bilaterais negam).
+          Logger.log('ingestao falhou docId=' + docId + ' msg=' + msg.getId() + ' erro=' + e.message);
           threadOk = false;
         }
       }
     }
-    // só marca a thread quando TUDO deu certo (retry idempotente por docId de conteúdo)
+    // Marca por MENSAGEM/PDF: a thread só é marcada quando TODOS os PDFs de TODAS
+    // as mensagens foram tratados (criados ou já-ingeridos). Se ALGUM PDF falhou,
+    // a thread NÃO é marcada e o próximo ciclo reprocessa com segurança
+    // (idempotente por hash). O label é só otimização; a fonte de verdade é o
+    // armazenamento atômico por conteúdo.
     if (threadOk) threads[t].addLabel(GmailApp.createLabel('lagos-ingerido'));
   }
 }

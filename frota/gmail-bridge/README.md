@@ -172,13 +172,41 @@ depois: o anexo **persiste** (a exclusão da tx é *soft delete*, não remove
   confirmar que é o mesmo par (conteúdo diferente ⇒ sha diferente ⇒ id diferente,
   nunca colide). **Não** se trata qualquer `ALREADY_EXISTS` como sucesso cego: só
   é seguro porque o id é o hash do conteúdo.
-- **Marcação:** **não** confiar só no label da thread (ela pode receber anexos
-  novos). A proteção **primária** é o armazenamento idempotente por `id` de
-  conteúdo; a marcação da thread (`lagos-ingerido`) só acontece quando **tudo**
-  deu certo. Se metadado **ou** arquivo falhar, o e-mail **não** é marcado →
-  retry seguro no próximo ciclo.
+- **Marcação por MENSAGEM e por PDF (não só a thread):** o label da thread
+  (`lagos-ingerido`) é apenas uma otimização coarse — a thread pode receber
+  mensagens/anexos novos, então **não** é fonte de verdade. A proteção
+  **primária** é o armazenamento atômico por `id` de conteúdo (por PDF). A thread
+  só é marcada quando **todas** as mensagens e **todos** os PDFs foram tratados
+  (criados ou já-ingeridos por hash). **Nunca** marcar a mensagem/thread se
+  **algum** PDF dela falhou.
+- **`FAILED_PRECONDITION` no commit atômico:**
+  - como a criação é **sempre atômica**, o robô **nunca** produz estado parcial;
+    logo, `FAILED_PRECONDITION` num `id` de conteúdo significa que **o par já foi
+    ingerido** → pode **encerrar aquele anexo**;
+  - o robô **não repara** estado parcial por gravação isolada — ele é
+    **incapaz** disso (as regras bilaterais negam criar um doc sem o par);
+  - um **erro real** (rede/servidor, código ≠ precondição) mantém a mensagem
+    **não concluída** e gera **erro diagnosticável** (log com `docId`+código, sem
+    segredos); a thread não é marcada e o ciclo seguinte reprocessa com segurança;
+  - um estado parcial **externo/inesperado** (ex.: exclusão manual de um dos
+    docs) não é curado silenciosamente pelo robô — aparece como órfão para a
+    verificação de integridade/retenção (fora desta etapa), não como confirmação.
 - A dedup de **negócio** final (chave de acesso da NF-e) continua no momento de
   **confirmar a despesa**, no app.
+
+### Auditoria da regra (endurecimentos aplicados nesta etapa)
+
+O robô fornece **apenas dados de ingestão**; campos de processamento/confirmação
+são do app. As regras agora também garantem:
+- `lido` **vazio** (o robô não preenche campos fiscais);
+- **tamanhos limitados** em `emailFrom` (≤320), `emailAssunto` (≤512),
+  `emailMessageId` (≤200), `nome` (≤200) e `dataBase64` (≤999 629);
+- **timestamps não arbitrários** (`recebidoEm`/`criadoEm` dentro de uma janela de
+  `request.time`);
+- **estado inicial** obrigatório `recebida` (nunca `confirmada`);
+- `txId`/`motivoRejeicao`/`erroLeitura` **null** e `anexoTxId`/`jaLancada`/…
+  **proibidos** (não estão em `hasOnly`);
+- **tipos** corretos e `sha256`/`id` coerentes (`sha256 == hashDoId(id)`).
 
 ---
 
@@ -236,3 +264,44 @@ firebase emulators:exec --only firestore --project lagos-test \
   "node <repo>/frota/tests/rules.emulator.mjs"
 ```
 As regras vêm de `firestore.rules`. Nada real é acessado.
+
+## UID do robô — configuração segura
+
+- Identificado **por UID fixo**, nunca por e-mail/nome apresentado.
+- `roboUid()` traz o **sentinela `ROBO_UID_NAO_CONFIGURADO`** — nenhum usuário
+  real possui esse UID, então, enquanto não for trocado, **todo robô é negado**
+  (fail-closed) e **os sócios não são afetados**. Publicar o sentinela por engano
+  é seguro (o robô simplesmente não funciona).
+- Na ativação, trocar **apenas** o retorno de `roboUid()` pelo UID real do
+  usuário-robô. **Nunca** colocar senha/token nas regras.
+- **Troca/revogação:** para revogar, desabilitar/excluir o usuário-robô no Auth
+  **ou** voltar `roboUid()` ao sentinela **ou** remover os dois `match`
+  específicos. Qualquer um corta o robô na hora; os sócios seguem intactos.
+
+## Plano de ATIVAÇÃO (executar só quando aprovado — nada disto foi feito)
+
+1. **Backup integral das Rules atuais** — salvar o conteúdo publicado hoje no
+   Console (copiar para `firestore.rules.backup-AAAA-MM-DD`).
+2. **Criar o usuário-robô** no Firebase Auth (e-mail/senha dedicados).
+3. **Copiar o UID** gerado do usuário-robô.
+4. **Inserir o UID** no ruleset (trocar `roboUid()` → UID real).
+5. **Revalidar no Emulator** (`rules.emulator.mjs`) com o UID real.
+6. **Aplicar as Rules no Console** (colar o ruleset revisado).
+7. **Testar permissões** com uma **conta Gmail de teste** (não a do Luiz):
+   comprovar que o robô cria o par e é negado no resto; sócios intactos.
+8. **Ativar o listener do app** — ligar `INTEGRACAO_NOTAS = true`.
+9. **Publicar uma versão controlada** (bump de versão/cache) e validar.
+10. **Conectar por último o Gmail do Luiz** (Script Properties + gatilho).
+
+## ROLLBACK por fase (reversão segura)
+
+| Fase | Reverter com |
+|------|--------------|
+| Usuário-robô criado | **desabilitar/excluir** o usuário-robô no Auth |
+| Permissões específicas aplicadas | **remover** os dois `match` do robô (ou voltar `roboUid()` ao sentinela) |
+| Rules aplicadas | **restaurar** o `firestore.rules.backup-…` no Console |
+| Listener ligado | **desligar** a flag `INTEGRACAO_NOTAS = false` e republicar |
+| Gatilho do Apps Script | **remover/desabilitar** o gatilho e limpar Script Properties |
+
+Em **qualquer** rollback, **notas e despesas existentes são preservadas** — as
+reversões mexem só em permissões/robô/flag/gatilho, nunca apagam dados.

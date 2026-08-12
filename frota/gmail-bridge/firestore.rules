@@ -1,16 +1,20 @@
-// REGRAS PROPOSTAS — validar SOMENTE no Firebase Emulator (Etapa 4 corretiva).
-// NÃO aplicar no Console. Sócios mantêm o acesso vigente (catch-all).
+// RULESET COMPLETO PROPOSTO — validar SOMENTE no Firebase Emulator (Etapa 5).
+// NÃO aplicar no Console. Parte da regra REAL publicada (catch-all dos sócios)
+// e ACRESCENTA apenas a permissão mínima do robô: CRIAR o par atômico
+// (notaArquivos/{id} + notasPendentes/{id}). Nada mais.
 //
-// O robô é identificado por UID FIXO e só pode CRIAR o PAR (arquivo + metadado)
-// na MESMA operação atômica. Vínculo BILATERAL via getAfter()/existsAfter():
-// criar um sem o outro é negado; ids/hashes divergentes são negados. O id é
-// endereçado por conteúdo (nfe-<sha256>) e a regra exige sha256 == hash do id,
-// o que torna a idempotência segura mesmo SEM leitura (a existência do id prova
-// o conteúdo). O robô nunca lê, atualiza ou exclui.
+// Convivência com o catch-all: permissões sobrepostas são SOMADAS (OR). O robô
+// NÃO passa em isSocio() (o catch-all o nega) e só recebe o `create` estreito
+// das duas coleções pelos matches específicos. Sócios mantêm tudo.
+//
+// UID do robô: identificado por UID FIXO (nunca por e-mail/nome). O valor abaixo
+// é um SENTINELA que NENHUM usuário real possui → enquanto não for trocado pelo
+// UID real (na ativação), qualquer robô é NEGADO (fail-closed), sem afetar os
+// sócios. Nunca colocar senha/token nas regras.
 //
 // Limites (espelham gmail-bridge/bridge.mjs, formato REST do Firestore):
-//   dataBase64 (base64 CRU) <= 999629  (≈ doc real <= 1.000.000)
-//   tamanhoBytes (PDF cru declarado)      <= 749721
+//   dataBase64 (base64 CRU) <= 999629   (doc real <= 1.000.000; teto 1.048.576)
+//   tamanhoBytes (PDF cru)  <= 749721
 
 rules_version = '2';
 service cloud.firestore {
@@ -23,12 +27,14 @@ service cloud.firestore {
         'lagosoperacional+thadeu@gmail.com'
       ];
     }
-    function roboUid() { return 'ROBO_NOTAS_UID'; }
+    // Trocar 'ROBO_UID_NAO_CONFIGURADO' pelo UID real do robô SÓ na ativação.
+    function roboUid() { return 'ROBO_UID_NAO_CONFIGURADO'; }
     function isRobo() { return request.auth != null && request.auth.uid == roboUid(); }
 
     function hexSha(s) { return s is string && s.matches('^[0-9a-f]{64}$'); }
     function idValido(id) { return id.matches('^nfe-[0-9a-f]{64}$'); }
-    function hashDoId(id) { return id.split('-')[1]; }   // 'nfe-<hex>' → '<hex>'
+    function hashDoId(id) { return id.split('-')[1]; }
+    function tsOk(v) { return v is int && v >= request.time.toMillis() - 600000 && v <= request.time.toMillis() + 120000; }
 
     function metaEsperado(database, id, sha) {
       return existsAfter(/databases/$(database)/documents/notasPendentes/$(id))
@@ -50,28 +56,32 @@ service cloud.firestore {
         && d.nome is string && d.nome.size() > 0 && d.nome.size() <= 200
         && d.tamanhoBytes is int && d.tamanhoBytes > 0 && d.tamanhoBytes <= 749721
         && d.dataBase64 is string && d.dataBase64.size() > 0 && d.dataBase64.size() <= 999629
-        && metaEsperado(database, id, d.sha256);                 // vínculo bilateral (o metadado par)
+        && tsOk(d.criadoEm)                                       // timestamp não arbitrário
+        && metaEsperado(database, id, d.sha256);                  // vínculo bilateral
     }
     function metaValido(database, id, d) {
       return d.keys().hasOnly(['status', 'origem', 'recebidoEm', 'emailMessageId', 'emailFrom', 'emailAssunto', 'sha256', 'lido', 'arquivoId', 'tamanhoBytes', 'txId', 'motivoRejeicao', 'erroLeitura'])
         && idValido(id)
-        && d.status == 'recebida'
+        && d.status == 'recebida'                                 // nunca outro estado (ex.: confirmada)
         && d.origem == 'email'
-        && hexSha(d.sha256) && d.sha256 == hashDoId(id)          // id ⟺ conteúdo
+        && hexSha(d.sha256) && d.sha256 == hashDoId(id)
         && d.arquivoId == id
-        && d.lido is map
+        && d.lido is map && d.lido.size() == 0                    // o robô NÃO preenche campos fiscais
         && d.tamanhoBytes is int && d.tamanhoBytes > 0 && d.tamanhoBytes <= 749721
-        && d.txId == null && d.motivoRejeicao == null && d.erroLeitura == null
-        && d.emailMessageId is string && d.emailFrom is string
-        && arqEsperado(database, id, d.sha256);                  // vínculo bilateral (o arquivo par)
+        && d.txId == null && d.motivoRejeicao == null && d.erroLeitura == null   // campos de processamento/confirmação são do app
+        && d.emailMessageId is string && d.emailMessageId.size() > 0 && d.emailMessageId.size() <= 200
+        && d.emailFrom is string && d.emailFrom.size() > 0 && d.emailFrom.size() <= 320
+        && d.emailAssunto is string && d.emailAssunto.size() <= 512
+        && tsOk(d.recebidoEm)
+        && arqEsperado(database, id, d.sha256);                   // vínculo bilateral
     }
 
-    // Sócios: acesso vigente mantido (catch-all atual, inalterado).
+    // === Sócios: acesso vigente mantido (catch-all real, inalterado) ===
     match /{document=**} {
       allow read, write: if isSocio();
     }
 
-    // Robô: SÓ cria o par, na MESMA operação (atômica). Sem read/update/delete.
+    // === Robô: SÓ cria o par, na MESMA operação (atômica). Sem read/update/delete. ===
     match /notaArquivos/{id} {
       allow create: if isRobo() && arqValido(database, id, request.resource.data);
     }
