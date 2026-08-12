@@ -162,6 +162,8 @@
       </div>
     </div>
 
+    <div id="notas-revisar" class="nrev" style="display:none"></div>
+
     <div id="lanc-charts" style="display:none">
       <h2 class="sec-title" data-ic="chart">Para onde foi o dinheiro</h2>
       <div class="card" id="lanc-charts-body"></div>
@@ -283,6 +285,7 @@
     </div>
     <label class="fld"><span>Descrição <small>(opcional)</small></span><input type="text" id="tx-desc" placeholder="Ex.: troca de óleo, repasse da prefeitura…"></label>
     <button class="btn btn-secondary btn-block" id="tx-nota-btn" onclick="document.getElementById('nota-input').click()" data-ic="paperclip">Anexar nota ou comprovante</button>
+    <button class="btn btn-secondary btn-block" id="tx-fila-btn" style="margin-top:8px" onclick="document.getElementById('nota-fila-input').click()" data-ic="receipt">Adicionar às notas para revisar</button>
     <div id="tx-anexo-chip" class="fuel-hint" style="display:none; margin-top:8px">Nota anexada — os valores lidos preenchem os campos vazios</div>
     <button class="btn btn-primary btn-block" id="tx-save-btn" style="margin-top:10px" onclick="saveTx()">Salvar</button>
   </div>
@@ -536,6 +539,20 @@
 <input type="file" id="veh-foto-input" accept="image/*" style="display:none">
 <input type="file" id="drv-foto-input" accept="image/*" style="display:none">
 <input type="file" id="nota-input" accept="image/*,application/pdf" style="display:none">
+<input type="file" id="nota-fila-input" accept="image/*,application/pdf" style="display:none">
+
+<!-- Rejeitar nota (motivo obrigatório) -->
+<div class="overlay" id="modal-nota-rej">
+  <div class="sheet sheet-small">
+    <div class="sheet-head"><h3 data-ic="x">Rejeitar nota</h3><button class="x" onclick="closeOverlay('modal-nota-rej')">✕</button></div>
+    <p class="modal-note">Escolha um motivo. A nota não vira despesa e o arquivo continua guardado — dá para restaurar depois.</p>
+    <label class="nrej-opt"><input type="radio" name="nrej-motivo" value="duplicada"><span>Duplicada</span></label>
+    <label class="nrej-opt"><input type="radio" name="nrej-motivo" value="nao_abastecimento"><span>Não é abastecimento</span></label>
+    <label class="nrej-opt"><input type="radio" name="nrej-motivo" value="ilegivel"><span>Ilegível</span></label>
+    <label class="nrej-opt"><input type="radio" name="nrej-motivo" value="outro"><span>Outro</span></label>
+    <button class="btn btn-danger btn-block" style="margin-top:10px" onclick="confirmarRejeicaoNota()">Rejeitar nota</button>
+  </div>
+</div>
 
 <!-- Central do Motorista -->
 <div class="overlay" id="modal-drv-detail">

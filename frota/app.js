@@ -32,7 +32,7 @@ let me = null; // { uid, email, nome }
 
 // Estado compartilhado (espelho do Firestore ou do localStorage no demo)
 // (anexos ficam fora dos listeners: são carregados sob demanda, por item)
-let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [], empresa: [], financiamentos: [] };
+let S = { vehicles: [], drivers: [], tx: [], kmlog: [], profiles: {}, anexos: [], eventos: [], empresa: [], financiamentos: [], notasPendentes: [] };
 let unsubs = [];
 
 // Estado de UI
@@ -345,7 +345,7 @@ function salvarEmpresaDoc(patch) {
 
 function startListeners() {
   stopListeners();
-  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa', 'financiamentos'].forEach(coll => {
+  ['vehicles', 'drivers', 'tx', 'kmlog', 'eventos', 'empresa', 'financiamentos', 'notasPendentes'].forEach(coll => {
     unsubs.push(db.collection(coll).onSnapshot(snap => {
       S[coll] = snap.docs.map(d => ({ ...d.data(), id: d.id }));
       renderAll();
@@ -1190,6 +1190,7 @@ function setLancCat(cat) {
 
 function renderLanc() {
   $('lanc-month-label').textContent = monthLabel(monthOffset);
+  renderNotasRevisar();
 
   // popula filtro de veículos
   const sel = $('lanc-veh-filter');
@@ -3721,6 +3722,7 @@ async function importNota(input) {
   if (!file) return;
   const formAberto = $('modal-tx').classList.contains('open');
   if (!formAberto) openTxForm();
+  notaFilaId = null;   // importação direta (não é revisão de item da fila)
   toast('Lendo a nota… pode levar alguns segundos');
   // Fluxo único: PDF → texto nativo primeiro; OCR só quando não há camada útil.
   let leitura, anexo = null;
@@ -3812,33 +3814,67 @@ async function confirmarNotaAbast() {
   const litros = parseValor($('nc-litros').value);
   const km = parseIntBR($('nc-km').value);
   const veiculo = $('nc-veiculo').value;
-  const data = $('nc-data').value || todayStr();
+  const data = $('nc-data').value;
   if (valor <= 0) { toast('Confira o valor total da nota.'); return; }
   if (!veiculo) { toast('Confirme qual van foi abastecida.'); return; }
+  if (!data) { toast('Confira a data da nota.'); return; }
 
   if (_salvandoNota) return;
   _salvandoNota = true;
+  const filaId = notaFilaId;          // fixa o contexto da fila para esta operação
+  const info = notaConfInfo || {};
+  const chave = chaveDedupNota(info);
+  const idAlvo = idTxDaNota(chave);
+
+  // já lançada antes (manual ou por OUTRA nota da fila)? nunca cria uma 2ª
+  // despesa. Se a tx existente for desta mesma nota (retry após falha parcial),
+  // não bloqueia — segue para reconhecer e concluir de forma idempotente.
+  const existente = txPorChaveDedup(chave);
+  if (existente && existente.notaPendenteId !== filaId) {
+    closeOverlay('modal-nota-conf');
+    if (filaId) {
+      try { await marcarNotaConfirmada(filaId, existente.id, true); } catch (e) { console.error(e); }
+      toast('Esta nota já estava lançada — vinculei ao lançamento existente.');
+    } else {
+      toast('Esta nota já foi lançada.');
+    }
+    notaConfInfo = null; notaFilaId = null; _salvandoNota = false;
+    return;
+  }
+
   const v = vehById(veiculo);
   const kmAntes = v ? kmAtual(v) : 0;
+  // retry após falha parcial: se a tx-alvo já existe, reaproveita (idempotente)
+  const jaExiste = S.tx.find(t => t.id === idAlvo && !t.deleted);
   const t = {
     tipo: 'despesa', cat: 'combustivel', origem: 'frota',
     valor, data, veiculo, litros, km,
     desc: $('nc-posto').value.trim(),
-    autorNome: me.nome || me.email, autorUid: me.uid, ts: Date.now(),
+    autorNome: me.nome || me.email, autorUid: me.uid, ts: jaExiste ? jaExiste.ts : Date.now(),
   };
-  const id = newId();
+  if (chave) t.chaveDedup = chave;
+  if (filaId) t.notaPendenteId = filaId;
   const anexo = pendingAnexo;
   closeOverlay('modal-nota-conf');
   toast('Salvando abastecimento…');
   try {
-    await dataSet('tx', id, t);
+    await dataSet('tx', idAlvo, t);
     // nota anexada ao lançamento e vinculada ao veículo (aparece na ficha da van)
-    if (anexo) {
-      try { await addAnexoRecord('tx', id, { ...anexo, veiculoId: veiculo }); } catch (e) { console.error(e); }
-      pendingAnexo = null;
+    if (anexo && !jaExiste) {
+      try { await addAnexoRecord('tx', idAlvo, { ...anexo, veiculoId: veiculo }); } catch (e) { console.error(e); }
     }
+    pendingAnexo = null;
     // o abastecimento entra como leitura; espelha no cadastro como base
     if (km > 0 && v) await dataSet('vehicles', v.id, { ...stripId(v), km });
+    // só marca a nota como confirmada DEPOIS que a tx foi criada com sucesso
+    if (filaId) {
+      try { await marcarNotaConfirmada(filaId, idAlvo, false); }
+      catch (e) {
+        console.error(e);
+        toast('Lançamento salvo, mas a nota não atualizou. Toque em Revisar de novo para concluir.');
+        notaConfInfo = null; notaFilaId = null; _salvandoNota = false; return;
+      }
+    }
     const partes = ['Abastecimento salvo ✓'];
     if (km > kmAntes && kmAntes > 0) partes.push('rodou ' + fmtKm(km - kmAntes) + ' desde o último registro');
     const cons = consumoMedio(veiculo);
@@ -3850,6 +3886,7 @@ async function confirmarNotaAbast() {
     toast('Não foi possível salvar. Verifique a internet e tente de novo.');
   }
   notaConfInfo = null;
+  notaFilaId = null;
   _salvandoNota = false;
 }
 
@@ -3858,6 +3895,7 @@ function notaConfManual() {
   const info = notaConfInfo || {};
   const anexo = pendingAnexo;
   const veic = $('nc-veiculo').value;
+  notaFilaId = null;   // "preencher manualmente" sai do fluxo da fila
   closeOverlay('modal-nota-conf');
   openTxForm();
   pendingAnexo = anexo;
@@ -3871,6 +3909,218 @@ function notaConfManual() {
   updateFuelExtra();
   updateFuelHint();
   notaConfInfo = null;
+}
+
+// ══════════════════════════════════════════
+// NOTAS PARA REVISAR — fila separada dos lançamentos (tx)
+// Uma nota nunca vira despesa sozinha: fica na fila até o Luiz revisar,
+// confirmar (reutilizando confirmarNotaAbast) ou rejeitar.
+// ══════════════════════════════════════════
+let notaFilaId = null;   // nota pendente em revisão no modal de conferência
+let notaRejId = null;    // nota pendente em rejeição
+let _salvandoNotaFila = false;
+const NOTA_PENDENTE = ['recebida', 'processando', 'precisa_revisao'];
+const MOTIVO_REJ = { duplicada: 'Duplicada', nao_abastecimento: 'Não é abastecimento', ilegivel: 'Ilegível', outro: 'Outro' };
+
+// só os campos "lido" definidos no modelo (aditivo: campos ausentes não quebram)
+function mapLidoNota(info) {
+  const o = {};
+  ['data', 'posto', 'cnpjEmitente', 'numeroNota', 'serieNota', 'chaveNota', 'combustivel', 'valor', 'litros', 'precoLitro', 'placa', 'km', 'conferenciaOk']
+    .forEach(k => { if (info[k] !== undefined) o[k] = info[k]; });
+  return o;
+}
+function novaNotaPendente(dados) {
+  return {
+    id: dados.id || newId(),
+    status: dados.status || 'precisa_revisao',
+    recebidoEm: dados.recebidoEm || Date.now(),
+    origem: dados.origem || 'manual',
+    anexoNome: dados.anexoNome || null,
+    anexoMime: dados.anexoMime || null,
+    anexoData: dados.anexoData || null,
+    emailMessageId: dados.emailMessageId || null,
+    emailFrom: dados.emailFrom || null,
+    emailAssunto: dados.emailAssunto || null,
+    lido: dados.lido || {},
+    txId: dados.txId || null,
+    motivoRejeicao: dados.motivoRejeicao || null,
+    erroLeitura: dados.erroLeitura || null,
+  };
+}
+// chave determinística p/ deduplicação — NUNCA usa valor/data (evita bloquear
+// notas diferentes com mesmo valor/dia). Prioriza a chave de acesso da NF-e.
+function chaveDedupNota(lido) {
+  if (lido && /^\d{44}$/.test(lido.chaveNota || '')) return lido.chaveNota;
+  const cn = String(lido && lido.cnpjEmitente || '').replace(/\D/g, '');
+  const num = String(lido && lido.numeroNota || '').replace(/\D/g, '');
+  const ser = String(lido && lido.serieNota || '').replace(/\D/g, '');
+  if (num && cn) return 'alt:' + cn + '-' + num + (ser ? '-' + ser : '');
+  return '';
+}
+function txPorChaveDedup(chave) {
+  return chave ? S.tx.find(t => !t.deleted && t.chaveDedup === chave) : null;
+}
+// id determinístico da tx a partir da chave — garante idempotência em novas
+// tentativas (falha parcial não duplica a despesa).
+function idTxDaNota(chave) {
+  return chave ? 'ntx_' + chave.replace(/[^0-9A-Za-z]/g, '_') : newId();
+}
+function notasPendentesLista() { return (S.notasPendentes || []).filter(n => NOTA_PENDENTE.includes(n.status)); }
+// vínculo vivo? uma nota confirmada cuja tx foi para a lixeira não pode alegar
+// silenciosamente que existe uma despesa válida.
+function notaTemTxViva(n) { return !!(n.txId && S.tx.find(t => t.id === n.txId && !t.deleted)); }
+
+// importação manual → FILA (não cria tx, não mexe em KM/veículo)
+async function importNotaParaFila(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  if (!exigirEdicao()) return;
+  toast('Lendo a nota… pode levar alguns segundos');
+  let leitura, anexo;
+  try {
+    leitura = await lerTextoNota(file);
+    anexo = await montarAnexoNota(file, leitura.imagem);
+  } catch (e) { console.error(e); toast('Não consegui abrir esse arquivo.'); return; }
+  const temTexto = textoUtil(leitura.texto);
+  const info = leitura.texto ? parseNota(leitura.texto) : {};
+  const nota = novaNotaPendente({
+    origem: 'manual',
+    anexoNome: anexo.nome, anexoMime: anexo.mime, anexoData: anexo.data,
+    lido: mapLidoNota(info),
+    status: 'precisa_revisao',
+    erroLeitura: temTexto ? null : 'sem_texto_util',
+  });
+  try {
+    await dataSet('notasPendentes', nota.id, nota);
+    toast('Nota adicionada às "Notas para revisar"');
+    goTab('lanc');
+    setTimeout(() => { const el = $('notas-revisar'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 120);
+  } catch (e) { console.error(e); toast('Não foi possível salvar a nota. Tente de novo.'); }
+}
+
+// abre o modal de conferência já existente para revisar uma nota da fila
+function revisarNotaPendente(id) {
+  const n = (S.notasPendentes || []).find(x => x.id === id);
+  if (!n) return;
+  if (!exigirEdicao()) return;
+  if (n.status === 'confirmada' && notaTemTxViva(n)) { toast('Esta nota já foi confirmada.'); return; }
+  notaFilaId = id;
+  pendingAnexo = n.anexoData ? { nome: n.anexoNome || 'nota', mime: n.anexoMime || 'application/pdf', data: n.anexoData } : null;
+  abrirConferenciaNota({ ...(n.lido || {}) });
+}
+
+async function marcarNotaConfirmada(notaId, txId, jaLancada) {
+  const n = (S.notasPendentes || []).find(x => x.id === notaId);
+  if (!n) return;
+  const patch = { ...stripId(n), status: 'confirmada', txId, confirmadoEm: Date.now(), motivoRejeicao: null, erroLeitura: null };
+  if (jaLancada) patch.jaLancada = true;
+  await dataSet('notasPendentes', notaId, patch);
+}
+
+// rejeição com motivo obrigatório
+function abrirRejeicaoNota(id) {
+  const n = (S.notasPendentes || []).find(x => x.id === id);
+  if (!n) return;
+  if (!exigirEdicao()) return;
+  notaRejId = id;
+  document.querySelectorAll('input[name="nrej-motivo"]').forEach(r => { r.checked = false; });
+  openOverlay('modal-nota-rej');
+}
+async function confirmarRejeicaoNota() {
+  const sel = document.querySelector('input[name="nrej-motivo"]:checked');
+  if (!sel) { toast('Escolha um motivo para rejeitar.'); return; }
+  const n = (S.notasPendentes || []).find(x => x.id === notaRejId);
+  if (!n) { closeOverlay('modal-nota-rej'); return; }
+  try {
+    await dataSet('notasPendentes', n.id, { ...stripId(n), status: 'rejeitada', motivoRejeicao: sel.value, rejeitadoEm: Date.now() });
+    closeOverlay('modal-nota-rej'); notaRejId = null;
+    toast('Nota rejeitada');
+  } catch (e) { console.error(e); toast('Não foi possível rejeitar agora.'); }
+}
+// restaurar (rejeitada ou com tx removida) de volta para a revisão
+async function restaurarNotaRevisar(id) {
+  const n = (S.notasPendentes || []).find(x => x.id === id);
+  if (!n) return;
+  if (!exigirEdicao()) return;
+  try {
+    await dataSet('notasPendentes', id, { ...stripId(n), status: 'precisa_revisao', motivoRejeicao: null, txId: null });
+    toast('Nota voltou para revisão');
+  } catch (e) { console.error(e); toast('Não foi possível restaurar agora.'); }
+}
+
+// ── render da área "Notas para revisar" (discreta, dentro do Financeiro) ──
+let _histNotasAberto = false;
+function toggleHistNotas() { _histNotasAberto = !_histNotasAberto; renderNotasRevisar(); }
+function nrevChip(txt) { return `<span class="nrev-chip">${esc(txt)}</span>`; }
+function notaResumoHTML(n, acoes) {
+  const l = n.lido || {};
+  const posto = l.posto ? esc(l.posto) : 'Posto não identificado';
+  const val = l.valor ? R(l.valor) : 'Valor a revisar';
+  const dt = l.data ? fmtData(l.data) : 'Data a revisar';
+  const veic = l.placa ? esc(l.placa) : 'Veículo não identificado';
+  const extra = [l.combustivel ? esc(l.combustivel) : '', l.litros ? String(l.litros).replace('.', ',') + ' L' : ''].filter(Boolean).join(' · ');
+  return `
+    <div class="nrev-card">
+      <div class="nrev-main">
+        <div class="nrev-posto">${posto}</div>
+        <div class="nrev-meta">${dt} · <b>${val}</b></div>
+        <div class="nrev-sub">${veic}${extra ? ' · ' + extra : ''}</div>
+        ${n.erroLeitura ? '<div class="nrev-warn">' + icon('alert', 14) + 'Leitura incompleta — revise os campos</div>' : ''}
+      </div>
+      <div class="nrev-acts">${acoes}</div>
+    </div>`;
+}
+function renderNotasRevisar() {
+  const wrap = $('notas-revisar');
+  if (!wrap) return;
+  const todas = S.notasPendentes || [];
+  if (!todas.length) { wrap.style.display = 'none'; wrap.innerHTML = ''; return; }
+  wrap.style.display = '';
+  const pend = notasPendentesLista().sort((a, b) => (b.recebidoEm || 0) - (a.recebidoEm || 0));
+  const conf = todas.filter(n => n.status === 'confirmada');
+  const rej = todas.filter(n => n.status === 'rejeitada');
+  // notas confirmadas cuja tx sumiu (excluída no fluxo financeiro) → atenção
+  const orfas = conf.filter(n => !notaTemTxViva(n));
+
+  let html = `<div class="nrev-head"><h2 class="sec-title" data-ic="receipt" style="margin:0">Notas para revisar</h2>`
+    + `<span class="nrev-count${pend.length ? ' on' : ''}">${pend.length}</span>`
+    + `<button class="btn btn-small nrev-add" onclick="document.getElementById('nota-fila-input').click()">${icon('plus', 14)}Adicionar</button></div>`;
+
+  if (pend.length) {
+    html += pend.map(n => notaResumoHTML(n,
+      `<button class="btn btn-small btn-primary" onclick="revisarNotaPendente('${n.id}')">Revisar</button>`
+      + `<button class="btn btn-small" onclick="abrirRejeicaoNota('${n.id}')">Rejeitar</button>`)).join('');
+  } else {
+    html += `<div class="nrev-empty">Nenhuma nota aguardando revisão.</div>`;
+  }
+
+  // notas órfãs (tx removida) — sempre visíveis, precisam de ação
+  if (orfas.length) {
+    html += `<div class="nrev-subhead">${icon('alert', 14)}Lançamento removido</div>`;
+    html += orfas.map(n => notaResumoHTML(n,
+      `<button class="btn btn-small btn-primary" onclick="restaurarNotaRevisar('${n.id}')">Reabrir</button>`)).join('');
+  }
+
+  // histórico simples (confirmadas com tx viva + rejeitadas) — recolhido
+  const confOk = conf.filter(n => notaTemTxViva(n));
+  const totHist = confOk.length + rej.length;
+  if (totHist) {
+    html += `<button class="nrev-hist-toggle" onclick="toggleHistNotas()">${icon('history', 14)}Histórico (${totHist}) ${_histNotasAberto ? '▲' : '▼'}</button>`;
+    if (_histNotasAberto) {
+      html += confOk.sort((a, b) => (b.confirmadoEm || 0) - (a.confirmadoEm || 0)).map(n => notaResumoHTML(n,
+        `${nrevChip('Confirmada')}<button class="btn btn-small" onclick="verTxDaNota('${n.id}')">Ver lançamento</button>`)).join('');
+      html += rej.sort((a, b) => (b.rejeitadoEm || 0) - (a.rejeitadoEm || 0)).map(n => notaResumoHTML(n,
+        `${nrevChip('Rejeitada: ' + (MOTIVO_REJ[n.motivoRejeicao] || '—'))}<button class="btn btn-small" onclick="restaurarNotaRevisar('${n.id}')">Restaurar</button>`)).join('');
+    }
+  }
+  wrap.innerHTML = html;
+  injetarIcones();
+}
+function verTxDaNota(id) {
+  const n = (S.notasPendentes || []).find(x => x.id === id);
+  if (n && n.txId && S.tx.find(t => t.id === n.txId && !t.deleted)) openTxDetail(n.txId);
+  else toast('O lançamento vinculado não está mais disponível.');
 }
 
 // ══════════════════════════════════════════
@@ -4024,6 +4274,7 @@ document.addEventListener('change', e => {
   if (e.target.id === 'veh-foto-input') handleVehFotoInput(e.target);
   if (e.target.id === 'drv-foto-input') handleDrvFotoInput(e.target);
   if (e.target.id === 'nota-input') importNota(e.target);
+  if (e.target.id === 'nota-fila-input') importNotaParaFila(e.target);
 });
 
 // Enter no login envia o formulário
@@ -4056,6 +4307,14 @@ async function softDeleteTx(id) {
   if (!t || t.deleted) return;
   try {
     await dataSet('tx', id, { ...stripId(t), deleted: true, deletedPorNome: me.nome || me.email, deletedEm: Date.now() });
+    // integridade: se a despesa veio de uma nota da fila, a nota não pode seguir
+    // dizendo que existe um lançamento válido — reabre para revisão.
+    if (t.notaPendenteId) {
+      const n = (S.notasPendentes || []).find(x => x.id === t.notaPendenteId);
+      if (n && n.status === 'confirmada') {
+        try { await dataSet('notasPendentes', n.id, { ...stripId(n), status: 'precisa_revisao', txId: null, erroLeitura: 'tx_removida' }); } catch (e) { console.error(e); }
+      }
+    }
     toast('Lançamento movido para a lixeira');
   } catch (e) { console.error(e); toast('Não foi possível excluir agora. Tente de novo.'); }
 }
@@ -4067,6 +4326,13 @@ async function restaurarTx(id) {
     const limpo = stripId(t);
     delete limpo.deleted; delete limpo.deletedPorNome; delete limpo.deletedEm;
     await dataSet('tx', id, limpo);
+    // se a despesa veio de uma nota da fila, restaura o vínculo
+    if (t.notaPendenteId) {
+      const n = (S.notasPendentes || []).find(x => x.id === t.notaPendenteId);
+      if (n && n.status !== 'confirmada') {
+        try { await dataSet('notasPendentes', n.id, { ...stripId(n), status: 'confirmada', txId: id, erroLeitura: null }); } catch (e) { console.error(e); }
+      }
+    }
     toast('Lançamento recuperado ✓');
     renderMais();
   } catch (e) { toast('Não foi possível recuperar agora.'); }
