@@ -381,15 +381,14 @@ function renderRecentTx() {
   const platMap = Object.fromEntries((D.platforms || []).map(p => [p.id, p]));
   const exps = (D.expenses || []).map(e => ({
     type: 'exp', id: e.id, date: e.date, label: e.description || e.category, sub: e.category, amount: e.amount,
+    typeLabel: _movementTypeLabel(e),
     editRef: { kind: 'exp', id: e.id }
   }));
   const incItems = (D.incomeItems || []).filter(it => it.status === 'paid').map(it => ({
     type: 'inc', id: it.id, date: it.date,
     label: it.note || platMap[it.platformId]?.name || 'Receita',
     sub: platMap[it.platformId]?.name || '',
-    // Venda de patrimônio (asset-sale) é entrada de caixa extraordinária: rotula o
-    // "tipo" de forma honesta, sem alterar valor, agregação ou natureza.
-    typeLabel: (it.meta && it.meta.source === 'asset-sale') ? 'Venda de patrimônio' : 'Receita',
+    typeLabel: _movementTypeLabel(it),
     amount: it.amount,
     editRef: { kind: 'item', id: it.id }
   }));
@@ -399,6 +398,7 @@ function renderRecentTx() {
       const v = pm[p.id];
       if (v && v > 0 && !(D.incomeItems || []).some(it => it.date === date && it.platformId === p.id))
         manualInc.push({ type: 'inc', id: '', date, label: p.name, sub: '', amount: v,
+          typeLabel: 'Receita',
           editRef: { kind: 'legacy', date, pid: p.id } });
     });
   });
@@ -416,7 +416,7 @@ function renderRecentTx() {
       <div class="tx-icon ${tx.type === 'inc' ? 'tx-icon-inc' : 'tx-icon-exp'}">${tx.type === 'inc' ? '↑' : '↓'}</div>
       <div class="tx-info">
         <div class="tx-label">${escHtml(tx.label)}</div>
-        <div class="tx-sub">${tx.sub ? escHtml(tx.sub) + ' · ' : ''}${tx.type === 'inc' ? (tx.typeLabel || 'Receita') : 'Gasto'} · ${fmtShort(tx.date)}</div>
+        <div class="tx-sub">${tx.sub ? escHtml(tx.sub) + ' · ' : ''}${escHtml(tx.typeLabel || 'Gasto')} · ${fmtShort(tx.date)}</div>
       </div>
       <div class="tx-amt ${tx.type === 'inc' ? 'pos' : 'neg'}">${tx.type === 'inc' ? '+' : '−'}${currSym} ${Math.abs(tx.amount).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
     </div>`;
@@ -591,6 +591,7 @@ function _srchCollect() {
     out.push({
       type:'exp', date: localDateKey(e.date), amount: e.amount,
       desc: e.description || '', tag: (e.category && String(e.category).trim()) ? e.category : 'Sem categoria',
+      typeLabel: _movementTypeLabel(e),
       link: _srchLinkName(e), bemId: _expBemLegacyId(e), editRef: { kind:'exp', id:e.id },
     });
   });
@@ -599,6 +600,7 @@ function _srchCollect() {
     out.push({
       type:'inc', date: localDateKey(it.date), amount: it.amount,
       desc: it.note || '', tag: pl ? pl.name : 'Receita', link:'',
+      typeLabel: _movementTypeLabel(it),
       assetSale: !!(it.meta && it.meta.source === 'asset-sale'),
       pending: it.status === 'pending', editRef: { kind:'item', id:it.id },
     });
@@ -614,6 +616,7 @@ function _srchCollect() {
       const pl = (D.platforms||[]).find(p => p.id === pid);
       out.push({
         type:'inc', date: dk, amount: v, desc:'', tag: pl ? pl.name : 'Receita',
+        typeLabel: 'Receita',
         link:'', editRef: { kind:'legacy', date: dateKey, pid },
       });
     });
@@ -754,7 +757,7 @@ function renderPesquisaResults() {
   listEl.innerHTML = rows.map(r => {
     const sign = r.type === 'inc' ? '+' : '−';
     const cls = r.type === 'inc' ? 'v-green' : 'v-red';
-    const typeLbl = r.type === 'inc' ? (r.assetSale ? 'Venda de patrimônio' : 'Receita') : 'Gasto';
+    const typeLbl = r.typeLabel || (r.type === 'inc' ? 'Receita' : 'Gasto');
     const title = r.desc || r.tag;
     const linkHtml = r.link ? `<span class="srch-r-link">· ${escHtml(r.link)}</span>` : '';
     const pend = r.pending ? ' <span class="srch-r-pend">(pendente)</span>' : '';
@@ -2083,6 +2086,29 @@ function _movementNature(item) {
   if (meta && _isValidExpenseNatureOverride(meta.nature)) return meta.nature;
   // 4) Default de despesa manual.
   return 'consumo';
+}
+
+// ── Rótulo humano do TIPO de uma movimentação (só apresentação) ────────────
+// Recentes e Pesquisa usam este helper para não chamar toda saída de "Gasto"
+// enquanto o resto do app já separa consumo de dívida e de aquisição. Deriva de
+// `_movementNature` e da metadata estrutural que já existe — não é uma segunda
+// classificação, não decide nada e não entra em cálculo nenhum.
+//
+// `fixed-payment` é consumo para o motor (e continua sendo), mas na lista vale
+// dizer que veio de um gasto fixo: é a origem, não a natureza, que muda.
+const MOVIMENTO_LBL = Object.freeze({
+  'debt-payment':      'Pagamento de dívida',
+  'asset-acquisition': 'Aquisição de patrimônio',
+  'income-extra':      'Venda de patrimônio',
+  'income-operational':'Receita',
+  'transfer':          'Reserva',
+  'consumo':           'Gasto',
+});
+function _movementTypeLabel(item) {
+  if (!item || typeof item !== 'object') return 'Gasto';
+  const meta = (item.meta && typeof item.meta === 'object') ? item.meta : null;
+  if (meta && meta.source === 'fixed-payment') return 'Gasto fixo';
+  return MOVIMENTO_LBL[_movementNature(item)] || 'Gasto';
 }
 
 function addExpense() {
