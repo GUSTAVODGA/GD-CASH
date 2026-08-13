@@ -6784,6 +6784,76 @@ function _restoreFab() {
   f.style.display = (id === 'page-inicio' || id === 'page-semana' || id === 'page-mes') ? '' : 'none';
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// POLÍTICA DE EDIÇÃO — fonte única de "o que o formulário genérico pode mudar"
+//
+// Regra de produto: a mesma operação nunca é mantida em dois lugares à mão. Um
+// pagamento de dívida vive na despesa E no marcador `debtPayments` (que guarda
+// o próprio `valor`, lido por `_debtPagoCents`); uma venda de patrimônio vive
+// no item de receita com `platformId: null`, e é esse `null` que a mantém fora
+// da receita operacional. Editar esses campos pelo formulário genérico mudaria
+// um lado só — o caixa passaria a dizer um número e a dívida (ou o ritmo de
+// receita) outro, sem aviso.
+//
+// Por isso, origem estrutural aqui é APRESENTADA, não editada: o formulário
+// mostra a operação e manda para o fluxo canônico, que sabe mexer nos dois
+// lados. Lançamento manual — receita, gasto e aquisição — segue editável como
+// sempre; a proteção não se aplica a ele.
+//
+// `fixed-payment` NÃO entra na proteção: o marcador de baixa não copia valor
+// nenhum (só fixedId/cycle/expenseId/paidDate) e `qaConfirm` já sincroniza
+// ciclo e data de pagamento, inclusive bloqueando conflito de ciclo. Não há
+// divergência possível ali, e o comportamento aprovado fica intacto.
+// ══════════════════════════════════════════════════════════════════════════
+const EDICAO_LIVRE = Object.freeze({
+  origemEstrutural: null, podeEditarValor: true, podeEditarData: true,
+  podeEditarTipo: true, podeEditarPlataforma: true, podeEditarNatureza: true,
+  podeEditarVinculo: true, titulo: '', explicacao: '', ctaLabel: '', destinoCanonico: null,
+});
+
+function _movementEditPolicy(item) {
+  if (!item || typeof item !== 'object') return EDICAO_LIVRE;
+  const meta = (item.meta && typeof item.meta === 'object') ? item.meta : null;
+  const source = meta ? meta.source : null;
+
+  // Pagamento de dívida: valor e data pertencem ao marcador em debtPayments.
+  if (source === 'debt') {
+    return Object.freeze({
+      origemEstrutural: 'debt',
+      podeEditarValor: false, podeEditarData: false, podeEditarTipo: false,
+      podeEditarPlataforma: false, podeEditarNatureza: false, podeEditarVinculo: false,
+      titulo: 'Pagamento de dívida',
+      explicacao: 'Valor e data são controlados pela dívida.',
+      ctaLabel: 'Abrir dívida',
+      destinoCanonico: meta.debtId ? { tipo: 'divida', id: meta.debtId } : null,
+    });
+  }
+
+  // Venda de patrimônio: é `platformId: null` que a mantém como entrada
+  // extraordinária. Uma edição genérica atribuiria uma plataforma e a venda
+  // viraria receita operacional, mudando o ritmo e a razão de consumo.
+  if (source === 'asset-sale') {
+    const alvo = meta.vehicleId ? { tipo: 'veiculo', id: meta.vehicleId }
+               : meta.patrimonioId ? { tipo: 'patrimonio', id: meta.patrimonioId }
+               : null;
+    return Object.freeze({
+      origemEstrutural: 'asset-sale',
+      podeEditarValor: false, podeEditarData: false, podeEditarTipo: false,
+      podeEditarPlataforma: false, podeEditarNatureza: false, podeEditarVinculo: false,
+      titulo: 'Venda de patrimônio',
+      explicacao: 'Esta entrada pertence à venda de um bem.',
+      ctaLabel: 'Abrir patrimônio',
+      destinoCanonico: alvo,
+    });
+  }
+
+  return EDICAO_LIVRE;
+}
+
+// Só quem é apresentado em modo leitura (dívida e venda). Baixa de fixo e
+// lançamento manual continuam no formulário normal.
+function _edicaoSomenteLeitura(item) { return _movementEditPolicy(item).origemEstrutural !== null; }
+
 // ── Fase B: reclassificação explícita de "Tipo de saída" (só despesa manual) ──
 // Uma despesa é reclassificável se NÃO tem origem estrutural protegida (debt/fixed).
 var _qaReclassivel = true;
@@ -6839,6 +6909,63 @@ function _qaInitSaida(nature) {
   qaOnSaidaChange();
 }
 
+// Registro por trás de um editRef (só leitura; não altera nada).
+function _qaRegistroDe(ref) {
+  if (!ref) return null;
+  if (ref.kind === 'exp')  return (D.expenses   || []).find(x => x.id === ref.id) || null;
+  if (ref.kind === 'item') return (D.incomeItems || []).find(x => x.id === ref.id) || null;
+  return null; // 'legacy' é sempre receita manual — nunca estrutural
+}
+
+let _qaProtegidoAlvo = null;
+
+// Mostra a operação e desliga tudo que é editável. Nenhuma gravação acontece
+// nesta tela: não há Salvar nem Excluir — a entidade dona é quem altera.
+function _qaMostrarProtegido(registro, politica) {
+  _qaProtegidoAlvo = politica.destinoCanonico;
+  const ocultar = ['qa-compr-slot', 'qa-type-toggle', 'qa-amt-row', 'qa-date-row', 'qa-cat-row',
+                   'qa-aq-wrap', 'qa-bem-row', 'qa-plat-row', 'qa-desc-row', 'qa-suggest-row',
+                   'qa-save-btn', 'qa-del-btn'];
+  ocultar.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  const painel = document.getElementById('qa-protegido');
+  if (painel) painel.style.display = '';
+  const txt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  txt('qa-prot-tit', politica.titulo);
+  txt('qa-prot-sub', politica.explicacao);
+  txt('qa-prot-desc', registro.description || registro.note || politica.titulo);
+  txt('qa-prot-valor', R(registro.amount || 0));
+  txt('qa-prot-data', _fmtDataBR(localDateKey(registro.date) || registro.date));
+  const cta = document.getElementById('qa-prot-cta');
+  if (cta) { cta.textContent = politica.ctaLabel; cta.style.display = politica.destinoCanonico ? '' : 'none'; }
+  const titulo = document.getElementById('qa-title');
+  if (titulo) titulo.textContent = politica.titulo;
+}
+
+// Devolve o formulário ao estado editável (o painel é reaproveitado a cada abertura).
+function _qaEsconderProtegido() {
+  _qaProtegidoAlvo = null;
+  const painel = document.getElementById('qa-protegido');
+  if (painel) painel.style.display = 'none';
+  ['qa-compr-slot', 'qa-type-toggle', 'qa-amt-row', 'qa-date-row', 'qa-desc-row', 'qa-save-btn']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.style.display = ''; });
+  // As linhas condicionais (categoria, plataforma, bem, aquisição, sugestão e o
+  // botão excluir) são reposicionadas pelo próprio fluxo de abertura.
+}
+
+// Leva ao fluxo canônico dono da operação. Não edita nada aqui.
+function qaAbrirOrigem() {
+  const alvo = _qaProtegidoAlvo;
+  if (!alvo) return;
+  _qaEdit = null;
+  _qaSaving = true;
+  closeOverlay('modal-quick-add');
+  _restaurarFabQuandoSeguro('modal-quick-add');
+  if (alvo.tipo === 'divida') { switchTab('dividas', _currentMainTab); openDebtDetail(alvo.id); return; }
+  switchTab('patrimonio', 'mais');
+  if (alvo.tipo === 'veiculo') { _vehDetailId = alvo.id; _vehDetailMode = 'integrated'; renderVehPatDetail(alvo.id); return; }
+  if (alvo.tipo === 'patrimonio') { renderPatDetail(alvo.id); return; }
+}
+
 function openQuickAdd(editRef) {
   _qaEdit = editRef || null;
   _qaSaving = false;
@@ -6849,6 +6976,19 @@ function openQuickAdd(editRef) {
   const amtEl = document.getElementById('qa-amt-input');
   const descEl = document.getElementById('qa-desc');
   document.getElementById('qa-suggest-row').style.display = 'none';
+  _qaEsconderProtegido();
+
+  // Origem estrutural: apresenta e sai. Não monta formulário editável nenhum,
+  // venha o toque de Recentes, da Pesquisa, da Semana ou de onde for.
+  const _reg = _qaRegistroDe(_qaEdit);
+  const _pol = _movementEditPolicy(_reg);
+  if (_reg && _pol.origemEstrutural) {
+    _qaApplyMode();
+    _qaMostrarProtegido(_reg, _pol);
+    openOverlay('modal-quick-add');
+    return;
+  }
+
   // Antes de qualquer ramo: a faixa reflete o estado no instante da abertura.
   renderFaixaCompromissos();
 
@@ -7016,6 +7156,9 @@ function qaCancel() {
 
 function qaConfirm() {
   if (_qaSaving) return; // impede duplicação por duplo toque
+  // Rede de segurança do gravador: mesmo que a UI seja contornada, um lançamento
+  // de origem estrutural nunca é regravado por aqui.
+  if (_edicaoSomenteLeitura(_qaRegistroDe(_qaEdit))) return;
   const amt = parseFloat(document.getElementById('qa-amt-input')?.value);
   if (!amt || amt <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
   const date = document.getElementById('qa-date')?.value || todayStr();
@@ -7120,6 +7263,7 @@ function qaConfirm() {
 function qaDelete() {
   const edit = _qaEdit;
   if (!edit) return;
+  if (_edicaoSomenteLeitura(_qaRegistroDe(edit))) return; // desfaz-se pela entidade dona
   gdConfirm({
     title: 'Excluir lançamento?',
     msg: 'Esta ação não pode ser desfeita.',

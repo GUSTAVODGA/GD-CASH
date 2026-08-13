@@ -218,8 +218,13 @@ test('pagamento de dívida não pode ser reclassificado pela edição', async ({
   await esperarOverlay(page, 'modal-quick-add', true);
   await expect(linha(page)).toBeHidden();
 
-  await page.locator('#qa-save-btn').click();
-  await esperarOverlay(page, 'modal-quick-add', false);
+  // A garantia ficou mais forte: o pagamento de dívida nem chega a abrir o
+  // formulário editável — é apresentado em leitura, sem Salvar (ver
+  // edicao-estrutural.spec.js). Reclassificar deixou de ser alcançável.
+  await expect(page.locator('#qa-protegido')).toBeVisible();
+  await expect(page.locator('#qa-save-btn')).toBeHidden();
+  await page.evaluate(() => window.qaConfirm());
+
   const e = await lerEstado(page, "D.expenses.find(x => x.id === 'exp-div')");
   expect(e.meta.source).toBe('debt');
   expect(e.meta.nature, 'a natureza estrutural foi sobrescrita').toBeUndefined();

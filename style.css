@@ -3792,6 +3792,41 @@ button:focus-visible, [role="button"]:focus-visible {
 .div-prior-main { font-size: 14px; font-weight: 700; color: var(--text); }
 .div-prior-sub { font-size: 12px; color: var(--tx2); margin-top: 3px; }
 
+/* Quick-add: lançamento de origem estrutural (dívida, venda) — só leitura.
+   O formulário some e a operação é apresentada; quem altera é a entidade dona. */
+.qa-prot-aviso {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px; border-radius: 12px; margin-bottom: 14px;
+  background: color-mix(in srgb, var(--bl) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bl) 26%, transparent);
+}
+.qa-prot-ico { flex-shrink: 0; display: flex; color: var(--bl); margin-top: 1px; }
+.qa-prot-txt { flex: 1; min-width: 0; display: block; }
+.qa-prot-tit {
+  display: block; font-size: 14px; font-weight: 800; color: var(--bl);
+  line-height: 1.25; overflow-wrap: anywhere;
+}
+.qa-prot-sub {
+  display: block; font-size: 12px; color: var(--tx2); margin-top: 3px;
+  line-height: 1.35; overflow-wrap: anywhere;
+}
+.qa-prot-linhas { margin-bottom: 16px; }
+.qa-prot-linha {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 11px 2px; border-bottom: 1px solid var(--border);
+}
+.qa-prot-linha:last-child { border-bottom: none; }
+.qa-prot-k { font-size: 12px; color: var(--tx3); flex-shrink: 0; }
+.qa-prot-v {
+  font-size: 14px; font-weight: 700; color: var(--text);
+  text-align: right; min-width: 0; overflow-wrap: anywhere;
+}
+:root[data-theme="dark"] .qa-prot-sub { color: rgba(232,237,255,.68); }
+@media (max-width: 340px) {
+  .qa-prot-aviso { gap: 8px; padding: 10px; }
+  .qa-prot-tit { font-size: 13px; }
+}
+
 /* Quick-add: "Foi para comprar um bem?" — uma linha, sem acordeão e sem card.
    A densidade tem de ficar abaixo da do acordeão que este bloco substituiu. */
 .qa-aq-row {
