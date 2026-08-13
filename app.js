@@ -9633,6 +9633,10 @@ function savePatrimonioForm() {
 function deletePatrimonioUI(id) {
   const p = getPatrimonio(id);
   if (!p) return;
+  // Mesma guarda do menu "⋮": este botão vive no rodapé do formulário e era a
+  // única porta de exclusão sem verificação nenhuma.
+  const estado = _patrimonioDeleteState(id);
+  if (!estado.podeExcluir) { _patBloquearExclusao(id, estado); return; }
   gdConfirm({
     title: 'Excluir patrimônio',
     msg: `Excluir permanentemente "${p.nome}"? Esta ação não pode ser desfeita. Você também pode apenas mudar o status para Arquivado.`,
@@ -9819,28 +9823,113 @@ function reabrirBem(id) {
     },
   });
 }
-// Excluir guardado: limpo só sem histórico/vínculos relevantes; senão orienta a Vender.
-function _bemTemHistorico(id) {
+// ── FONTE ÚNICA DA EXCLUSÃO DE UM BEM ────────────────────────────────────
+// Apagar um bem que ainda tem vínculo deixa o outro lado órfão: a despesa
+// continua apontando para um `patrimonioId` que não existe mais, e a dívida
+// para um bem que sumiu. Como não há exclusão em cascata (de propósito — o
+// histórico financeiro é do usuário, não do cadastro), a única saída correta
+// é não apagar: o bem se ENCERRA (vendido/encerrado), preservando tudo.
+//
+// Todo bloqueio nasce aqui. O estado é DERIVADO dos dados atuais a cada
+// consulta e nunca é gravado — não existe flag "tem vínculo" em lugar nenhum.
+// Serve veículo e imóvel/outro bem pelo mesmo caminho, porque o modelo de
+// vínculo é o mesmo (`vehicleId`/`patrimonioId` na despesa, na dívida e na
+// pendência); o que difere entre os dois é só o índice legado do veículo
+// (`linkedExpenses`/`linkedPendencias`), já coberto por `_expensesDoBem`.
+const _PAT_VINCULO_LBL = Object.freeze({
+  aquisicao:     ['aquisição', 'aquisições'],
+  despesa:       ['lançamento vinculado', 'lançamentos vinculados'],
+  financiamento: ['financiamento', 'financiamentos'],
+  divida:        ['dívida vinculada', 'dívidas vinculadas'],
+  pendencia:     ['pendência', 'pendências'],
+  historico:     ['evento no histórico', 'eventos no histórico'],
+});
+const _PAT_VINCULO_ORDEM = Object.freeze(['aquisicao', 'financiamento', 'divida', 'despesa', 'pendencia', 'historico']);
+
+// Todas as dívidas do bem, de qualquer tipo e em qualquer estado — inclusive
+// quitada. Financiamento pago é histórico: apagar o bem apagaria o dono do
+// registro. (`_debtsDoBem` responde outra pergunta — só o financiamento vivo
+// do bem, usado pelo fluxo de venda — e por isso não serve de guarda.)
+function _dividasVinculadasAoBem(id) {
+  const rec = _patOwnerRec(id);
+  const vidKey = _patIsVeiculo(id) ? id : (rec ? (rec._idOriginal || rec.id) : id);
+  const patKey = rec ? rec.id : id;
+  return (D.debts || []).filter(d => (d.patrimonioId && d.patrimonioId === patKey) || (d.vehicleId && d.vehicleId === vidKey));
+}
+
+// Pendências que apontam para o bem: vínculo canônico (`patrimonioId`/
+// `vehicleId`) e os dois índices reversos que o modelo mantém.
+function _pendenciasVinculadasAoBem(id) {
+  const rec = _patOwnerRec(id);
+  const vidKey = _patIsVeiculo(id) ? id : (rec ? (rec._idOriginal || rec.id) : id);
+  const patKey = rec ? rec.id : id;
+  const reversos = new Set([
+    ...(((D.vehicles || []).find(v => v.id === vidKey) || {}).linkedPendencias || []),
+    ...(((rec && rec.detalhes) || {}).linkedPendencias || []),
+  ]);
+  return (D.pendencias || []).filter(p =>
+    (p.patrimonioId && p.patrimonioId === patKey) ||
+    (p.vehicleId && p.vehicleId === vidKey) ||
+    reversos.has(p.id));
+}
+
+/** Estado de exclusão de um bem: pode apagar? por quê não? o que está preso? */
+function _patrimonioDeleteState(ref) {
+  const id = (ref && typeof ref === 'object') ? (ref.id || null) : ref;
+  if (!id) return { podeExcluir: true, motivos: [], tipos: [], total: 0, contagem: {} };
+
   const rec = _patOwnerRec(id);
   const veh = (D.vehicles || []).find(v => v.id === id);
-  const hist = ((rec && rec.historico) || []).length + ((veh && veh.history) || []).length;
-  const fins = _debtsDoBem(id).length;
-  const links = (veh && ((veh.linkedExpenses || []).length + (veh.linkedPendencias || []).length)) || 0;
-  const despVenda = (D.expenses || []).some(e => e.meta && e.meta.debtId && _debtsDoBem(id).some(d => d.id === e.meta.debtId));
-  return hist > 0 || fins > 0 || links > 0 || despVenda;
+
+  const despesas = _expensesDoBem(id);
+  const contagem = {
+    aquisicao:     despesas.filter(e => _movementNature(e) === 'asset-acquisition').length,
+    despesa:       despesas.filter(e => _movementNature(e) !== 'asset-acquisition').length,
+    financiamento: _dividasVinculadasAoBem(id).filter(d => d.tipo === 'financiamento').length,
+    divida:        _dividasVinculadasAoBem(id).filter(d => d.tipo !== 'financiamento').length,
+    pendencia:     _pendenciasVinculadasAoBem(id).length,
+    historico:     ((rec && rec.historico) || []).length + ((veh && veh.history) || []).length,
+  };
+
+  // Um motivo por TIPO de vínculo, com a contagem dentro — nunca repetido.
+  const tipos = _PAT_VINCULO_ORDEM.filter(k => contagem[k] > 0);
+  const motivos = tipos.map(k => {
+    const n = contagem[k], lbl = _PAT_VINCULO_LBL[k];
+    return `${n} ${n === 1 ? lbl[0] : lbl[1]}`;
+  });
+  const total = tipos.reduce((s, k) => s + contagem[k], 0);
+  return { podeExcluir: total === 0, motivos, tipos, total, contagem };
 }
+
+// Mantido como pergunta booleana para quem só quer saber "dá ou não dá".
+function _bemTemHistorico(id) { return !_patrimonioDeleteState(id).podeExcluir; }
+
+// Diálogo único do bloqueio: explica o porquê e oferece o caminho seguro
+// (encerrar/vender), que preserva o bem e todo o histórico.
+function _patBloquearExclusao(id, estado) {
+  const tipo = _patTipoOf(id);
+  const encerrado = _patEncerradoLabel(tipo);
+  const verbo = encerrado === 'Vendido' ? 'Marcar como vendido' : 'Encerrar';
+  gdConfirm({
+    title: 'Este bem possui histórico financeiro',
+    variant: 'warning', confirmText: verbo, cancelText: 'Voltar',
+    msg: `"${_patNomeOf(id)}" tem ${_listaHumana(estado.motivos)}. Para preservar esse histórico, ele não pode ser apagado — marque como ${encerrado.toLowerCase()} e ele sai do seu patrimônio sem perder nada.`,
+    onConfirm: () => venderBem(id),
+  });
+}
+
+// "a, b e c" — enumeração legível, sem vírgula antes do "e".
+function _listaHumana(itens) {
+  const l = (itens || []).filter(Boolean);
+  if (!l.length) return 'vínculos';
+  if (l.length === 1) return l[0];
+  return l.slice(0, -1).join(', ') + ' e ' + l[l.length - 1];
+}
+
 function excluirBemGuardado(id) {
-  if (_bemTemHistorico(id)) {
-    const tipo = _patTipoOf(id);
-    const verbo = _patEncerradoLabel(tipo) === 'Vendido' ? 'Marcar como vendido' : 'Encerrar';
-    gdConfirm({
-      title: 'Não dá para excluir', variant: 'warning', confirmText: verbo, cancelText: 'Voltar',
-      msg: `"${_patNomeOf(id)}" tem histórico e vínculos. Para não perder esse registro, marque como ${_patEncerradoLabel(tipo).toLowerCase()} — ele sai do seu patrimônio e fica no histórico.`,
-      onConfirm: () => venderBem(id),
-    });
-    return;
-  }
-  // Sem histórico → exclusão limpa (reusa os fluxos existentes por tipo)
+  const estado = _patrimonioDeleteState(id);
+  if (!estado.podeExcluir) { _patBloquearExclusao(id, estado); return; }
+  // Sem vínculo → exclusão limpa (reusa os fluxos existentes por tipo)
   if (_patIsVeiculo(id)) _vehDoDelete(id);
   else deletePatrimonioUI(id);
 }
