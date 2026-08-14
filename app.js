@@ -5758,6 +5758,124 @@ function renderTrendsChart() {
     </div>`;
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// MODELO DO RESUMO MENSAL COMPARTILHÁVEL — CAMADA 1
+//
+// Função PURA que COMPÕE os motores canônicos; não recalcula finança nenhuma.
+// Recebe o período por PARÂMETRO (`off`), nunca lê `monthOffset` nem `new Date()`
+// para o que é relativo ao mês compartilhado — é isso que faz o relatório
+// funcionar para qualquer mês passado e refletir correções feitas depois.
+//
+// Nada aqui persiste: não escreve em D, não chama save(), não cria snapshot.
+// Gerar o relatório de maio hoje e de novo daqui a um ano devolve a verdade
+// de maio SEGUNDO OS DADOS DE AGORA — que é exatamente o pedido.
+//
+// Fontes (únicas):
+//   _monthMovementSummary(off)  caixa, naturezas e consumo por categoria
+//   monthAggregate(off)         totais de caixa (checagem cruzada)
+//   sumMonthReserva(off)        reserva do mês (estrutura à parte do caixa)
+//   fmtMonthYear(off)           rótulo do período
+//
+// PRIVACIDADE: só agregados. Categoria (criada pelo usuário) entra; descrição
+// de lançamento, título de dívida, nome de plataforma, qual bem foi vendido ou
+// comprado, ids e metadata NUNCA entram — nem no modelo, nem por acidente.
+// ══════════════════════════════════════════════════════════════════════════
+
+// Quantas categorias de consumo aparecem nominalmente antes de "Outras".
+const SHARE_TOP_CATEGORIAS = 5;
+
+function _sharePct(parte, total) {
+  return total > 0 ? Math.round((parte / total) * 100) : 0;
+}
+
+/** Modelo do mês `off` (0 = atual, −1 = anterior, …). Puro e determinístico. */
+function _monthShareModel(off) {
+  const periodo = Number.isFinite(off) ? off : 0;
+  const sum = _monthMovementSummary(periodo);
+  const agg = monthAggregate(periodo);
+  const reserva = sumMonthReserva(periodo);
+  const rotulo = fmtMonthYear(periodo);
+
+  // ── Para onde foi: decomposição do CAIXA por natureza ──────────────────
+  // As três parcelas somam exatamente totalCashOut (invariante do motor).
+  const destino = [
+    { chave: 'consumo',   rotulo: 'Dia a dia',  valor: sum.consumo,          pct: _sharePct(sum.consumo, sum.totalCashOut) },
+    { chave: 'divida',    rotulo: 'Dívidas',    valor: sum.debtPayments,     pct: _sharePct(sum.debtPayments, sum.totalCashOut) },
+    { chave: 'patrimonio',rotulo: 'Patrimônio', valor: sum.assetAcquisition, pct: _sharePct(sum.assetAcquisition, sum.totalCashOut) },
+  ].filter(d => d.valor > 0);
+
+  // ── Gastos do dia a dia: SÓ consumo, direto de consumoByCategory ───────
+  // Muitas categorias viram "Outras", e o resto é o COMPLEMENTO exato: a soma
+  // das linhas continua sendo o consumo total, sem sobra nem falta.
+  const todas = Object.entries(sum.consumoByCategory)
+    .map(([nome, valor]) => ({ nome, valor }))
+    .sort((a, b) => b.valor - a.valor || a.nome.localeCompare(b.nome, 'pt-BR'));
+  const principais = todas.slice(0, SHARE_TOP_CATEGORIAS).map(c => ({
+    nome: c.nome, valor: c.valor, pct: _sharePct(c.valor, sum.consumo),
+  }));
+  const somaPrincipais = principais.reduce((s, c) => s + c.valor, 0);
+  const restoValor = Math.round((sum.consumo - somaPrincipais) * 100) / 100;
+  const outras = todas.length > SHARE_TOP_CATEGORIAS
+    ? { quantidade: todas.length - SHARE_TOP_CATEGORIAS, valor: restoValor, pct: _sharePct(restoValor, sum.consumo) }
+    : null;
+
+  // ── De onde veio: operacional × extraordinária ─────────────────────────
+  // Só vira seção quando há entrada extraordinária — sem ela, "entrou" já diz tudo.
+  const origem = sum.extraordinaryIncome > 0
+    ? {
+        operacional: sum.operationalIncome,
+        extraordinaria: sum.extraordinaryIncome,
+        pctExtraordinaria: _sharePct(sum.extraordinaryIncome, sum.totalCashIn),
+      }
+    : null;
+
+  // ── Comparação com o mês anterior: só quando é honesta ─────────────────
+  // Exige mês anterior COM consumo (senão a variação percentual é ficção) e,
+  // para o mês corrente (parcial), compara o mesmo número de dias decorridos.
+  const comparacao = _shareComparacaoConsumo(periodo, sum.consumo);
+
+  const vazio = sum.totalCashIn === 0 && sum.totalCashOut === 0;
+
+  return {
+    periodo: { off: periodo, rotulo, vazio },
+    caixa: {
+      entradas: sum.totalCashIn,
+      saidas: sum.totalCashOut,
+      resultado: sum.cashResult,          // PROTAGONISTA: entradas − saídas
+    },
+    destino,
+    consumo: { total: sum.consumo, categorias: principais, outras },
+    origem,
+    comparacao,
+    reserva: reserva !== 0 ? reserva : null,
+    // Resultado operacional é SECUNDÁRIO e sempre rotulado como tal por quem
+    // desenha: nunca existem dois números chamados só de "resultado".
+    operacional: { receita: sum.operationalIncome, sobra: Math.round((sum.operationalIncome - sum.consumo) * 100) / 100 },
+    _checagem: { aggReceitas: agg.receitas, aggGastos: agg.gastos, aggLiquido: agg.liquido },
+  };
+}
+
+/** Variação do consumo contra o mês anterior, ou null quando não é comparável.
+ *
+ * Mês passado × mês passado: compara os dois meses inteiros.
+ *
+ * Mês CORRENTE: ele ainda está pela metade. Comparar 12 dias contra 31 diria
+ * "você gastou 60% menos" quando na verdade o mês só não acabou. Então a
+ * janela do mês anterior é recortada nos mesmos dias decorridos — usando o
+ * MESMO motor, com outro conjunto de chaves. Este é o único ponto que olha o
+ * relógio, e só para o mês corrente: um mês passado nunca depende de hoje.
+ */
+function _shareComparacaoConsumo(off, consumoAtual) {
+  const parcialAte = off === 0 ? new Date().getDate() : null;
+  const chaves = new Set(
+    parcialAte ? monthDates(off - 1).slice(0, parcialAte) : monthDates(off - 1)
+  );
+  const anterior = _periodMovementSummary(chaves);
+  if (!(anterior.consumo > 0)) return null;   // sem base: não inventa percentual
+  const variacao = Math.round(((consumoAtual - anterior.consumo) / anterior.consumo) * 100);
+  return { consumoAnterior: anterior.consumo, variacaoPct: variacao, parcial: !!parcialAte };
+}
+
 // ══════════════════════════════════════════
 // COMPARTILHAR RESUMO MENSAL
 // ══════════════════════════════════════════
