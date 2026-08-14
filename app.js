@@ -3546,6 +3546,10 @@ function _normDebt(raw) {
     valorOriginal: Math.max(0, _r(_c(d.valorOriginal))),
     amortizadoInicial: _r(_c(d.amortizadoInicial)),           // já amortizado antes do app
     parcelasTotal: Math.max(0, Math.round(Number(d.parcelasTotal) || 0)),
+    // Quantas parcelas já haviam TRANSCORRIDO quando a dívida foi cadastrada.
+    // Grandeza de calendário, separada de `amortizadoInicial` (dinheiro).
+    // Ausente em dado antigo → 0: a amortização anterior não inventa vencimentos.
+    parcelasPagasAntes: Math.max(0, Math.round(Number(d.parcelasPagasAntes) || 0)),
     valorParcela: Math.max(0, _r(_c(d.valorParcela))),
     periodicidade: d.periodicidade || 'mensal',
     dataInicio: d.dataInicio || '',
@@ -3621,11 +3625,36 @@ function _debtParcelasDeAmort(debt) {
   for (let k = 1; k <= N; k++) { acc += _debtParcelaCents(debt, k); if (amort >= acc) count++; else break; }
   return count;
 }
-// Vencimento da parcela k: dataInicio + periodicidade·(k−1). Mensal clampa dia curto.
+// ── PROGRESSO FINANCEIRO ≠ PROGRESSO CRONOLÓGICO ─────────────────────────
+// `amortizadoInicial` é DINHEIRO pago antes do cadastro. Ele reduz o saldo e
+// entra no "já pago" — mas não diz que semanas ou meses transcorreram. Uma
+// entrada de R$ 2.000 numa dívida semanal de R$ 200 não faz dez sextas-feiras
+// acontecerem.
+//
+// Quem informa tempo transcorrido é `parcelasPagasAntes` — a contagem que o
+// formulário já pergunta ("Parcelas já pagas antes"). Com ela, `dataInicio`
+// ("Primeiro vencimento") continua sendo o vencimento da parcela
+// `parcelasPagasAntes + 1`, e a grade caminha a partir dali.
+//
+// Este deslocamento mede as parcelas que o dinheiro quitou SEM que o tempo
+// tenha passado — as que a projeção precisa desconsiderar ao datar:
+//
+//   fantasma = parcelas cobertas pela amortização − parcelas declaradas como
+//              cronologicamente transcorridas          (nunca negativo)
+//
+// Sem amortização anterior, fantasma = 0 e a grade é exatamente a de sempre.
+function _debtParcelasSemCalendario(debt) {
+  const declaradas = Math.max(0, Math.round(Number(debt && debt.parcelasPagasAntes) || 0));
+  return Math.max(0, _debtParcelasDeAmort(debt) - declaradas);
+}
+// Vencimento da parcela k, ancorado na grade contratual: dataInicio +
+// periodicidade·(k−1−fantasma). Mensal clampa dia curto. A grade NUNCA é
+// reancorada na data em que um pagamento foi feito — pagar atrasado quita a
+// parcela vencida, não empurra as seguintes.
 function _debtDueDate(debt, k) {
   const base = parseDate(debt.dataInicio);
   if (!base || isNaN(base)) return '';
-  const i = Math.max(1, k) - 1;
+  const i = Math.max(1, k) - 1 - _debtParcelasSemCalendario(debt);
   const freq = debt.periodicidade || 'mensal';
   let dt;
   if (freq === 'semanal')        dt = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 7 * i);
@@ -4658,10 +4687,17 @@ function openDebtDetail(id) {
   // pagamento do app. Diferencia claramente "antes do cadastro" de "registrado no Avenco".
   const temAmort = _c(d.amortizadoInicial) > 0;
   const parcAmort = _debtParcelasDeAmort(d);
+  // O texto precisa dizer a verdade das DUAS grandezas: o dinheiro abate o
+  // saldo sempre; o calendário só anda quando o usuário declarou parcelas já
+  // transcorridas. Antes esta linha afirmava que a amortização era "considerada
+  // na projeção" — era exatamente o defeito, escrito na tela.
+  const parcCrono = Math.max(0, Math.round(Number(d.parcelasPagasAntes) || 0));
   const priorHtml = temAmort ? `
     <div class="div-prior-card">
       <div class="div-prior-main">${R(d.amortizadoInicial)} pagos antes do cadastro no Avenco</div>
-      ${(temParcelas && parcAmort > 0) ? `<div class="div-prior-sub">Equivalente a ${parcAmort} ${parcAmort === 1 ? 'parcela considerada' : 'parcelas consideradas'} na projeção.</div>` : ''}
+      ${temParcelas && parcAmort > 0 ? `<div class="div-prior-sub">${parcCrono > 0
+        ? `Equivalente a ${parcAmort} ${parcAmort === 1 ? 'parcela' : 'parcelas'}; ${parcCrono} ${parcCrono === 1 ? 'já havia vencido' : 'já haviam vencido'} antes do cadastro.`
+        : `Abate o saldo, sem alterar as datas de vencimento.`}</div>` : ''}
     </div>` : '';
   const histHtml = pays.length === 0
     ? `<div class="pagfin-empty">${temAmort ? 'Nenhum pagamento registrado no Avenco ainda.' : 'Nenhum pagamento registrado ainda.'}</div>`
@@ -4959,7 +4995,7 @@ function _renderDebtForm(d) {
   // "Parcelas já pagas antes": importa a posição por contagem (só cadastro em andamento,
   // fora do financiamento — que importa via saldo). NÃO gera despesas nem debtPayments.
   const pagasAntesRow = (showParcelas && t !== 'financiamento') ? `
-    <div class="form-group"><label class="form-label" for="df-pagas-antes">Parcelas já pagas antes (opc.)</label><input class="form-input" id="df-pagas-antes" type="number" min="0" step="1" inputmode="numeric" placeholder="0"><div class="parcel-form-hint">Se a compra já está em andamento, informe quantas parcelas já foram pagas. Isso vira saldo inicial importado — não cria despesas nem afeta Início/Semana/Mês.</div></div>` : '';
+    <div class="form-group"><label class="form-label" for="df-pagas-antes">Parcelas já pagas antes (opc.)</label><input class="form-input" id="df-pagas-antes" type="number" min="0" step="1" inputmode="numeric" placeholder="0" value="${d && d.parcelasPagasAntes ? d.parcelasPagasAntes : ''}"><div class="parcel-form-hint">Se a compra já está em andamento, informe quantas parcelas já foram pagas — é isso que posiciona o próximo vencimento. Vira saldo inicial importado, sem criar despesas nem afetar Início/Semana/Mês. Se você só deu uma entrada, deixe em branco e informe o valor ao lado.</div></div>` : '';
   const parcelasBlock = showParcelas ? `
     <div class="veh-form-row">
       <div class="form-group"><label class="form-label" for="df-parcelas">Nº de parcelas${t === 'parcelamento' || t === 'financiamento' ? '' : ' (opc.)'}</label><input class="form-input" id="df-parcelas" type="number" min="0" step="1" inputmode="numeric" value="${g('parcelasTotal')}"></div>
@@ -5006,7 +5042,7 @@ function salvarDivida() {
   const juros = (g('df-juros') && g('df-juros').value !== '') ? Number(g('df-juros').value) : null;
   const categoria = g('df-cat')?.value || '';
   const bemVal = g('df-bem')?.value || '';
-  let valorOriginal = 0, amortizadoInicial = 0, valorBem = null;
+  let valorOriginal = 0, amortizadoInicial = 0, valorBem = null, parcelasPagasAntes = 0;
   if (tipo === 'financiamento') {
     valorOriginal = Number(g('df-valor')?.value) || 0;
     valorBem = (g('df-bemvalor') && g('df-bemvalor').value !== '') ? Number(g('df-bemvalor').value) : null;
@@ -5022,6 +5058,10 @@ function salvarDivida() {
     } else {
       amortizadoInicial = (g('df-pago') && g('df-pago').value !== '') ? (Number(g('df-pago').value) || 0) : 0;
     }
+    // A contagem é guardada ALÉM do dinheiro: ela é a única que diz quanto
+    // tempo já passou. Convertê-la só em `amortizadoInicial` apagava a
+    // diferença entre "dei uma entrada" e "já paguei dez parcelas".
+    parcelasPagasAntes = pagasAntes;
   }
   if (!(valorOriginal > 0)) { gdToast('Informe o valor.', { type: 'error' }); return; }
   // Correção segura da quantidade de parcelas: com valor total e valor padrão, o total é
@@ -5033,7 +5073,7 @@ function salvarDivida() {
   let patrimonioId = null, vehicleId = null;
   if (bemVal.startsWith('pat:')) patrimonioId = bemVal.slice(4);
   else if (bemVal.startsWith('veh:')) vehicleId = bemVal.slice(4);
-  const fields = { tipo, titulo, credor, valorOriginal, amortizadoInicial, parcelasTotal, valorParcela, periodicidade, dataInicio, juros, categoria, valorBem, patrimonioId, vehicleId, observacoes: obs };
+  const fields = { tipo, titulo, credor, valorOriginal, amortizadoInicial, parcelasPagasAntes, parcelasTotal, valorParcela, periodicidade, dataInicio, juros, categoria, valorBem, patrimonioId, vehicleId, observacoes: obs };
   if (_saveBtn) _saveBtn.disabled = true; // validações passaram → trava o botão
   D.debts = D.debts || [];
   if (id) {
