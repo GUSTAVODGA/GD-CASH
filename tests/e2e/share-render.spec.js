@@ -126,6 +126,70 @@ test('mês vazio desenha a mensagem e nada mais', async ({ page }) => {
   expect(r.ultimaLinhaComTinta).toBeLessThanOrEqual(1350);
 });
 
+// ══ TRANSBORDO — O TESTE QUE FALTAVA ═════════════════════════════════════
+// A primeira versão desta peça invadia o rodapé quando o mês tinha TODAS as
+// seções, e nenhum teste pegou: media-se a última linha com tinta, mas nunca
+// se exigiu que o conteúdo terminasse antes do rodapé.
+
+test('mês com todas as seções não invade o rodapé', async ({ page }) => {
+  const nomes = ['Alimentação', 'Transporte', 'Casa', 'Saúde', 'Lazer', 'Educação', 'Pets', 'Vestuário'];
+  await abrir(page, {
+    incomeItems: [REC('i1', '10', 8400), VENDA],
+    expenses: [...nomes.map((n, i) => G('e' + i, '10', 900 - i * 90, n)), PARCELA, AQUIS],
+    reservaHistory: [{ date: '2026-06-05', type: 'dep', amount: 700 }],
+  });
+  const r = await page.evaluate(() => {
+    const m = window._monthShareModel(0);
+    const c = window._renderShareCanvas(m);
+    const ctx = c.getContext('2d');
+    const d = ctx.getImageData(0, 0, c.width, c.height).data;
+    const fundo = d[0];
+    // Faixa entre o fim seguro do conteúdo e o topo do rodapé: precisa estar limpa.
+    const seguro = c.height - 100;
+    let tintaNaFaixa = 0;
+    for (let y = seguro; y < c.height - 80; y++) {
+      for (let x = 0; x < c.width; x += 3) {
+        const i = (y * c.width + x) * 4;
+        if (Math.abs(d[i] - fundo) > 12) { tintaNaFaixa++; break; }
+      }
+    }
+    return { tintaNaFaixa, plano: window._sharePlano(m), altura: window._shareAlturaDoPlano(m, window._sharePlano(m).nCats, window._sharePlano(m).comContexto) };
+  });
+  expect(r.tintaNaFaixa, 'conteúdo invadiu a faixa do rodapé').toBe(0);
+  expect(r.altura).toBeLessThanOrEqual(1250);
+});
+
+test('o plano degrada por prioridade: categorias primeiro, contexto depois', async ({ page }) => {
+  await abrir(page, COMPLETO);
+  const r = await page.evaluate(() => {
+    const m = window._monthShareModel(0);
+    return {
+      // Poucas seções: cabe tudo.
+      simples: window._sharePlano(window._monthShareModel(-3)),
+      cheio: window._sharePlano(m),
+      alturaCheia: window._shareAlturaDoPlano(m, 5, true),
+    };
+  });
+  expect(r.alturaCheia).toBeGreaterThan(1250);        // o pior caso realmente não cabe
+  expect(r.cheio.nCats).toBeGreaterThanOrEqual(1);
+  expect(r.cheio.nCats).toBeLessThanOrEqual(5);
+});
+
+test('dobrar categorias preserva a soma exata do consumo', async ({ page }) => {
+  const nomes = ['Alimentação', 'Transporte', 'Casa', 'Saúde', 'Lazer', 'Educação', 'Pets'];
+  await abrir(page, { expenses: nomes.map((n, i) => G('e' + i, '10', 333.33 - i * 11.11, n)) });
+  const r = await page.evaluate(() => {
+    const m = window._monthShareModel(0);
+    const somas = [];
+    for (let n = 1; n <= 5; n++) {
+      const c = window._shareDobrarCategorias(m.consumo, n);
+      somas.push(Math.round((c.categorias.reduce((s, x) => s + x.valor, 0) + (c.outras ? c.outras.valor : 0)) * 100) / 100);
+    }
+    return { somas, total: m.consumo.total };
+  });
+  r.somas.forEach(s => expect(s).toBe(r.total));
+});
+
 // ══ BORDAS VISUAIS ═══════════════════════════════════════════════════════
 
 test('números grandes não estouram o quadro', async ({ page }) => {

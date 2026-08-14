@@ -5900,6 +5900,65 @@ function _sharePalette(dark) {
     : { bg1:'#F2F0EA', bg2:'#E7E4DB', text:'#0D1440', dim:'rgba(13,20,64,.62)', faint:'rgba(13,20,64,.42)', ac:'#2563EB', gn:'#16A34A', rd:'#DC2626', line:'rgba(13,20,64,.10)', card:'rgba(13,20,64,.05)', trilho:'rgba(13,20,64,.08)' };
 }
 
+// PLANO DE LAYOUT — decide o que cabe ANTES de desenhar.
+//
+// As constantes abaixo são os incrementos REAIS de `y` usados no desenho: se
+// alguém mexer no render sem mexer aqui, o teste de transbordo acusa.
+//
+// Quando o mês tem tudo (três destinos, muitas categorias, venda de bem,
+// comparação e reserva), o conteúdo não cabe em 1350px. Então degrada-se por
+// PRIORIDADE, na ordem inversa da hierarquia aprovada: primeiro dobram-se
+// categorias em "Outras" (a soma continua exata), e só depois some o contexto,
+// que é o bloco menos essencial. Resultado, destino e origem nunca caem.
+const SHARE_ALT = Object.freeze({
+  base: 378,            // cabeçalho + resultado + "entrou · saiu"
+  destinoFixo: 132, destinoLinha: 72,
+  gastosFixo: 130, gastosLinha: 54, gastosOutras: 44,
+  origem: 232,
+  contextoFixo: 88, contextoLinha: 44,
+  seguro: SHARE_H - 100, // o rodapé vive abaixo desta linha
+});
+
+/** Reduz as categorias nominais a `n`, jogando o resto em "Outras".
+ *  Só rearranja números JÁ derivados pelo modelo: a soma continua sendo o
+ *  consumo total, porque "Outras" é sempre o complemento. */
+function _shareDobrarCategorias(consumo, n) {
+  const cats = consumo.categorias;
+  if (n >= cats.length) return consumo;
+  const mantidas = cats.slice(0, n);
+  const somaMantidas = mantidas.reduce((s, c) => s + c.valor, 0);
+  const valor = Math.round((consumo.total - somaMantidas) * 100) / 100;
+  const quantidade = (cats.length - n) + (consumo.outras ? consumo.outras.quantidade : 0);
+  return {
+    total: consumo.total,
+    categorias: mantidas,
+    outras: quantidade > 0 ? { quantidade, valor, pct: _sharePct(valor, consumo.total) } : null,
+  };
+}
+
+/** Altura ocupada por um plano. */
+function _shareAlturaDoPlano(m, nCats, comContexto) {
+  const A = SHARE_ALT;
+  let h = A.base;
+  if (m.destino.length) h += A.destinoFixo + m.destino.length * A.destinoLinha;
+  const c = _shareDobrarCategorias(m.consumo, nCats);
+  if (c.categorias.length) h += A.gastosFixo + c.categorias.length * A.gastosLinha + (c.outras ? A.gastosOutras : 0);
+  if (m.origem) h += A.origem;
+  const linhas = comContexto ? ((m.comparacao ? 1 : 0) + (m.reserva !== null ? 1 : 0)) : 0;
+  if (linhas) h += A.contextoFixo + linhas * A.contextoLinha;
+  return h;
+}
+
+/** O maior plano que cabe no quadro, degradando por prioridade. */
+function _sharePlano(m) {
+  for (const comContexto of [true, false]) {
+    for (let n = SHARE_TOP_CATEGORIAS; n >= 1; n--) {
+      if (_shareAlturaDoPlano(m, n, comContexto) <= SHARE_ALT.seguro) return { nCats: n, comContexto };
+    }
+  }
+  return { nCats: 1, comContexto: false };
+}
+
 /** Desenha a peça do mês a partir do modelo. Devolve o canvas. */
 function _renderShareCanvas(m, opts) {
   const o = opts || {};
@@ -6021,13 +6080,17 @@ function _renderShareCanvas(m, opts) {
   }
 
   // ── Gastos do dia a dia ──
-  if (m.consumo.categorias.length) {
+  // Quantas categorias cabem é decisão de APRESENTAÇÃO: o excedente vai para
+  // "Outras", que é o complemento exato — a soma segue igual ao consumo.
+  const plano = _sharePlano(m);
+  const consumoVis = _shareDobrarCategorias(m.consumo, plano.nCats);
+  if (consumoVis.categorias.length) {
     y += 42; risco(y); y += 48;
     secao('Gastos do dia a dia', y);
     y += 46;
-    const maior = m.consumo.categorias[0].valor || 1;
+    const maior = consumoVis.categorias[0].valor || 1;
     const barraW = 220;
-    m.consumo.categorias.forEach((c, i) => {
+    consumoVis.categorias.forEach((c, i) => {
       const pctTxt = `${c.pct}%`, valTxt = R(c.valor);
       ctx.textAlign = 'right';
       fonte(600, 24); ctx.fillStyle = C.faint;
@@ -6049,8 +6112,8 @@ function _renderShareCanvas(m, opts) {
       ctx.fillStyle = PALETTE[i % PALETTE.length]; ctx.fill();
       y += 54;
     });
-    if (m.consumo.outras) {
-      const ou = m.consumo.outras;
+    if (consumoVis.outras) {
+      const ou = consumoVis.outras;
       ctx.fillStyle = C.faint; fonte(600, 26);
       ctx.fillText(`+ outras ${ou.quantidade} categoria${ou.quantidade === 1 ? '' : 's'}`, M, y + 8);
       ctx.textAlign = 'right'; ctx.fillStyle = C.dim; fonte(600, 26);
@@ -6082,7 +6145,7 @@ function _renderShareCanvas(m, opts) {
 
   // ── Contexto: comparação e reserva ──
   const contexto = [];
-  if (m.comparacao) {
+  if (plano.comContexto && m.comparacao) {
     const v = m.comparacao.variacaoPct;
     contexto.push([
       m.comparacao.parcial ? 'Dia a dia vs. mesmo período do mês anterior' : 'Dia a dia vs. mês anterior',
@@ -6090,7 +6153,7 @@ function _renderShareCanvas(m, opts) {
       v > 0 ? C.rd : C.gn,
     ]);
   }
-  if (m.reserva !== null) {
+  if (plano.comContexto && m.reserva !== null) {
     contexto.push(['Reserva do mês', (m.reserva > 0 ? '+' : '') + R(m.reserva), m.reserva >= 0 ? C.gn : C.rd]);
   }
   if (contexto.length) {
