@@ -5876,51 +5876,56 @@ function _shareComparacaoConsumo(off, consumoAtual) {
   return { consumoAnterior: anterior.consumo, variacaoPct: variacao, parcial: !!parcialAte };
 }
 
-// ══════════════════════════════════════════
-// COMPARTILHAR RESUMO MENSAL
-// ══════════════════════════════════════════
-// Story de compartilhamento — 9:16, identidade AVENCO, adaptado ao tema atual.
-// Mesmos dados de sempre (resultado, receita, gastos, top categorias, mês).
-function shareMonthReport() {
-  const canvas = _buildMonthStoryCanvas();
-  const mLabel = fmtMonthYear(monthOffset);
-  canvas.toBlob(blob => {
-    const file = new File([blob], 'avenco-resumo.png', { type: 'image/png' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ files: [file], title: `Avenco — ${mLabel}` }).catch(() => {});
-    } else {
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = `avenco-${mLabel}.png`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    }
-  }, 'image/png');
+// ══════════════════════════════════════════════════════════════════════════
+// PEÇA DO RESUMO MENSAL — CAMADA 2 (render)
+//
+// Cartão-relatório 1080×1350 (4:5): cabe em feed, story e mensageiro sem
+// corte, e rende mais informação por pixel de altura do que o 9:16 anterior,
+// que gastava 1920px para mostrar cinco números.
+//
+// Desenha A PARTIR DO MODELO e nada além dele. Não conhece `D`, não conhece
+// `monthOffset` e não calcula dinheiro: se um número está errado aqui, ele já
+// estava errado no modelo — e o modelo tem invariantes contra os motores.
+//
+// Seção sem conteúdo naquele mês simplesmente não é desenhada: a peça encolhe.
+// Não se preenche espaço com nada inventado.
+// ══════════════════════════════════════════════════════════════════════════
+
+const SHARE_W = 1080, SHARE_H = 1350, SHARE_M = 84;
+const SHARE_FONT = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
+
+function _sharePalette(dark) {
+  return dark
+    ? { bg1:'#0F1629', bg2:'#0A0F1E', text:'#E8EDFF', dim:'rgba(232,237,255,.62)', faint:'rgba(232,237,255,.38)', ac:'#5B8AF5', gn:'#4ADE80', rd:'#F87171', line:'rgba(232,237,255,.12)', card:'rgba(232,237,255,.06)', trilho:'rgba(232,237,255,.10)' }
+    : { bg1:'#F2F0EA', bg2:'#E7E4DB', text:'#0D1440', dim:'rgba(13,20,64,.62)', faint:'rgba(13,20,64,.42)', ac:'#2563EB', gn:'#16A34A', rd:'#DC2626', line:'rgba(13,20,64,.10)', card:'rgba(13,20,64,.05)', trilho:'rgba(13,20,64,.08)' };
 }
 
-function _buildMonthStoryCanvas() {
-  const W = 1080, H = 1920, M = 100;
-  const canvas = document.createElement('canvas');
+/** Desenha a peça do mês a partir do modelo. Devolve o canvas. */
+function _renderShareCanvas(m, opts) {
+  const o = opts || {};
+  const W = SHARE_W, H = SHARE_H, M = SHARE_M, contentW = W - M * 2;
+  const canvas = o.canvas || document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-  const inc = sumMonthIncome(monthOffset), exp = sumMonthExpenses(monthOffset), liq = inc - exp;
-  const mLabel = fmtMonthYear(monthOffset);
+  const dark = o.dark !== undefined ? !!o.dark : (document.documentElement.dataset.theme === 'dark');
+  const C = _sharePalette(dark);
+  const F = SHARE_FONT;
 
-  const dark = document.documentElement.dataset.theme === 'dark';
-  const C = dark
-    ? { bg1:'#0F1629', bg2:'#0A0F1E', text:'#E8EDFF', dim:'rgba(232,237,255,.55)', faint:'rgba(232,237,255,.34)', ac:'#5B8AF5', gn:'#4ADE80', rd:'#F87171', line:'rgba(232,237,255,.12)', card:'rgba(232,237,255,.05)' }
-    : { bg1:'#F2F0EA', bg2:'#E7E4DB', text:'#0D1440', dim:'rgba(13,20,64,.58)', faint:'rgba(13,20,64,.38)', ac:'#2563EB', gn:'#16A34A', rd:'#DC2626', line:'rgba(13,20,64,.10)', card:'rgba(13,20,64,.04)' };
-  const F = "system-ui,-apple-system,'Segoe UI',Roboto,sans-serif";
-
-  // Fundo com leve gradiente vertical + brilho do acento no topo
-  const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-  bgGrad.addColorStop(0, C.bg1); bgGrad.addColorStop(1, C.bg2);
-  ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
-  const glow = ctx.createRadialGradient(W/2, 120, 0, W/2, 120, 720);
-  glow.addColorStop(0, dark ? 'rgba(91,138,245,.16)' : 'rgba(37,99,235,.10)');
-  glow.addColorStop(1, 'rgba(0,0,0,0)');
-  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
-
-  const roundRect = (x, y, w, h, r) => {
+  const fonte = (peso, tam) => { ctx.font = `${peso} ${tam}px ${F}`; };
+  // Reduz o corpo até caber; devolve o tamanho usado. Nunca corta número.
+  const caber = (texto, maxW, base, peso) => {
+    let t = base; fonte(peso, t);
+    while (ctx.measureText(texto).width > maxW && t > 18) { t -= 2; fonte(peso, t); }
+    return t;
+  };
+  // Encurta com reticências quando nem o corpo mínimo resolve (nome de categoria).
+  const encurtar = (texto, maxW) => {
+    if (ctx.measureText(texto).width <= maxW) return texto;
+    let t = texto;
+    while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1);
+    return t + '…';
+  };
+  const arred = (x, y, w, h, r) => {
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
     else {
@@ -5928,101 +5933,213 @@ function _buildMonthStoryCanvas() {
       ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
     }
   };
+  const risco = (y) => { ctx.fillStyle = C.line; ctx.fillRect(M, y, contentW, 2); };
+  const secao = (txt, y) => {
+    ctx.fillStyle = C.faint; fonte(700, 26); ctx.textAlign = 'left';
+    ctx.fillText(txt.toUpperCase(), M, y);
+  };
 
-  // ── Marca AVENCO: badge com triângulo + wordmark ──
-  const bs = 120, bx = M, by = 150;
-  roundRect(bx, by, bs, bs, 30);
-  ctx.fillStyle = C.ac; ctx.fill();
-  // triângulo (contorno branco, apontando para cima) — igual ao logo do app
-  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 9; ctx.lineJoin = 'round';
-  const tcx = bx + bs/2, tcy = by + bs/2, ts = 34;
+  // ── Fundo ──
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, C.bg1); g.addColorStop(1, C.bg2);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  const brilho = ctx.createRadialGradient(W/2, 90, 0, W/2, 90, 620);
+  brilho.addColorStop(0, dark ? 'rgba(91,138,245,.16)' : 'rgba(37,99,235,.10)');
+  brilho.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = brilho; ctx.fillRect(0, 0, W, H);
+
+  // ── Cabeçalho: marca + período ──
+  let y = M;
+  const bs = 66;
+  arred(M, y, bs, bs, 18); ctx.fillStyle = C.ac; ctx.fill();
+  ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
+  const tcx = M + bs/2, tcy = y + bs/2, ts = 19;
   ctx.beginPath();
   ctx.moveTo(tcx, tcy - ts); ctx.lineTo(tcx + ts*0.92, tcy + ts*0.72);
   ctx.lineTo(tcx - ts*0.92, tcy + ts*0.72); ctx.closePath(); ctx.stroke();
-  ctx.fillStyle = C.text; ctx.font = `800 66px ${F}`; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  ctx.fillText('Avenco', bx + bs + 34, by + 84);
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = C.text; fonte(800, 38); ctx.fillText('Avenco', M + bs + 22, y + 30);
+  ctx.fillStyle = C.faint; fonte(600, 24); ctx.fillText('Resumo mensal', M + bs + 22, y + 60);
+  const mesTxt = m.periodo.rotulo.charAt(0).toUpperCase() + m.periodo.rotulo.slice(1);
+  ctx.textAlign = 'right'; ctx.fillStyle = C.dim; fonte(700, 30);
+  ctx.fillText(mesTxt, W - M, y + 46);
+  ctx.textAlign = 'left';
+  y += bs + 34; risco(y);
 
-  // Mês
-  ctx.fillStyle = C.faint; ctx.font = `600 40px ${F}`;
-  ctx.fillText(mLabel.charAt(0).toUpperCase() + mLabel.slice(1), M, by + bs + 90);
+  // ── Mês sem movimentação: diz isso e encerra ──
+  if (m.periodo.vazio) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = C.dim; fonte(700, 44);
+    ctx.fillText('Nenhuma movimentação', W/2, H/2 - 20);
+    ctx.fillStyle = C.faint; fonte(600, 30);
+    ctx.fillText('registrada neste mês', W/2, H/2 + 30);
+    fonte(600, 24); ctx.fillStyle = C.faint;
+    ctx.fillText('Avenco', W/2, H - 60);
+    ctx.textAlign = 'left';
+    return canvas;
+  }
 
-  // Auto-ajuste de fonte para nunca cortar valores grandes
-  const fitFont = (text, maxW, base, weight) => {
-    let size = base; ctx.font = `${weight} ${size}px ${F}`;
-    while (ctx.measureText(text).width > maxW && size > 22) { size -= 2; ctx.font = `${weight} ${size}px ${F}`; }
-    return size;
-  };
-  const contentW = W - M*2;
-
-  // ── Resultado do mês (destaque) ──
-  let y = by + bs + 250;
-  ctx.fillStyle = C.dim; ctx.font = `600 42px ${F}`;
+  // ── Resultado do mês: o número protagonista (caixa) ──
+  y += 62;
+  ctx.fillStyle = C.dim; fonte(600, 30);
   ctx.fillText('Resultado do mês', M, y);
-  y += 130;
-  const liqTxt = R(liq);
-  const liqSize = fitFont(liqTxt, contentW, 150, '800');
-  ctx.fillStyle = liq >= 0 ? C.gn : C.rd; ctx.font = `800 ${liqSize}px ${F}`;
-  ctx.fillText(liqTxt, M, y);
+  y += 88;
+  const resTxt = R(m.caixa.resultado);
+  const resTam = caber(resTxt, contentW, 104, '800');
+  ctx.fillStyle = m.caixa.resultado >= 0 ? C.gn : C.rd; fonte(800, resTam);
+  ctx.fillText(resTxt, M, y);
+  y += 44;
+  const ctxTxt = `Entrou ${R(m.caixa.entradas)}  ·  Saiu ${R(m.caixa.saidas)}`;
+  const ctxTam = caber(ctxTxt, contentW, 28, '600');
+  ctx.fillStyle = C.faint; fonte(600, ctxTam);
+  ctx.fillText(ctxTxt, M, y);
 
-  // Divider
-  y += 90; ctx.fillStyle = C.line; ctx.fillRect(M, y, contentW, 2);
-
-  // ── Receita / Gastos (duas colunas, cada valor ajustado à sua metade) ──
-  y += 120;
-  const colW = (contentW - 50) / 2;
-  const colGx = M + colW + 50; // início da coluna de Gastos
-  const incTxt = '↑ ' + R(inc), expTxt = '↓ ' + R(exp);
-  const incSize = fitFont(incTxt, colW, 58, '800');
-  ctx.fillStyle = C.gn; ctx.font = `800 ${incSize}px ${F}`;
-  ctx.fillText(incTxt, M, y);
-  const expSize = fitFont(expTxt, colW, 58, '800');
-  ctx.fillStyle = C.rd; ctx.font = `800 ${expSize}px ${F}`;
-  ctx.fillText(expTxt, colGx, y);
-  ctx.fillStyle = C.faint; ctx.font = `600 34px ${F}`;
-  ctx.fillText('Receita', M, y + 56);
-  ctx.fillText('Gastos', colGx, y + 56);
-
-  // ── Top categorias ──
-  const dates = monthDates(monthOffset);
-  const catMap = {};
-  D.expenses.filter(e => dates.includes(e.date)).forEach(e => { catMap[e.category] = (catMap[e.category]||0) + e.amount; });
-  const topCats = Object.entries(catMap).sort((a,b) => b[1]-a[1]).slice(0, 3);
-  if (topCats.length) {
-    y += 170; ctx.fillStyle = C.line; ctx.fillRect(M, y, W - M*2, 2);
-    y += 80; ctx.fillStyle = C.dim; ctx.font = `600 38px ${F}`;
-    ctx.fillText('Top categorias', M, y);
-    y += 90;
-    topCats.forEach(([cat, val], i) => {
-      const ry = y + i*110;
-      roundRect(M, ry - 46, contentW, 92, 22);
-      ctx.fillStyle = C.card; ctx.fill();
-      ctx.fillStyle = PALETTE[i % PALETTE.length];
-      ctx.beginPath(); ctx.arc(M + 44, ry, 16, 0, Math.PI*2); ctx.fill();
-      // valor à direita (fonte fixa), nome à esquerda ajustado ao espaço restante
-      const valTxt = R(val);
-      ctx.font = `700 46px ${F}`;
+  // ── Para onde foi ──
+  if (m.destino.length) {
+    y += 52; risco(y); y += 48;
+    secao('Para onde foi', y);
+    y += 42;
+    m.destino.forEach(d => {
+      arred(M, y, contentW, 62, 16); ctx.fillStyle = C.card; ctx.fill();
+      ctx.textAlign = 'right';
+      ctx.fillStyle = C.dim; fonte(600, 26);
+      ctx.fillText(`${d.pct}%`, W - M - 24, y + 40);
+      const pctW = ctx.measureText('100%').width;
+      const valTxt = R(d.valor);
+      const valTam = caber(valTxt, contentW - 48 - pctW - 24 - 220, 30, '700');
+      ctx.fillStyle = C.text; fonte(700, valTam);
+      ctx.fillText(valTxt, W - M - 24 - pctW - 24, y + 40);
       const valW = ctx.measureText(valTxt).width;
-      const nameMaxW = contentW - 84 - 30 - valW - 40;
-      const nameSize = fitFont(cat, nameMaxW, 46, '700');
-      ctx.fillStyle = C.text; ctx.textAlign = 'left'; ctx.font = `700 ${nameSize}px ${F}`;
-      ctx.fillText(cat, M + 84, ry + 16);
-      ctx.font = `700 46px ${F}`; ctx.textAlign = 'right';
-      ctx.fillText(valTxt, W - M - 30, ry + 16);
       ctx.textAlign = 'left';
+      const rotMaxW = contentW - 48 - pctW - 24 - valW - 24;
+      const rotTam = caber(d.rotulo, rotMaxW, 30, '700');
+      ctx.fillStyle = C.text; fonte(700, rotTam);
+      ctx.fillText(encurtar(d.rotulo, rotMaxW), M + 24, y + 40);
+      y += 72;
+    });
+    y -= 10;
+  }
+
+  // ── Gastos do dia a dia ──
+  if (m.consumo.categorias.length) {
+    y += 42; risco(y); y += 48;
+    secao('Gastos do dia a dia', y);
+    y += 46;
+    const maior = m.consumo.categorias[0].valor || 1;
+    const barraW = 220;
+    m.consumo.categorias.forEach((c, i) => {
+      const pctTxt = `${c.pct}%`, valTxt = R(c.valor);
+      ctx.textAlign = 'right';
+      fonte(600, 24); ctx.fillStyle = C.faint;
+      ctx.fillText(pctTxt, W - M, y + 10);
+      const pctW = ctx.measureText('100%').width;
+      fonte(700, 28); ctx.fillStyle = C.text;
+      ctx.fillText(valTxt, W - M - pctW - 20, y + 10);
+      const valW = ctx.measureText(valTxt).width;
+      ctx.textAlign = 'left';
+      // Nome recebe o espaço que sobra: barra e números têm prioridade.
+      const nomeMaxW = contentW - barraW - 24 - valW - pctW - 40;
+      const nomeTam = caber(c.nome, nomeMaxW, 28, '700');
+      ctx.fillStyle = C.text; fonte(700, nomeTam);
+      ctx.fillText(encurtar(c.nome, nomeMaxW), M, y + 10);
+      // Trilho + preenchimento proporcional à MAIOR categoria.
+      const bx = M + contentW - barraW - valW - pctW - 40;
+      arred(bx, y - 8, barraW, 14, 7); ctx.fillStyle = C.trilho; ctx.fill();
+      arred(bx, y - 8, Math.max(6, Math.round(barraW * (c.valor / maior))), 14, 7);
+      ctx.fillStyle = PALETTE[i % PALETTE.length]; ctx.fill();
+      y += 54;
+    });
+    if (m.consumo.outras) {
+      const ou = m.consumo.outras;
+      ctx.fillStyle = C.faint; fonte(600, 26);
+      ctx.fillText(`+ outras ${ou.quantidade} categoria${ou.quantidade === 1 ? '' : 's'}`, M, y + 8);
+      ctx.textAlign = 'right'; ctx.fillStyle = C.dim; fonte(600, 26);
+      ctx.fillText(`${R(ou.valor)}   ${ou.pct}%`, W - M, y + 8);
+      ctx.textAlign = 'left';
+      y += 44;
+    }
+    y -= 6;
+  }
+
+  // ── De onde veio (só quando há entrada extraordinária) ──
+  if (m.origem) {
+    y += 42; risco(y); y += 48;
+    secao('De onde veio', y);
+    y += 42;
+    const meia = (contentW - 30) / 2;
+    const bloco = (bx, rot, val, cor) => {
+      arred(bx, y, meia, 92, 16); ctx.fillStyle = C.card; ctx.fill();
+      ctx.fillStyle = C.faint; fonte(600, 24);
+      ctx.fillText(encurtar(rot, meia - 40), bx + 20, y + 34);
+      const t = caber(R(val), meia - 40, 32, '800');
+      ctx.fillStyle = cor; fonte(800, t);
+      ctx.fillText(R(val), bx + 20, y + 72);
+    };
+    bloco(M, 'Operação', m.origem.operacional, C.text);
+    bloco(M + meia + 30, 'Venda de bem', m.origem.extraordinaria, C.ac);
+    y += 100;
+  }
+
+  // ── Contexto: comparação e reserva ──
+  const contexto = [];
+  if (m.comparacao) {
+    const v = m.comparacao.variacaoPct;
+    contexto.push([
+      m.comparacao.parcial ? 'Dia a dia vs. mesmo período do mês anterior' : 'Dia a dia vs. mês anterior',
+      `${v > 0 ? '+' : ''}${v}%`,
+      v > 0 ? C.rd : C.gn,
+    ]);
+  }
+  if (m.reserva !== null) {
+    contexto.push(['Reserva do mês', (m.reserva > 0 ? '+' : '') + R(m.reserva), m.reserva >= 0 ? C.gn : C.rd]);
+  }
+  if (contexto.length) {
+    y += 42; risco(y); y += 46;
+    contexto.forEach(([rot, val, cor]) => {
+      ctx.textAlign = 'right'; ctx.fillStyle = cor; fonte(700, 28);
+      ctx.fillText(val, W - M, y);
+      const valW = ctx.measureText(val).width;
+      ctx.textAlign = 'left'; ctx.fillStyle = C.dim; fonte(600, 26);
+      ctx.fillText(encurtar(rot, contentW - valW - 30), M, y);
+      y += 44;
     });
   }
 
-  // Footer AVENCO
-  ctx.fillStyle = C.faint; ctx.font = `600 34px ${F}`; ctx.textAlign = 'center';
-  ctx.fillText('Avenco', W/2, H - 90);
+  // ── Rodapé ──
+  ctx.textAlign = 'center'; ctx.fillStyle = C.faint; fonte(600, 24);
+  ctx.fillText('Avenco', W/2, H - 60);
   ctx.textAlign = 'left';
-
   return canvas;
 }
 
 // ══════════════════════════════════════════
-// ORÇAMENTO POR CATEGORIA
+// COMPARTILHAR RESUMO MENSAL — CAMADA 3
 // ══════════════════════════════════════════
+// Único ponto com I/O: modelo → peça → PNG → compartilhar ou baixar.
+// O mês compartilhado é o EXIBIDO (`monthOffset`), lido aqui e passado adiante.
+// Não altera D, não chama save(), não cria lançamento, não mexe em monthOffset
+// e não persiste snapshot. Falhar aqui não deixa rastro financeiro.
+function shareMonthReport() {
+  const off = monthOffset;
+  const mLabel = fmtMonthYear(off);
+  let canvas;
+  try { canvas = _renderShareCanvas(_monthShareModel(off)); }
+  catch (e) { console.error(e); gdToast('Não foi possível gerar a imagem.', { type: 'error' }); return; }
+  canvas.toBlob(blob => {
+    if (!blob) { gdToast('Não foi possível gerar a imagem.', { type: 'error' }); return; }
+    const nome = `avenco-${mLabel.replace(/\s+/g, '-').replace(/\./g, '')}.png`;
+    const file = new File([blob], nome, { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ files: [file], title: `Avenco — ${mLabel}` }).catch(() => {});
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = nome;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+  }, 'image/png');
+}
+
 function renderCatBudgets() {
   const el = document.getElementById('cat-budget-bars');
   if (!el) return;
