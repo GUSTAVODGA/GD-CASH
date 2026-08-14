@@ -286,8 +286,9 @@ async function loadFromCloud() {
       const _migrated = migrateDebtsV1();
       const _patLife = migratePatrimonioLifecycleV1();
       const _debtCleaned = reconcileDebtPayments();
+      const _pendCleaned = reconcilePendencias();
       localStorage.setItem('gdcash_v1', JSON.stringify(D));
-      if (_fxCleaned || _migrated || _patLife || _debtCleaned || _fxNeedSave) save();
+      if (_fxCleaned || _migrated || _patLife || _debtCleaned || _pendCleaned || _fxNeedSave) save();
     } else {
       // Primeiro login — oferece migrar dados locais existentes
       const local = localStorage.getItem('gdcash_v1');
@@ -2108,6 +2109,7 @@ function _movementTypeLabel(item) {
   if (!item || typeof item !== 'object') return 'Gasto';
   const meta = (item.meta && typeof item.meta === 'object') ? item.meta : null;
   if (meta && meta.source === 'fixed-payment') return 'Gasto fixo';
+  if (meta && meta.source === 'pendencia') return 'Gasto de pendência';
   return MOVIMENTO_LBL[_movementNature(item)] || 'Gasto';
 }
 
@@ -2128,6 +2130,38 @@ function addExpense() {
   notifyRegistered(val, desc || cat, cat);
 }
 
+// ── PENDÊNCIA ⇄ DESPESA: reconciliador único ─────────────────────────────
+// Mesmo padrão de dívidas e fixos: a despesa é a verdade financeira, e o
+// vínculo é um marcador que só pode existir enquanto a despesa existir. Se a
+// despesa some, a conclusão que dependia dela deixa de ter lastro — e a
+// pendência volta a ser um compromisso em aberto.
+//
+// O que este reconciliador NUNCA faz: apagar dinheiro. Marcador órfão do lado
+// da pendência é limpo; despesa órfã (apontando para pendência inexistente)
+// é preservada intacta — vira um gasto comum, que é o que ela sempre foi para
+// o caixa. Excluir pendência com despesa viva é bloqueado antes, na UI.
+//
+// Idempotente: rodar duas vezes não produz efeito novo.
+function _pendDespesaVinculada(p) {
+  if (!p || !p.despesaId) return null;
+  return (D.expenses || []).find(e => e.id === p.despesaId) || null;
+}
+function reconcilePendencias() {
+  if (!Array.isArray(D.pendencias)) return false;
+  let mudou = false;
+  D.pendencias.forEach(p => {
+    if (!p || !p.despesaId) return;
+    if (_pendDespesaVinculada(p)) return;          // despesa viva: nada a fazer
+    delete p.despesaId;                            // marcador órfão
+    if (p.status === 'concluida') {                // a conclusão perdeu o lastro
+      p.status = 'aberta';
+      delete p.completedAt;
+    }
+    mudou = true;
+  });
+  return mudou;
+}
+
 function deleteExpense(id) {
   // Remove o id do índice legado em qualquer veículo (o vínculo canônico some com a despesa).
   (D.vehicles||[]).forEach(v => { if (v.linkedExpenses) v.linkedExpenses = v.linkedExpenses.filter(eid => eid !== id); });
@@ -2137,6 +2171,8 @@ function deleteExpense(id) {
   // Dívidas (financiamento/parcelamento/…): remove o marcador do pagamento, revertendo
   // a amortização (saldo/progresso/parcela recalculados por derivação). Sem órfãos.
   reconcileDebtPayments();
+  // Pendências: se a despesa era o lastro de uma conclusão, a pendência reabre.
+  reconcilePendencias();
   save();
   refreshAfterDayEdit();
   refreshHomeFixosAlert();
@@ -3975,6 +4011,7 @@ let _obrigacoesNaTela = [];
 function _sairDoLancamento() {
   _qaEdit = null;
   _pendVehicleId = null;
+  _pendOrigemId = null;
   _qaSaving = true;
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = true;
   const ov = document.getElementById('modal-quick-add');
@@ -6170,7 +6207,7 @@ function initLongPress() {
         confirmText: 'Excluir',
         variant: 'danger',
         onConfirm: () => {
-          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); reconcileDebtPayments(); }
+          if (type === 'exp') { D.expenses = D.expenses.filter(e => e.id !== id); reconcileFixedPayments(); reconcileDebtPayments(); reconcilePendencias(); }
           else if (type === 'inc') { D.incomeItems = (D.incomeItems||[]).filter(it => it.id !== id); }
           save(); renderInicio();
         },
@@ -6212,6 +6249,11 @@ var _vehLinkExpTarget = null;
 var _vehLinkPendTarget = null;
 var _vehStatusTarget = null;
 var _pendVehicleId = null;
+// Pendência que originou o formulário aberto agora. Memória EFÊMERA de UI: só
+// vira vínculo persistido se o usuário chegar a salvar. Cancelar não deixa
+// relação fantasma — a pendência fica concluída sem despesa, igual a quem
+// responde "Não" ao ser perguntado.
+var _pendOrigemId = null;
 var qaType = 'rec';
 // Estado de edição do formulário de lançamento (null = criação).
 // Formas: {kind:'exp', id} | {kind:'item', id} | {kind:'legacy', date, pid}
@@ -7035,6 +7077,7 @@ function qaAbrirOrigem() {
 function openQuickAdd(editRef) {
   _qaEdit = editRef || null;
   _qaSaving = false;
+  _pendOrigemId = null;   // o "+" nunca herda a origem de uma pendência anterior
   _hideFabForSheet();
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   _qaPopulateSelects();
@@ -7180,6 +7223,7 @@ function qaCadastrarBem() {
   _qaRascunho = _qaCapturarRascunho();
   _qaEdit = null;
   _pendVehicleId = null;
+  _pendOrigemId = null;
   _qaSaving = true;                 // trava um Salvar atrasado enquanto estamos fora
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = true;
   closeOverlay('modal-quick-add');
@@ -7213,6 +7257,7 @@ function patSheetDismiss() {
 function qaCancel() {
   _qaEdit = null;
   _pendVehicleId = null;
+  _pendOrigemId = null;
   _qaSaving = false;
   _qaLimparRascunho();  // cancelar o lançamento encerra o rascunho de vez
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
@@ -7305,6 +7350,16 @@ function qaConfirm() {
     const cat = document.getElementById('qa-cat-sel')?.value || (D.expCats[0] || 'Outros');
     _pendVehicleId = null;
     const expObj = { id: uid(), date, category: cat, description: desc || cat, amount: amt };
+    // Origem pendência: o vínculo é gravado dos DOIS lados, como já acontece em
+    // dívida e gasto fixo (despesa + marcador). Só aqui — no Salvar — a relação
+    // passa a existir. A natureza continua consumo: `source` diz de onde veio,
+    // não o que é.
+    const _pendOrigem = _pendOrigemId ? (D.pendencias || []).find(x => x.id === _pendOrigemId) : null;
+    if (_pendOrigem) {
+      expObj.meta = { source: 'pendencia', pendenciaId: _pendOrigem.id };
+      _pendOrigem.despesaId = expObj.id;
+    }
+    _pendOrigemId = null;
     D.expenses.push(expObj);
     // Vínculo com patrimônio escolhido em "Relacionado a" (opcional, canônico).
     _expSetBemLink(expObj, document.getElementById('qa-bem-sel')?.value || '');
@@ -7973,6 +8028,7 @@ function openPendenciaAsExpense(p) {
   _hideFabForSheet();
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   _pendVehicleId = p.vehicleId || null;
+  _pendOrigemId = p.id;
   _qaPopulateSelects();
   _qaApplyMode();
   const dateEl = document.getElementById('qa-date');
@@ -7994,6 +8050,18 @@ function openPendenciaAsExpense(p) {
 function reopenPendencia(id) {
   const p = (D.pendencias || []).find(x => x.id === id);
   if (!p) return;
+  // Reabrir com despesa viva criaria duas verdades ao mesmo tempo: um
+  // compromisso em aberto e o gasto que o quitou. Apagar o dinheiro por conta
+  // própria seria pior — quem decide sobre dinheiro é o usuário, no lançamento.
+  const desp = _pendDespesaVinculada(p);
+  if (desp) {
+    gdAlert({
+      title: 'Existe um gasto registrado',
+      type: 'warning',
+      msg: `Esta pendência foi concluída com um gasto de ${R(desp.amount)} em ${_fmtDataBR(desp.date)}. Para reabri-la, exclua esse lançamento primeiro — ela volta sozinha para os compromissos em aberto.`,
+    });
+    return;
+  }
   p.status = 'aberta';
   delete p.completedAt;
   save();
@@ -8003,6 +8071,18 @@ function reopenPendencia(id) {
 }
 
 function deletePendencia(id) {
+  // Apagar a pendência deixaria a despesa apontando para algo que não existe
+  // mais. Não há cascata: o gasto é do usuário, não do cadastro.
+  const p = (D.pendencias || []).find(x => x.id === id);
+  const desp = p ? _pendDespesaVinculada(p) : null;
+  if (desp) {
+    gdAlert({
+      title: 'Existe um gasto vinculado',
+      type: 'warning',
+      msg: `Esta pendência tem um gasto de ${R(desp.amount)} em ${_fmtDataBR(desp.date)}. Exclua o lançamento primeiro se quiser mesmo apagá-la — nenhum gasto é removido junto.`,
+    });
+    return;
+  }
   gdConfirm({
     title: 'Excluir pendência',
     msg: 'Deseja excluir esta pendência permanentemente?',

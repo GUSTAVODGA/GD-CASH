@@ -57,6 +57,7 @@ const RESUMO = `({
   manuais: D.expenses.filter(e => !e.meta || !e.meta.source).length,
   deDivida: D.expenses.filter(e => e.meta && e.meta.source === 'debt').length,
   deFixo: D.expenses.filter(e => e.meta && e.meta.source === 'fixed-payment').length,
+  dePendencia: D.expenses.filter(e => e.meta && e.meta.source === 'pendencia').length,
   debtPayments: D.debtPayments.length,
   fixedPayments: D.fixedPayments.length,
 })`;
@@ -209,7 +210,11 @@ test('pendência "Registrar": abre o formulário pré-preenchido, sem faixa e se
   await page.locator('#qa-save-btn').click();
   await esperarOverlay(page, 'modal-quick-add', false);
   const r = await lerEstado(page, RESUMO);
-  expect(r).toMatchObject({ despesas: 1, manuais: 1, debtPayments: 0, fixedPayments: 0 });
+  // A despesa nasce VINCULADA à pendência (não é mais um gasto manual solto):
+  // é o vínculo que permite reabrir a pendência se o lançamento for excluído.
+  expect(r).toMatchObject({ despesas: 1, dePendencia: 1, manuais: 0, debtPayments: 0, fixedPayments: 0 });
+  expect(await lerEstado(page, 'D.expenses[0].meta.pendenciaId')).toBe(await lerEstado(page, 'D.pendencias[0].id'));
+  expect(await lerEstado(page, 'D.pendencias[0].despesaId')).toBe(await lerEstado(page, 'D.expenses[0].id'));
   await expect(fab(page)).toBeVisible();
   expect(await lerEstado(page, '_jornadaCompromisso')).toBe(false);
 });
