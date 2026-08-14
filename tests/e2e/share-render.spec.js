@@ -242,13 +242,17 @@ test('nome longo de categoria é encurtado, não sobreposto ao valor', async ({ 
   expect(r.nomeMax).toBeGreaterThan(0);
 });
 
-test('muitas categorias: cinco linhas + "Outras", somando o consumo', async ({ page }) => {
+test('muitas categorias: o modelo traz todas; quem dobra é o desenho', async ({ page }) => {
   const nomes = ['Alimentação', 'Transporte', 'Casa', 'Saúde', 'Lazer', 'Educação', 'Pets', 'Vestuário'];
   await abrir(page, { expenses: nomes.map((n, i) => G('e' + i, '10', 100 - i * 5, n)) });
   const m = await lerEstado(page, '_monthShareModel(0)');
-  expect(m.consumo.categorias.length).toBe(5);
-  expect(m.consumo.outras.quantidade).toBe(3);
-  const soma = m.consumo.categorias.reduce((s, c) => s + c.valor, 0) + m.consumo.outras.valor;
+  expect(m.consumo.categorias.length).toBe(8);
+  expect(m.consumo.outras).toBeNull();
+  // A peça tem quadro fixo e dobra o excedente na hora de desenhar.
+  const dobrado = await page.evaluate(() => window._shareDobrarCategorias(window._monthShareModel(0).consumo, 5));
+  expect(dobrado.categorias.length).toBe(5);
+  expect(dobrado.outras.quantidade).toBe(3);
+  const soma = dobrado.categorias.reduce((s, c) => s + c.valor, 0) + dobrado.outras.valor;
   expect(Math.round(soma * 100) / 100).toBe(m.consumo.total);
 });
 

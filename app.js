@@ -5875,17 +5875,13 @@ function _monthShareModel(off) {
   // ── Gastos do dia a dia: SÓ consumo, direto de consumoByCategory ───────
   // Muitas categorias viram "Outras", e o resto é o COMPLEMENTO exato: a soma
   // das linhas continua sendo o consumo total, sem sobra nem falta.
-  const todas = Object.entries(sum.consumoByCategory)
-    .map(([nome, valor]) => ({ nome, valor }))
+  // TODAS as categorias, maior primeiro. O relatório em PDF lista todas; quem
+  // tem quadro fixo (a peça em imagem) dobra o excedente na hora de desenhar —
+  // limitar aqui seria impor a restrição de um formato ao modelo.
+  const principais = Object.entries(sum.consumoByCategory)
+    .map(([nome, valor]) => ({ nome, valor, pct: _sharePct(valor, sum.consumo) }))
     .sort((a, b) => b.valor - a.valor || a.nome.localeCompare(b.nome, 'pt-BR'));
-  const principais = todas.slice(0, SHARE_TOP_CATEGORIAS).map(c => ({
-    nome: c.nome, valor: c.valor, pct: _sharePct(c.valor, sum.consumo),
-  }));
-  const somaPrincipais = principais.reduce((s, c) => s + c.valor, 0);
-  const restoValor = Math.round((sum.consumo - somaPrincipais) * 100) / 100;
-  const outras = todas.length > SHARE_TOP_CATEGORIAS
-    ? { quantidade: todas.length - SHARE_TOP_CATEGORIAS, valor: restoValor, pct: _sharePct(restoValor, sum.consumo) }
-    : null;
+  const outras = null;
 
   // ── De onde veio: operacional × extraordinária ─────────────────────────
   // Só vira seção quando há entrada extraordinária — sem ela, "entrou" já diz tudo.
@@ -6242,6 +6238,244 @@ function _renderShareCanvas(m, opts) {
   ctx.fillText('Avenco', W/2, H - 60);
   ctx.textAlign = 'left';
   return canvas;
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// RELATÓRIO MENSAL EM PDF — CAMADA 2b
+//
+// A4 vertical, multipágina. Diferente da peça em imagem, aqui não há quadro
+// para o conteúdo caber: a tabela quebra a página, repete o cabeçalho e segue.
+// Nenhum lançamento é escondido para economizar espaço.
+//
+// Monta A PARTIR DO MODELO e de nada mais. Devolve `{ doc, stats }` — separado
+// da exportação de propósito, para poder ser verificado sem gerar arquivo.
+//
+// As bibliotecas são carregadas SOB DEMANDA, no primeiro relatório: nada disso
+// entra no boot nem no precache do service worker. Depois da primeira geração
+// ficam no cache do próprio SW (estratégia cache-first já existente).
+// ══════════════════════════════════════════════════════════════════════════
+
+const PDF_V = 'v1';
+function _pdfCarregarScript(src) {
+  return new Promise((ok, falha) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = ok; s.onerror = () => falha(new Error('falha ao carregar ' + src));
+    document.head.appendChild(s);
+  });
+}
+async function _pdfGarantirLib() {
+  if (window.jspdf && window.jspdf.jsPDF) return;
+  await _pdfCarregarScript('vendor-jspdf.js?' + PDF_V);
+  await _pdfCarregarScript('vendor-jspdf-autotable.js?' + PDF_V);
+}
+
+// Paleta do documento (RGB para o jsPDF). Impressão é sempre clara: um
+// relatório não muda de cor com o tema do app.
+const PDF_C = Object.freeze({
+  tinta: [13, 20, 64], suave: [110, 122, 150], linha: [214, 220, 235],
+  zebra: [246, 247, 251], cabecalho: [13, 20, 64],
+  verde: [22, 122, 62], vermelho: [178, 40, 40], acento: [37, 99, 235],
+});
+
+/** Nome de arquivo seguro: "Avenco - Agosto 2026.pdf". */
+function _pdfNomeArquivo(rotulo) {
+  const limpo = String(rotulo || '').replace(/\./g, '').replace(/[\\/:*?"<>|]/g, '-').trim();
+  const capitalizado = limpo.charAt(0).toUpperCase() + limpo.slice(1);
+  return `Avenco - ${capitalizado}.pdf`;
+}
+
+/** Monta o relatório do mês. Devolve { doc, stats } — não exporta nada. */
+function _shareRelatorioDoc(m) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const M = 40, CW = W - 2 * M;
+  const mesTxt = m.periodo.rotulo.charAt(0).toUpperCase() + m.periodo.rotulo.slice(1);
+  const geradoEm = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+  // ── Cabeçalho da primeira página ──
+  let y = M;
+  doc.setFillColor(...PDF_C.acento); doc.roundedRect(M, y, 34, 34, 8, 8, 'F');
+  doc.setDrawColor(255, 255, 255); doc.setLineWidth(2.4);
+  doc.lines([[9, 14], [-18, 0], [9, -14]], M + 17, y + 11, [1, 1], 'S', true);
+  doc.setTextColor(...PDF_C.tinta); doc.setFont('helvetica', 'bold'); doc.setFontSize(19);
+  doc.text('Avenco', M + 46, y + 17);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5); doc.setTextColor(...PDF_C.suave);
+  doc.text('Relatório mensal', M + 46, y + 30);
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(...PDF_C.tinta);
+  doc.text(mesTxt, W - M, y + 17, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_C.suave);
+  doc.text('Gerado em ' + geradoEm, W - M, y + 30, { align: 'right' });
+  y += 46;
+  doc.setDrawColor(...PDF_C.linha); doc.setLineWidth(1); doc.line(M, y, W - M, y);
+  y += 20;
+
+  if (m.periodo.vazio) {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(...PDF_C.suave);
+    doc.text('Nenhuma movimentação registrada neste mês.', M, y + 16);
+    _pdfRodape(doc, mesTxt);
+    return { doc, stats: { paginas: doc.internal.getNumberOfPages(), entradas: 0, saidas: 0, linhas: 0 } };
+  }
+
+  // ── Resumo: três blocos ──
+  const bw = (CW - 20) / 3;
+  const bloco = (bx, titulo, valor, cor) => {
+    doc.setDrawColor(...PDF_C.linha); doc.setFillColor(...PDF_C.zebra);
+    doc.roundedRect(bx, y, bw, 54, 6, 6, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); doc.setTextColor(...PDF_C.suave);
+    doc.text(titulo.toUpperCase(), bx + 12, y + 18);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(14); doc.setTextColor(...cor);
+    doc.text(R(valor), bx + 12, y + 40);
+  };
+  bloco(M, 'Entradas', m.caixa.entradas, PDF_C.verde);
+  bloco(M + bw + 10, 'Saídas', m.caixa.saidas, PDF_C.vermelho);
+  bloco(M + 2 * (bw + 10), 'Resultado de caixa', m.caixa.resultado, m.caixa.resultado < 0 ? PDF_C.vermelho : PDF_C.tinta);
+  y += 70;
+
+  // Linhas secundárias: só o que existe naquele mês.
+  const secundarias = [];
+  const add = (rot, val) => { if (val > 0) secundarias.push([rot, R(val)]); };
+  add('Gastos do dia a dia', m.consumo.total);
+  add('Pagamentos de dívidas', (m.destino.find(d => d.chave === 'divida') || {}).valor || 0);
+  add('Aquisições de patrimônio', (m.destino.find(d => d.chave === 'patrimonio') || {}).valor || 0);
+  add('Receita operacional', m.operacional.receita);
+  add('Entradas extraordinárias', m.origem ? m.origem.extraordinaria : 0);
+  if (secundarias.length) {
+    doc.autoTable(_pdfOpts(M, {
+      startY: y,
+      body: secundarias,
+      theme: 'plain',
+      styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 4, textColor: PDF_C.tinta },
+      columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+    }));
+    y = doc.lastAutoTable.finalY + 18;
+  }
+
+  const titulo = (txt) => {
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(...PDF_C.tinta);
+    doc.text(txt, M, y);
+  };
+
+  // ── Gastos do dia a dia por categoria: TODAS ──
+  if (m.consumo.categorias.length || m.consumo.outras) {
+    titulo('Gastos do dia a dia por categoria');
+    const linhas = m.consumo.categorias.map(c => [c.nome, R(c.valor), c.pct + '%']);
+    if (m.consumo.outras) linhas.push([`Outras ${m.consumo.outras.quantidade} categorias`, R(m.consumo.outras.valor), m.consumo.outras.pct + '%']);
+    doc.autoTable(_pdfOpts(M, {
+      startY: y + 8,
+      head: [['Categoria', 'Valor', '% do consumo']],
+      body: linhas,
+      columnStyles: { 1: { halign: 'right', cellWidth: 90 }, 2: { halign: 'right', cellWidth: 90 } },
+      foot: [[{ content: 'Total', styles: { fontStyle: 'bold' } }, { content: R(m.consumo.total), styles: { halign: 'right', fontStyle: 'bold' } }, '']],
+    }));
+    y = doc.lastAutoTable.finalY + 20;
+  }
+
+  // ── Entradas do mês ──
+  if (m.movimentos.entradas.length) {
+    if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 64; }
+    titulo('Entradas do mês');
+    doc.autoTable(_pdfOpts(M, {
+      startY: y + 8,
+      head: [['Data', 'Tipo', 'Valor']],
+      body: m.movimentos.entradas.map(e => [_fmtDataBR(e.data), e.tipo, R(e.valor)]),
+      columnStyles: { 0: { cellWidth: 70 }, 2: { halign: 'right', cellWidth: 100 } },
+      foot: [[{ content: 'Total', styles: { fontStyle: 'bold' } }, '', { content: R(m.caixa.entradas), styles: { halign: 'right', fontStyle: 'bold' } }]],
+    }));
+    y = doc.lastAutoTable.finalY + 20;
+  }
+
+  // ── Saídas do mês ──
+  if (m.movimentos.saidas.length) {
+    if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 64; }
+    titulo('Saídas do mês');
+    doc.autoTable(_pdfOpts(M, {
+      startY: y + 8,
+      head: [['Data', 'Descrição', 'Tipo', 'Valor']],
+      body: m.movimentos.saidas.map(e => [_fmtDataBR(e.data), e.descricao, e.tipo, R(e.valor)]),
+      columnStyles: { 0: { cellWidth: 62 }, 2: { cellWidth: 110 }, 3: { halign: 'right', cellWidth: 84 } },
+      foot: [[{ content: 'Total', styles: { fontStyle: 'bold' } }, '', '', { content: R(m.caixa.saidas), styles: { halign: 'right', fontStyle: 'bold' } }]],
+    }));
+    y = doc.lastAutoTable.finalY + 20;
+  }
+
+  // ── Blocos agregados: dívidas, patrimônio, reserva, comparação ──
+  const agregados = [];
+  const pagDivida = m.movimentos.saidas.filter(s => s.tipo === 'Pagamento de dívida');
+  if (pagDivida.length) {
+    agregados.push(['Dívidas', `${R(pagDivida.reduce((s, x) => s + x.valor, 0))} em ${pagDivida.length} pagamento${pagDivida.length === 1 ? '' : 's'}`]);
+  }
+  const aquis = (m.destino.find(d => d.chave === 'patrimonio') || {}).valor || 0;
+  const vendas = m.origem ? m.origem.extraordinaria : 0;
+  if (aquis > 0) agregados.push(['Patrimônio — aquisições', R(aquis)]);
+  if (vendas > 0) agregados.push(['Patrimônio — vendas', R(vendas)]);
+  if (m.reserva !== null) agregados.push(['Reserva do mês (fora do caixa)', R(m.reserva)]);
+  if (m.comparacao) {
+    const v = m.comparacao.variacaoPct;
+    agregados.push([
+      m.comparacao.parcial ? 'Dia a dia vs. mesmo período do mês anterior' : 'Dia a dia vs. mês anterior',
+      `${v > 0 ? '+' : ''}${v}%`,
+    ]);
+  }
+  if (agregados.length) {
+    if (y > doc.internal.pageSize.getHeight() - 120) { doc.addPage(); y = 64; }
+    titulo('Resumo complementar');
+    doc.autoTable(_pdfOpts(M, {
+      startY: y + 8,
+      body: agregados,
+      theme: 'plain',
+      styles: { font: 'helvetica', fontSize: 9.5, cellPadding: 4, textColor: PDF_C.tinta },
+      columnStyles: { 1: { halign: 'right', fontStyle: 'bold' } },
+    }));
+  }
+
+  _pdfRodape(doc, mesTxt);
+  return {
+    doc,
+    stats: {
+      paginas: doc.internal.getNumberOfPages(),
+      entradas: m.caixa.entradas, saidas: m.caixa.saidas,
+      linhas: m.movimentos.entradas.length + m.movimentos.saidas.length,
+    },
+  };
+}
+
+/** Opções padrão das tabelas: zebra, cabeçalho repetido e margem reservada. */
+function _pdfOpts(M, extra) {
+  return Object.assign({
+    theme: 'grid',
+    // `top` reserva o espaço da faixa de continuação desenhada no rodapé final.
+    margin: { left: M, right: M, top: 58, bottom: 44 },
+    styles: { font: 'helvetica', fontSize: 9, cellPadding: 5, textColor: PDF_C.tinta, lineColor: PDF_C.linha, lineWidth: 0.5, overflow: 'linebreak' },
+    headStyles: { fillColor: PDF_C.cabecalho, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    alternateRowStyles: { fillColor: PDF_C.zebra },
+    footStyles: { fillColor: [237, 242, 249], textColor: PDF_C.tinta },
+    // O total é do MÊS, não da página: repeti-lo em cada página faria a
+    // primeira parecer fechada em si mesma. Cabeçalho repete; total, não.
+    showFoot: 'lastPage',
+    // Uma linha nunca é partida entre páginas: sem isso, uma descrição longa
+    // termina numa página e continua na outra sem data, tipo nem valor.
+    rowPageBreak: 'avoid',
+  }, extra);
+}
+
+/** Faixa de continuação (páginas 2+) e rodapé com paginação, em todas. */
+function _pdfRodape(doc, mesTxt) {
+  const total = doc.internal.getNumberOfPages();
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const M = 40;
+  for (let i = 1; i <= total; i++) {
+    doc.setPage(i);
+    if (i > 1) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...PDF_C.suave);
+      doc.text('Avenco · Relatório mensal · ' + mesTxt, M, 30);
+      doc.setDrawColor(...PDF_C.linha); doc.setLineWidth(0.5); doc.line(M, 38, W - M, 38);
+    }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(...PDF_C.suave);
+    doc.text('Gerado pelo Avenco', M, H - 22);
+    doc.text('Página ' + i + ' de ' + total, W - M, H - 22, { align: 'right' });
+  }
 }
 
 // ══════════════════════════════════════════

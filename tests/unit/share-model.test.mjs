@@ -169,19 +169,16 @@ test('lançamento legado sem metadata segue a classificação canônica', () => 
 
 // ══ CATEGORIAS ═══════════════════════════════════════════════════════════
 
-test('muitas categorias: as principais + "Outras" fecham o total', () => {
+test('o modelo devolve TODAS as categorias, sem cap de formato', () => {
+  // Limitar a 5 era restrição do quadro fixo da imagem. O relatório em PDF
+  // lista todas; dobrar o excedente virou decisão de quem desenha.
   const nomes = ['Alimentação', 'Transporte', 'Casa', 'Saúde', 'Lazer', 'Educação', 'Pets', 'Vestuário'];
   const { ctx } = cenario({ expenses: nomes.map((n, i) => GASTO('e' + i, '10', 100 - i * 5, n)) });
   const m = ctx._monthShareModel(0);
-  assert.equal(m.consumo.categorias.length, 5);
-  assert.equal(m.consumo.outras.quantidade, 3);
-  const soma = m.consumo.categorias.reduce((s, c) => s + c.valor, 0) + m.consumo.outras.valor;
+  assert.equal(m.consumo.categorias.length, 8);
+  assert.equal(m.consumo.outras, null);
+  const soma = m.consumo.categorias.reduce((s, c) => s + c.valor, 0);
   assert.equal(Math.round(soma * 100) / 100, m.consumo.total);
-});
-
-test('até cinco categorias: nenhuma linha "Outras"', () => {
-  const { ctx } = cenario({ expenses: ['A', 'B', 'C'].map((n, i) => GASTO('e' + i, '10', 50, n)) });
-  assert.equal(ctx._monthShareModel(0).consumo.outras, null);
 });
 
 test('categorias saem ordenadas por valor, maior primeiro', () => {
