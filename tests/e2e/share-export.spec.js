@@ -1,10 +1,10 @@
-// Compartilhar e exportar o resumo mensal — camada 3.
+// Compartilhar e exportar o relatório mensal — camada 3.
 //
 // Duas perguntas: o mês compartilhado é o EXIBIDO (inclusive meses anteriores
 // à existência desta feature), e gerar/compartilhar não toca em dinheiro.
 //
 // O fallback importa tanto quanto o caminho feliz: em desktop sem
-// `navigator.share`, a peça precisa virar download em vez de sumir.
+// `navigator.share`, o PDF precisa virar download em vez de sumir.
 import { test, expect } from '@playwright/test';
 import { abrirAppEmDemo, semearDados, lerEstado, irParaAba } from './_helpers.js';
 
@@ -52,8 +52,8 @@ async function espionar(page) {
   });
 }
 
-const esperarShare = page => page.waitForFunction(() => window.__share.arquivos.length > 0, null, { timeout: 5000 });
-const esperarDownload = page => page.waitForFunction(() => window.__share.downloads.length > 0, null, { timeout: 5000 });
+const esperarShare = page => page.waitForFunction(() => window.__share.arquivos.length > 0, null, { timeout: 15000 });
+const esperarDownload = page => page.waitForFunction(() => window.__share.downloads.length > 0, null, { timeout: 15000 });
 
 // ══ O MÊS EXIBIDO É A FONTE ══════════════════════════════════════════════
 
@@ -118,7 +118,7 @@ test('mês anterior à feature gera relatório sem exigir nada novo', async ({ p
 
 // ══ EXPORTAÇÃO ═══════════════════════════════════════════════════════════
 
-test('com navigator.share: envia um PNG nomeado pelo mês exibido', async ({ page }) => {
+test('com navigator.share: envia um PDF nomeado pelo mês exibido', async ({ page }) => {
   await abrir(page, TRES_MESES);
   await espionar(page);
   await page.evaluate(() => { window.monthOffset = -1; window.shareMonthReport(); });
@@ -128,8 +128,8 @@ test('com navigator.share: envia um PNG nomeado pelo mês exibido', async ({ pag
     const a = window.__share.arquivos[0];
     return { titulo: a.title, nome: a.files[0].name, tipo: a.files[0].type, bytes: a.files[0].size };
   });
-  expect(envio.tipo).toBe('image/png');
-  expect(envio.nome).toMatch(/^avenco-.+\.png$/);
+  expect(envio.tipo).toBe('application/pdf');
+  expect(envio.nome).toMatch(/^Avenco - .+\.pdf$/);
   expect(envio.bytes).toBeGreaterThan(1000);
   expect(envio.titulo).toContain('Avenco');
   expect(await lerEstado(page, 'window.__share.downloads.length')).toBe(0);
@@ -143,7 +143,7 @@ test('sem navigator.share: cai no download, sem erro', async ({ page }) => {
   await esperarDownload(page);
 
   const nome = await lerEstado(page, 'window.__share.downloads[0]');
-  expect(nome).toMatch(/^avenco-.+\.png$/);
+  expect(nome).toMatch(/^Avenco - .+\.pdf$/);
 });
 
 test('canShare recusando arquivos também cai no download', async ({ page }) => {
@@ -155,12 +155,12 @@ test('canShare recusando arquivos também cai no download', async ({ page }) => 
   expect(await lerEstado(page, 'window.__share.arquivos.length')).toBe(0);
 });
 
-test('falha ao desenhar avisa e não corrompe estado', async ({ page }) => {
+test('falha ao montar o relatório avisa e não corrompe estado', async ({ page }) => {
   await abrir(page, TRES_MESES);
   const antes = await lerEstado(page, 'JSON.stringify(D)');
-  await page.evaluate(() => {
-    window._renderShareCanvas = () => { throw new Error('falha sintética'); };
-    window.shareMonthReport();
+  await page.evaluate(async () => {
+    window._shareRelatorioDoc = () => { throw new Error('falha sintética'); };
+    await window.shareMonthReport();
   });
   expect(await lerEstado(page, 'JSON.stringify(D)')).toBe(antes);
   expect(await lerEstado(page, 'monthOffset')).toBe(0);
@@ -189,10 +189,11 @@ test('compartilhar não altera D, não salva e não cria lançamento', async ({ 
   expect(await lerEstado(page, 'D.fixedPayments.length')).toBe(0);
 });
 
-test('gerar a peça de vários meses seguidos não deixa resíduo', async ({ page }) => {
+test('gerar o relatório de vários meses seguidos não deixa resíduo', async ({ page }) => {
   await abrir(page, TRES_MESES);
+  await page.evaluate(() => window._pdfGarantirLib());
   const antes = await lerEstado(page, 'JSON.stringify(D)');
-  await page.evaluate(() => { [0, -1, -2, -6, -12].forEach(o => window._renderShareCanvas(window._monthShareModel(o))); });
+  await page.evaluate(() => { [0, -1, -2, -6, -12].forEach(o => window._shareRelatorioDoc(window._monthShareModel(o))); });
   expect(await lerEstado(page, 'JSON.stringify(D)')).toBe(antes);
 });
 

@@ -314,6 +314,43 @@ test('corrigir um lançamento antigo muda o PDF daquele mês', async ({ page }) 
   expect((await montar(page, -1)).stats.saidas).toBe(350);
 });
 
+// ══ A JORNADA NA INTERFACE ═══════════════════════════════════════════════
+
+test('a moeda configurada aparece no relatório', async ({ page }) => {
+  await abrir(page, COMPLETO);
+  const { escrito, moeda } = await page.evaluate(() => {
+    const m = window._monthShareModel(0);
+    return { escrito: window.R(m.caixa.entradas), moeda: localStorage.getItem('gdcash_currency') || 'R$' };
+  });
+  expect(escrito).toContain(moeda);
+  expect(tudoQueFoiEscrito(await montar(page))).toContain(escrito);
+});
+
+test.describe('a tela Mês não quebra ao gerar o relatório', () => {
+  for (const largura of [320, 375, 390, 430]) {
+    test(`botão acessível e layout íntegro @ ${largura}px`, async ({ page }) => {
+      await page.setViewportSize({ width: largura, height: 900 });
+      await abrir(page, COMPLETO);
+      await irParaAba(page, 'mes');
+
+      const btn = page.locator('.share-month-btn[onclick*="shareMonthReport"]');
+      await expect(btn).toContainText('Compartilhar relatório');
+      await btn.scrollIntoViewIfNeeded();
+      const box = await btn.boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(largura + 1);
+      expect(box.height).toBeGreaterThanOrEqual(40);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+
+      // Montar o documento não altera o layout nem o mês exibido.
+      const antes = await lerEstado(page, 'monthOffset');
+      await page.evaluate(() => window._shareRelatorioDoc(window._monthShareModel(window.monthOffset)));
+      expect(await lerEstado(page, 'monthOffset')).toBe(antes);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+    });
+  }
+});
+
 // ══ PUREZA ═══════════════════════════════════════════════════════════════
 
 test('montar o relatório não altera D, não salva e não mexe no mês', async ({ page }) => {
