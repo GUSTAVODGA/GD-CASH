@@ -6389,11 +6389,40 @@ function exportCalendar() {
   }
 }
 
+// Mesmo modelo da imagem, em texto. Antes esta função lia os agregadores por
+// conta própria e chamava tudo de "Receita/Gastos", sem separar natureza — duas
+// leituras do mesmo mês que podiam divergir. Agora há uma fonte só.
+function _shareTextoDoModelo(m) {
+  const linhas = [`Resumo financeiro: ${m.periodo.rotulo}`, ''];
+  if (m.periodo.vazio) {
+    linhas.push('Nenhuma movimentação registrada neste mês.');
+  } else {
+    linhas.push(`Entrou:    ${R(m.caixa.entradas)}`);
+    linhas.push(`Saiu:      ${R(m.caixa.saidas)}`);
+    linhas.push(`Resultado: ${R(m.caixa.resultado)}`);
+    if (m.destino.length) {
+      linhas.push('', 'Para onde foi:');
+      m.destino.forEach(d => linhas.push(`  ${d.rotulo}: ${R(d.valor)} (${d.pct}%)`));
+    }
+    if (m.consumo.categorias.length) {
+      linhas.push('', 'Gastos do dia a dia:');
+      m.consumo.categorias.forEach(c => linhas.push(`  ${c.nome}: ${R(c.valor)} (${c.pct}%)`));
+      if (m.consumo.outras) linhas.push(`  + outras ${m.consumo.outras.quantidade}: ${R(m.consumo.outras.valor)} (${m.consumo.outras.pct}%)`);
+    }
+    if (m.origem) {
+      linhas.push('', `De onde veio: operação ${R(m.origem.operacional)} · venda de bem ${R(m.origem.extraordinaria)}`);
+    }
+    if (m.reserva !== null) linhas.push('', `Reserva do mês: ${R(m.reserva)}`);
+  }
+  linhas.push('', '---', 'Gerado pelo Avenco');
+  return linhas.join('\n');
+}
+
 function emailMonthReport() {
-  const inc=sumMonthIncome(monthOffset), exp=sumMonthExpenses(monthOffset), liq=inc-exp;
-  const mLabel=fmtMonthYear(monthOffset);
+  const off = monthOffset;                       // o mês EXIBIDO manda
+  const mLabel = fmtMonthYear(off);
   const subject = `Avenco — Resumo ${mLabel}`;
-  const body = `Resumo financeiro: ${mLabel}\n\nReceita:   ${R(inc)}\nGastos:    ${R(exp)}\nResultado: ${R(liq)}\n\nReserva de emergência: ${R(D.emergency.current)}\n\n---\nGerado pelo Avenco`;
+  const body = _shareTextoDoModelo(_monthShareModel(off));
   window.open(`mailto:${currentUser?.email||''}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
 }
 
