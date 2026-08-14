@@ -2083,6 +2083,10 @@ function _movementNature(item) {
   // 1) Origem estrutural/canônica protegida — precede qualquer override manual.
   if (source === 'debt') return 'debt-payment';
   if (source === 'fixed-payment') return 'consumo';
+  // Pendência é origem canônica como as duas acima: enquanto o vínculo existir,
+  // a despesa é consumo. `source` diz de onde veio; nenhum override manual pode
+  // transformá-la em aquisição de patrimônio ou pagamento de dívida.
+  if (source === 'pendencia') return 'consumo';
   // 2) Override manual explícito, só quando não há origem estrutural protegida.
   if (meta && _isValidExpenseNatureOverride(meta.nature)) return meta.nature;
   // 4) Default de despesa manual.
@@ -6965,10 +6969,13 @@ function _edicaoSomenteLeitura(item) { return _movementEditPolicy(item).origemEs
 // ── Fase B: reclassificação explícita de "Tipo de saída" (só despesa manual) ──
 // Uma despesa é reclassificável se NÃO tem origem estrutural protegida (debt/fixed).
 var _qaReclassivel = true;
+// Reclassificar = oferecer "Foi para comprar um bem?" e gravar/remover o
+// override de natureza. Só isso: valor, data, categoria, descrição e vínculo
+// comum seguem editáveis em qualquer despesa não protegida por _movementEditPolicy.
 function _expIsReclassificavel(e) {
   if (!e) return true; // criação: sempre manual
   const src = e.meta && e.meta.source;
-  return src !== 'debt' && src !== 'fixed-payment';
+  return src !== 'debt' && src !== 'fixed-payment' && src !== 'pendencia';
 }
 // Grava/remove SOMENTE o override de natureza numa despesa manual. asset-acquisition
 // adiciona meta.nature; "consumo" (default) remove o override, preservando o resto.

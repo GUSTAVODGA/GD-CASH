@@ -235,6 +235,84 @@ test('sem despesa vinculada, reabrir e excluir seguem como sempre', async ({ pag
   expect(await lerEstado(page, 'D.pendencias.length')).toBe(0);
 });
 
+// ══ NATUREZA PROTEGIDA, LANÇAMENTO EDITÁVEL ══════════════════════════════
+
+test('editar a despesa não oferece "Foi para comprar um bem?"', async ({ page }) => {
+  await comDespesaVinculada(page);
+  await page.locator('#inicio-tx-list .tx-item', { hasText: 'Pendencia Teste' }).first().click();
+  await esperarOverlay(page, 'modal-quick-add', true);
+
+  // A natureza está protegida: sem switch de reclassificação.
+  await expect(page.locator('#qa-aq-wrap')).toBeHidden();
+  // Mas o lançamento NÃO é um painel somente leitura — nada de C1 aqui.
+  await expect(page.locator('#qa-protegido')).toBeHidden();
+  await expect(page.locator('#qa-amt-input')).toBeVisible();
+  await expect(page.locator('#qa-date')).toBeVisible();
+  await expect(page.locator('#qa-cat-sel')).toBeVisible();
+  await expect(page.locator('#qa-desc')).toBeVisible();
+  await expect(page.locator('#qa-save-btn')).toBeVisible();
+  await expect(page.locator('#qa-del-btn')).toBeVisible();
+});
+
+test('editar valor, data, categoria e descrição preserva o vínculo', async ({ page }) => {
+  await comDespesaVinculada(page);
+  await page.locator('#inicio-tx-list .tx-item', { hasText: 'Pendencia Teste' }).first().click();
+  await esperarOverlay(page, 'modal-quick-add', true);
+
+  await page.locator('#qa-amt-input').fill('180');
+  await page.locator('#qa-desc').fill('Pendencia Teste Editada');
+  await page.locator('#qa-date').fill('2026-06-16');
+  await page.locator('#qa-save-btn').click();
+  await esperarOverlay(page, 'modal-quick-add', false);
+
+  const e = await lerEstado(page, 'D.expenses[0]');
+  expect(e.amount).toBe(180);
+  expect(e.description).toBe('Pendencia Teste Editada');
+  expect(e.date).toBe('2026-06-16');
+  expect(e.meta).toEqual({ source: 'pendencia', pendenciaId: 'pend-1' });
+  expect(await lerEstado(page, 'D.pendencias[0].despesaId')).toBe(e.id);
+  expect(await page.evaluate(() => window._movementNature(window.eval('D.expenses[0]')))).toBe('consumo');
+  const res = await page.evaluate(() => window._monthMovementSummary(0));
+  expect(res.consumo).toBe(180);
+  expect(res.assetAcquisition).toBe(0);
+});
+
+test('forçar a natureza pelo gravador não transforma o lançamento', async ({ page }) => {
+  await comDespesaVinculada(page);
+  await page.locator('#inicio-tx-list .tx-item', { hasText: 'Pendencia Teste' }).first().click();
+  await esperarOverlay(page, 'modal-quick-add', true);
+
+  // Mesmo contornando a UI: o switch escondido é ligado à força e salvo.
+  await page.evaluate(() => {
+    const sw = document.getElementById('qa-aq-switch');
+    if (sw) { sw.checked = true; sw.dispatchEvent(new Event('change', { bubbles: true })); }
+    window.qaConfirm();
+  });
+
+  const e = await lerEstado(page, 'D.expenses[0]');
+  expect(e.meta.source).toBe('pendencia');
+  expect(e.meta.nature).toBeUndefined();
+  expect(await page.evaluate(() => window._movementNature(window.eval('D.expenses[0]')))).toBe('consumo');
+  const res = await page.evaluate(() => window._monthMovementSummary(0));
+  expect(res.assetAcquisition).toBe(0);
+  expect(res.consumo).toBe(150);
+});
+
+test('depois de editar, excluir ainda reabre a pendência', async ({ page }) => {
+  await comDespesaVinculada(page);
+  await page.locator('#inicio-tx-list .tx-item', { hasText: 'Pendencia Teste' }).first().click();
+  await esperarOverlay(page, 'modal-quick-add', true);
+  await page.locator('#qa-amt-input').fill('180');
+  await page.locator('#qa-save-btn').click();
+  await esperarOverlay(page, 'modal-quick-add', false);
+
+  await page.evaluate(() => window.deleteExpense(window.eval('D.expenses[0].id')));
+  expect(await lerEstado(page, 'D.pendencias[0].status')).toBe('aberta');
+  expect(await lerEstado(page, 'D.expenses.length')).toBe(0);
+  expect(await lerEstado(page, 'D.debtPayments.length')).toBe(0);
+  expect(await lerEstado(page, 'D.fixedPayments.length')).toBe(0);
+});
+
 // ══ RECENTES E PESQUISA ══════════════════════════════════════════════════
 
 test('Recentes nomeia o gasto de pendência', async ({ page }) => {

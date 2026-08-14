@@ -71,15 +71,47 @@ test('a despesa de pendência entra no caixa e no consumo como qualquer gasto', 
   assert.ok(app.D.pendencias.length === 1);
 });
 
-test('a despesa de pendência continua reclassificável como qualquer gasto manual', () => {
+// ── PRECEDÊNCIA DA ORIGEM ────────────────────────────────────────────────
+// `source='pendencia'` é origem canônica como 'debt' e 'fixed-payment':
+// enquanto o vínculo existir, nenhum override manual muda a natureza.
+
+test('override manual não transforma gasto de pendência em aquisição', () => {
   const { ctx } = vinculado();
-  assert.equal(ctx._expIsReclassificavel(DESPESA()), true);
+  const e = { ...DESPESA(), patrimonioId: 'pat-1', meta: { source: 'pendencia', pendenciaId: 'pend-1', nature: 'asset-acquisition' } };
+  assert.equal(ctx._movementNature(e), 'consumo', 'o override venceu a origem');
 });
 
-test('a despesa de pendência não é travada pela política de edição estrutural', () => {
+test('nenhum override, válido ou inválido, vence a origem pendência', () => {
+  const { ctx } = vinculado();
+  ['asset-acquisition', 'debt-payment', 'income-extra', 'transfer', 'xpto', '', null, 42].forEach(n => {
+    const e = { ...DESPESA(), meta: { source: 'pendencia', pendenciaId: 'pend-1', nature: n } };
+    assert.equal(ctx._movementNature(e), 'consumo', `nature=${JSON.stringify(n)} venceu a origem`);
+  });
+});
+
+test('a origem pendência tem a mesma precedência estrutural do gasto fixo', () => {
+  const { ctx } = vinculado();
+  const comOverride = src => ctx._movementNature({ ...DESPESA(), meta: { source: src, nature: 'asset-acquisition' } });
+  assert.equal(comOverride('pendencia'), 'consumo');
+  assert.equal(comOverride('fixed-payment'), 'consumo');
+});
+
+test('o formulário não oferece reclassificação para despesa de pendência', () => {
+  const { ctx } = vinculado();
+  assert.equal(ctx._expIsReclassificavel(DESPESA()), false);
+  // Mesmo tratamento das outras origens canônicas; gasto manual segue livre.
+  assert.equal(ctx._expIsReclassificavel({ ...DESPESA(), meta: { source: 'fixed-payment' } }), false);
+  assert.equal(ctx._expIsReclassificavel({ id: 'x', amount: 10, date: '2026-06-01' }), true);
+});
+
+test('proteger a natureza não vira painel somente leitura', () => {
+  // Dívida e venda têm outro registro canônico e por isso são apresentadas.
+  // A pendência não tem: o lançamento continua editável e excluível.
   const { ctx } = vinculado();
   assert.equal(ctx._movementEditPolicy(DESPESA()).origemEstrutural, null);
+  assert.equal(ctx._edicaoSomenteLeitura(DESPESA()), false);
 });
+
 
 // ══ RECONCILIAÇÃO: EXCLUIR A DESPESA ═════════════════════════════════════
 
