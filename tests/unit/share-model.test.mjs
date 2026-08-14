@@ -348,16 +348,145 @@ test('off inválido cai no mês corrente sem estourar', () => {
   });
 });
 
+// ══ MOVIMENTOS DETALHADOS ════════════════════════════════════════════════
+
+test('INVARIANTE: as saídas detalhadas somam exatamente as saídas do caixa', () => {
+  const { ctx } = cenarioCompleto();
+  const m = ctx._monthShareModel(0);
+  const soma = m.movimentos.saidas.reduce((s, x) => s + x.valor, 0);
+  assert.equal(Math.round(soma * 100) / 100, m.caixa.saidas);
+});
+
+test('INVARIANTE: as entradas detalhadas somam exatamente as entradas do caixa', () => {
+  const { ctx } = cenarioCompleto();
+  const m = ctx._monthShareModel(0);
+  const soma = m.movimentos.entradas.reduce((s, x) => s + x.valor, 0);
+  assert.equal(Math.round(soma * 100) / 100, m.caixa.entradas);
+});
+
+test('INVARIANTE: receita do input diário legado entra nas linhas e fecha a soma', () => {
+  // Modelo antigo: valor por dia/plataforma, sem `incomeItems`.
+  const { ctx } = cenario({ dailyIncome: { '2026-06-10': { 'plat-1': 320 }, '2026-06-11': { 'plat-1': 180 } } });
+  const m = ctx._monthShareModel(0);
+  assert.equal(m.caixa.entradas, 500);
+  const soma = m.movimentos.entradas.reduce((s, x) => s + x.valor, 0);
+  assert.equal(Math.round(soma * 100) / 100, 500, 'a receita legada não entrou nas linhas');
+  assert.equal(m.movimentos.entradas.length, 2);
+});
+
+test('cada saída carrega tipo, data, categoria e valor', () => {
+  const { ctx } = cenarioCompleto();
+  const tipos = ctx._monthShareModel(0).movimentos.saidas.map(x => x.tipo).sort();
+  mesmoConteudo(tipos, ['Aquisição de patrimônio', 'Gasto', 'Gasto', 'Gasto de pendência', 'Gasto fixo', 'Pagamento de dívida']);
+});
+
+test('as entradas distinguem receita operacional de venda de patrimônio', () => {
+  const { ctx } = cenarioCompleto();
+  const e = ctx._monthShareModel(0).movimentos.entradas;
+  mesmoConteudo(e.map(x => x.tipo).sort(), ['Receita operacional', 'Venda de patrimônio']);
+  assert.equal(e.find(x => x.tipo === 'Venda de patrimônio').valor, 40000);
+});
+
+test('os movimentos saem ordenados por data', () => {
+  const { ctx } = cenarioCompleto();
+  const m = ctx._monthShareModel(0);
+  [m.movimentos.saidas, m.movimentos.entradas].forEach(lista => {
+    const datas = lista.map(x => String(x.data));
+    assert.equal(datas.join('|'), datas.slice().sort().join('|'));
+  });
+});
+
+// ── Privacidade linha a linha ────────────────────────────────────────────
+
+test('pagamento de dívida vira "Parcela X/Y", sem título nem credor', () => {
+  const { ctx } = cenario({
+    debts: [{ id: 'd1', tipo: 'emprestimo', titulo: 'Empréstimo Secreto', credor: 'Banco Secreto', valorOriginal: 1000, valorParcela: 100, parcelasTotal: 10, amortizadoInicial: 0, dataInicio: '2026-01-10', periodicidade: 'mensal', status: 'ativa' }],
+    expenses: [{ id: 'e1', date: '2026-06-14', amount: 100, category: 'Dívidas', description: 'Empréstimo Secreto — Banco Secreto', meta: { source: 'debt', debtId: 'd1', parcelNo: 3 } }],
+  });
+  const saida = ctx._monthShareModel(0).movimentos.saidas[0];
+  assert.equal(saida.descricao, 'Parcela 3/10');
+  assert.equal(saida.tipo, 'Pagamento de dívida');
+  assert.ok(!saida.descricao.includes('Secreto'));
+});
+
+test('pagamento de dívida sem número de parcela usa rótulo genérico', () => {
+  const { ctx } = cenario({
+    expenses: [{ id: 'e1', date: '2026-06-14', amount: 100, category: 'Dívidas', description: 'Divida Secreta — Credor Secreto', meta: { source: 'debt', debtId: 'inexistente' } }],
+  });
+  assert.equal(ctx._monthShareModel(0).movimentos.saidas[0].descricao, 'Pagamento de dívida');
+});
+
+test('venda de patrimônio não nomeia o bem', () => {
+  const { ctx } = cenario({
+    incomeItems: [{ id: 'i1', date: '2026-06-12', amount: 40000, status: 'paid', platformId: null, note: 'Venda do Carro Secreto', meta: { source: 'asset-sale', saleId: 's1', vehicleId: 'v1' } }],
+  });
+  const entrada = ctx._monthShareModel(0).movimentos.entradas[0];
+  assert.equal(entrada.tipo, 'Venda de patrimônio');
+  assert.equal(entrada.descricao, '');
+});
+
+test('receita operacional não nomeia a plataforma', () => {
+  const { ctx } = cenario({
+    platforms: [{ id: 'plat-1', name: 'Plataforma Secreta', color: '#888' }],
+    incomeItems: [{ id: 'i1', date: '2026-06-10', amount: 500, status: 'paid', platformId: 'plat-1', note: 'Corrida Secreta' }],
+  });
+  const entrada = ctx._monthShareModel(0).movimentos.entradas[0];
+  assert.equal(entrada.tipo, 'Receita operacional');
+  assert.equal(entrada.descricao, '');
+});
+
+test('gasto manual, fixo, de pendência e aquisição mantêm a descrição do usuário', () => {
+  const { ctx } = cenario({
+    expenses: [
+      { id: 'e1', date: '2026-06-10', amount: 50, category: 'Casa', description: 'Feira da semana' },
+      { ...FIXO('e2', '10', 200), description: 'Internet de casa' },
+      { ...DE_PENDENCIA('e3', '11', 150), description: 'Consertar a torneira' },
+      { ...AQUISICAO('e4', '12', 8000), description: 'Entrada do apartamento' },
+    ],
+  });
+  const desc = ctx._monthShareModel(0).movimentos.saidas.map(x => x.descricao).sort();
+  mesmoConteudo(desc, ['Consertar a torneira', 'Entrada do apartamento', 'Feira da semana', 'Internet de casa']);
+});
+
+test('PRIVACIDADE: os movimentos não carregam id, meta nem vínculo interno', () => {
+  const { ctx } = cenarioCompleto();
+  const m = ctx._monthShareModel(0);
+  const permitidasSaida = ['data', 'descricao', 'tipo', 'categoria', 'valor'];
+  const permitidasEntrada = ['data', 'descricao', 'tipo', 'valor'];
+  m.movimentos.saidas.forEach(x => mesmoConteudo(Object.keys(x).sort(), permitidasSaida.slice().sort()));
+  m.movimentos.entradas.forEach(x => mesmoConteudo(Object.keys(x).sort(), permitidasEntrada.slice().sort()));
+});
+
+test('mês vazio devolve listas vazias, não nulas', () => {
+  const { ctx } = cenario();
+  const m = ctx._monthShareModel(0);
+  mesmoConteudo(m.movimentos.entradas, []);
+  mesmoConteudo(m.movimentos.saidas, []);
+});
+
+test('50+ lançamentos entram todos, sem corte', () => {
+  const muitos = Array.from({ length: 57 }, (_, i) => GASTO('e' + i, String(10 + (i % 20)).padStart(2, '0'), 10 + i, 'Cat' + (i % 7)));
+  const { ctx } = cenario({ expenses: muitos });
+  const m = ctx._monthShareModel(0);
+  assert.equal(m.movimentos.saidas.length, 57);
+  const soma = m.movimentos.saidas.reduce((s, x) => s + x.valor, 0);
+  assert.equal(Math.round(soma * 100) / 100, m.caixa.saidas);
+});
+
 // ══ PRIVACIDADE E PUREZA ═════════════════════════════════════════════════
 
-test('PRIVACIDADE: o modelo não carrega descrição, título, plataforma, bem nem id', () => {
+test('PRIVACIDADE: o modelo não carrega título de dívida, credor, plataforma, bem nem id', () => {
+  // A descrição de um gasto MANUAL passou a entrar por decisão de produto: é
+  // texto do próprio usuário, num relatório dele. O que segue proibido é o que
+  // vem de OUTRA fonte — título/credor da dívida, nome da plataforma, nome do
+  // bem — e qualquer identificador interno.
   const { ctx } = cenario({
     platforms: [{ id: 'plat-1', name: 'Plataforma Secreta', color: '#888' }],
     debts: [{ id: 'd1', tipo: 'emprestimo', titulo: 'Dívida Secreta', valorOriginal: 5000, valorParcela: 1000, parcelasTotal: 5, amortizadoInicial: 0, dataInicio: '2026-01-10', periodicidade: 'mensal', status: 'ativa' }],
     patrimonios: [{ id: 'pat-1', nome: 'Bem Secreto', tipo: 'outro', status: 'ativo', valorEstimado: 8000, historico: [], detalhes: {} }],
     incomeItems: [{ id: 'i1', date: '2026-06-12', amount: 40000, status: 'paid', platformId: null, note: 'Venda do Bem Secreto', meta: { source: 'asset-sale', saleId: 's1' } }],
     expenses: [
-      { id: 'e1', date: '2026-06-11', amount: 800, category: 'Alimentação', description: 'Descrição Secreta' },
+      { id: 'e1', date: '2026-06-11', amount: 800, category: 'Alimentação', description: 'Feira do mês' },
       PARCELA('e2', '14', 1000),
       AQUISICAO('e3', '09', 8000),
     ],

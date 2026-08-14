@@ -5788,6 +5788,74 @@ function _sharePct(parte, total) {
   return total > 0 ? Math.round((parte / total) * 100) : 0;
 }
 
+// ── MOVIMENTOS DETALHADOS — VIEW MODEL, NÃO ESPELHO DE D ─────────────────
+// O relatório em PDF tem espaço para listar o mês lançamento a lançamento.
+// O que sai daqui é APRESENTAÇÃO: data, descrição já sanitizada, tipo,
+// categoria e valor. Nada de id, meta, debtId, patrimonioId, vehicleId,
+// credor ou objeto interno — quem desenha não recebe o que não pode mostrar.
+//
+// Os tipos vêm de `_movementTypeLabel` (o mesmo rótulo de Recentes e Pesquisa),
+// e portanto de `_movementNature`: nenhuma classificação nova nasce aqui.
+
+/** Descrição segura de uma saída, por tipo de origem. */
+function _shareDescricaoSaida(e) {
+  const meta = (e.meta && typeof e.meta === 'object') ? e.meta : null;
+  if (meta && meta.source === 'debt') {
+    // A descrição original é "<título da dívida> — <credor>": expõe as duas
+    // coisas que não podem aparecer. Troca-se pela posição da parcela, que
+    // informa sem identificar. Sem parcela conhecida, rótulo genérico.
+    const total = meta.debtId ? _debtParcelasTotal(getDebt(meta.debtId) || {}) : 0;
+    if (meta.parcelNo && total > 0) return `Parcela ${meta.parcelNo}/${total}`;
+    if (meta.parcelNo) return `Parcela ${meta.parcelNo}`;
+    return 'Pagamento de dívida';
+  }
+  // Gasto manual, gasto fixo, gasto de pendência e aquisição de patrimônio
+  // usam o texto que o próprio usuário escreveu no lançamento.
+  return String(e.description || '').trim();
+}
+
+/** Entradas e saídas do mês, prontas para a tabela. */
+function _shareMovimentos(off) {
+  const agg = monthAggregate(off);
+  const dias = monthDates(off);
+
+  const entradas = [];
+  agg.lancamentos.receitas.forEach(it => {
+    const venda = it.meta && it.meta.source === 'asset-sale';
+    entradas.push({
+      data: localDateKey(it.date) || it.date,
+      // Venda não nomeia o bem; receita operacional não nomeia a plataforma.
+      descricao: '',
+      tipo: venda ? 'Venda de patrimônio' : 'Receita operacional',
+      valor: it.amount || 0,
+    });
+  });
+  // Receita lançada pelo input diário por plataforma (modelo legado) não está
+  // em `lancamentos.receitas`, mas ENTRA no total do mês. Sem ela, a soma das
+  // linhas não fecharia com o caixa. A leitura abaixo espelha exatamente a de
+  // `monthAggregate` — e o invariante de soma é testado justamente para que
+  // uma mudança lá não passe despercebida aqui.
+  dias.forEach(d => {
+    let legado = 0;
+    (D.platforms || []).forEach(p => {
+      const temItens = (D.incomeItems || []).some(it => localDateKey(it.date) === d && it.platformId === p.id);
+      if (!temItens) legado += (getDayIncome(d)[p.id] || 0);
+    });
+    if (legado > 0) entradas.push({ data: d, descricao: '', tipo: 'Receita operacional', valor: Math.round(legado * 100) / 100 });
+  });
+  entradas.sort((a, b) => String(a.data).localeCompare(String(b.data)));
+
+  const saidas = agg.lancamentos.gastos.map(e => ({
+    data: localDateKey(e.date) || e.date,
+    descricao: _shareDescricaoSaida(e),
+    tipo: _movementTypeLabel(e),
+    categoria: (e.category != null && String(e.category).trim()) ? String(e.category) : 'Sem categoria',
+    valor: e.amount || 0,
+  })).sort((a, b) => String(a.data).localeCompare(String(b.data)));
+
+  return { entradas, saidas };
+}
+
 /** Modelo do mês `off` (0 = atual, −1 = anterior, …). Puro e determinístico. */
 function _monthShareModel(off) {
   const periodo = Number.isFinite(off) ? off : 0;
@@ -5848,6 +5916,7 @@ function _monthShareModel(off) {
     origem,
     comparacao,
     reserva: reserva !== 0 ? reserva : null,
+    movimentos: _shareMovimentos(periodo),
     // Resultado operacional é SECUNDÁRIO e sempre rotulado como tal por quem
     // desenha: nunca existem dois números chamados só de "resultado".
     operacional: { receita: sum.operationalIncome, sobra: Math.round((sum.operationalIncome - sum.consumo) * 100) / 100 },

@@ -223,14 +223,17 @@ test('o texto do e-mail separa natureza como a imagem', async ({ page }) => {
   expect(texto).toContain('venda de bem');
 });
 
-test('PRIVACIDADE: nem a imagem nem o texto carregam dados sensíveis', async ({ page }) => {
+test('PRIVACIDADE: nem a imagem nem o texto carregam dados de outra fonte', async ({ page }) => {
+  // Descrição de gasto MANUAL entra por decisão de produto (texto do próprio
+  // usuário). O proibido é o que vem de outra fonte: título/credor da dívida,
+  // nome da plataforma, nome do bem, e qualquer identificador interno.
   await abrir(page, {
     platforms: [{ id: 'plat-1', name: 'Plataforma Secreta', color: '#888' }],
     debts: [{ id: 'd1', tipo: 'emprestimo', titulo: 'Divida Secreta', valorOriginal: 5000, valorParcela: 1000, parcelasTotal: 5, amortizadoInicial: 0, dataInicio: '2026-01-10', periodicidade: 'mensal', status: 'ativa' }],
     patrimonios: [{ id: 'pat-1', nome: 'Bem Secreto', tipo: 'outro', status: 'ativo', valorEstimado: 8000, historico: [], detalhes: {} }],
     incomeItems: [{ id: 'i1', date: '2026-08-12', amount: 40000, status: 'paid', platformId: null, note: 'Venda do Bem Secreto', meta: { source: 'asset-sale', saleId: 's1' } }],
     expenses: [
-      { id: 'e1', date: '2026-08-11', amount: 800, category: 'Alimentação', description: 'Descricao Secreta' },
+      { id: 'e1', date: '2026-08-11', amount: 800, category: 'Alimentação', description: 'Feira do mes' },
       { id: 'e2', date: '2026-08-14', amount: 1000, category: 'Dívidas', description: 'Parcela Secreta', meta: { source: 'debt', debtId: 'd1' } },
     ],
   });
