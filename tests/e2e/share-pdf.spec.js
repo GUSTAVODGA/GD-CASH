@@ -262,7 +262,45 @@ test('valores grandes e resultado negativo saem por extenso, sem truncar', async
   const escrito = tudoQueFoiEscrito(r);
   expect(escrito).toContain(await page.evaluate(() => window.R(1234567.89)));
   expect(r.modelo.caixa.resultado).toBe(-1234567.89);
-  expect(escrito).toContain(await page.evaluate(() => window.R(-1234567.89)));
+  // O sinal chega ao papel como hífen, não como o "−" que `R()` usa na tela:
+  // a fonte padrão do jsPDF escreve em cp1252, onde U+2212 não existe.
+  expect(escrito).toContain('-R$ 1.234.567,89');
+  expect(escrito).not.toContain('−');
+});
+
+// ══ CODIFICAÇÃO ══════════════════════════════════════════════════════════
+//
+// Regressão encontrada revisando um PDF real: o resultado negativo saía como
+// `"R$ 6.922,15`. O jsPDF não avisa quando o caractere não cabe na cp1252 —
+// ele emite outros bytes e o valor é lido ao contrário. Por isso a asserção é
+// sobre TUDO o que foi escrito, e não sobre um campo específico.
+
+const FORA_DA_CP1252 = /[^\n\x20-\xFF€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ]/u;
+
+test('CODIFICAÇÃO: nada escrito no documento sai da cp1252', async ({ page }) => {
+  await abrir(page, COMPLETO);
+  const r = await montar(page);
+  const fora = [...r.textos, JSON.stringify(r.tabelas)].filter(t => FORA_DA_CP1252.test(t));
+  expect(fora, `estes textos não sobrevivem à fonte padrão: ${JSON.stringify(fora)}`).toEqual([]);
+});
+
+test('CODIFICAÇÃO: mês de resultado negativo escreve o sinal, não uma aspa', async ({ page }) => {
+  await abrir(page, {
+    incomeItems: [rec('i1', '2026-08-05', 8516)],
+    expenses: [g('e1', '2026-08-06', 15438.15, 'Casa')],
+  });
+  const r = await montar(page);
+  expect(r.modelo.caixa.resultado).toBe(-6922.15);
+  expect(tudoQueFoiEscrito(r)).toContain('-R$ 6.922,15');
+});
+
+test('CODIFICAÇÃO: emoji e ideograma digitados pelo usuário não embaralham a linha', async ({ page }) => {
+  await abrir(page, { expenses: [g('e1', '2026-08-05', 90, 'Casa \u{1F3E0}', 'Mercado \u{1F6D2} da esquina')] });
+  const r = await montar(page);
+  const desc = r.tabelas.find(x => x.head.length && x.head[0].includes('Descrição')).body[0][1];
+  expect(desc).toBe('Mercado ? da esquina');
+  expect(tabelaPor(r, 'Categoria').body[0][0]).toBe('Casa ?');
+  expect(FORA_DA_CP1252.test(tudoQueFoiEscrito(r))).toBe(false);
 });
 
 test('categoria e descrição longas não são cortadas no modelo', async ({ page }) => {

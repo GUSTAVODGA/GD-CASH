@@ -5978,6 +5978,55 @@ const PDF_C = Object.freeze({
   verde: [22, 122, 62], vermelho: [178, 40, 40], acento: [37, 99, 235],
 });
 
+// ── Codificação: as fontes padrão do jsPDF escrevem em cp1252 ─────────────
+//
+// Fora dessa tabela o jsPDF não falha nem avisa: ele emite outros bytes, e o
+// texto sai embaralhado no papel. Dois caminhos chegam aqui:
+//
+//   • o próprio Avenco. `R()` usa "−" (U+2212 MINUS SIGN) de propósito, porque
+//     na tela ele é tipograficamente correto e alinha com os dígitos. Na cp1252
+//     esse caractere não existe, e todo mês de resultado negativo saía com aspas
+//     no lugar do sinal — o valor lido ao contrário do que era.
+//   • o usuário. Descrição e categoria são digitadas à mão; um emoji ali viraria
+//     uma sequência sem sentido no meio da linha.
+//
+// O hífen resolve o primeiro caso sem perder informação. Para o segundo não há
+// substituto fiel, e aí "?" é a escolha honesta: assume que um caractere não
+// coube, em vez de fingir que o texto era outro.
+const _PDF_CP1252_EXTRA = '€‚ƒ„…†‡ˆ‰Š‹ŒŽ'
+  + '‘’“”•–—˜™š›œžŸ';
+
+function _pdfTexto(v) {
+  return String(v == null ? '' : v)
+    .replace(/−/g, '-')
+    // `u` para percorrer por ponto de código: um emoji é um caractere, não dois.
+    .replace(/./gu, ch => (ch.codePointAt(0) <= 0xFF || _PDF_CP1252_EXTRA.indexOf(ch) >= 0) ? ch : '?');
+}
+
+/** Passa tudo o que for escrito no documento pelo `_pdfTexto`.
+ *
+ * Envolver a instância — e não sanear em cada chamada — é o que garante que
+ * nenhum ponto de escrita futuro escape por esquecimento. A tabela é saneada na
+ * entrada, e não só no desenho, para que a medida da coluna e o texto impresso
+ * sejam a mesma string.
+ */
+function _pdfSanear(doc) {
+  const texto0 = doc.text.bind(doc);
+  doc.text = function (conteudo, ...resto) {
+    return texto0(Array.isArray(conteudo) ? conteudo.map(_pdfTexto) : _pdfTexto(conteudo), ...resto);
+  };
+  const tabela0 = doc.autoTable.bind(doc);
+  const celula = c => (c && typeof c === 'object')
+    ? Object.assign({}, c, { content: _pdfTexto(c.content) })
+    : _pdfTexto(c);
+  doc.autoTable = function (opcoes) {
+    const o = Object.assign({}, opcoes);
+    ['head', 'body', 'foot'].forEach(k => { if (o[k]) o[k] = o[k].map(linha => linha.map(celula)); });
+    return tabela0(o);
+  };
+  return doc;
+}
+
 /** Nome de arquivo seguro: "Avenco - Agosto 2026.pdf". */
 function _pdfNomeArquivo(rotulo) {
   const limpo = String(rotulo || '').replace(/\./g, '').replace(/[\\/:*?"<>|]/g, '-').trim();
@@ -5988,7 +6037,7 @@ function _pdfNomeArquivo(rotulo) {
 /** Monta o relatório do mês. Devolve { doc, stats } — não exporta nada. */
 function _shareRelatorioDoc(m) {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+  const doc = _pdfSanear(new jsPDF({ unit: 'pt', format: 'a4' }));
   const W = doc.internal.pageSize.getWidth();
   const M = 40, CW = W - 2 * M;
   const mesTxt = m.periodo.rotulo.charAt(0).toUpperCase() + m.periodo.rotulo.slice(1);
