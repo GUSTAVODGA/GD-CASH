@@ -337,12 +337,8 @@ test('agosto → julho → junho → julho: cada PDF é do seu mês, e julho rep
 test('o cabeçalho nomeia o mês pedido, não o mês atual', async ({ page }) => {
   await abrir(page, TRES_MESES);
   const jul = await montar(page, -1);
-  const rotuloJul = await page.evaluate(() => window.fmtMonthYear(-1));
-  const esperado = rotuloJul.charAt(0).toUpperCase() + rotuloJul.slice(1);
-  expect(jul.textos).toContain(esperado);
-  expect(jul.textos).not.toContain(await page.evaluate(() => {
-    const r = window.fmtMonthYear(0); return r.charAt(0).toUpperCase() + r.slice(1);
-  }));
+  expect(jul.textos).toContain('Julho de 2026');
+  expect(jul.textos).not.toContain('Agosto de 2026');
 });
 
 test('corrigir um lançamento antigo muda o PDF daquele mês', async ({ page }) => {
@@ -407,7 +403,61 @@ test('montar o relatório não altera D, não salva e não mexe no mês', async 
 
 test('o nome do arquivo é seguro para o sistema de arquivos', async ({ page }) => {
   await abrir(page, COMPLETO);
-  const nome = await page.evaluate(() => window._pdfNomeArquivo(window.fmtMonthYear(0)));
-  expect(nome).toMatch(/^Avenco - .+\.pdf$/);
+  const nome = await page.evaluate(() => window._pdfNomeArquivo(window._pdfMesPorExtenso(0)));
+  expect(nome).toBe('Avenco - Agosto de 2026.pdf');
   expect(nome).not.toMatch(/[\\/:*?"<>|]/);
+});
+
+// ══ O MÊS POR EXTENSO ════════════════════════════════════════════════════
+//
+// O relatório sai do app: pode ser impresso, arquivado e lido meses depois,
+// sem o seletor de mês ao lado que justifica o rótulo curto nas telas.
+
+test('cabeçalho e faixa de continuação trazem o mês por extenso', async ({ page }) => {
+  await abrir(page, MUITOS);
+  const r = await montar(page);
+  expect(r.stats.paginas).toBeGreaterThan(1);
+  expect(r.textos).toContain('Agosto de 2026');
+  expect(r.textos.filter(t => t === 'Avenco · Relatório mensal · Agosto de 2026').length)
+    .toBe(r.stats.paginas - 1);
+  // E em lugar nenhum a forma abreviada das telas.
+  expect(tudoQueFoiEscrito(r)).not.toContain('ago. de 2026');
+});
+
+test('NÃO REGRESSÃO: fmtMonthYear das telas segue abreviada e a tela Mês não muda', async ({ page }) => {
+  await abrir(page, COMPLETO);
+  expect(await page.evaluate(() => window.fmtMonthYear(0))).toBe('ago. de 2026');
+  await irParaAba(page, 'mes');
+  // O seletor de mês da tela continua desenhando o rótulo curto.
+  expect(await page.evaluate(() => document.getElementById('month-lbl').textContent))
+    .toBe('ago. de 2026');
+});
+
+test('GEOMETRIA: o mês mais longo não colide com a marca no cabeçalho', async ({ page }) => {
+  await abrir(page, COMPLETO);
+  // Fevereiro e Setembro são os rótulos mais largos; medem-se os doze mesmo
+  // assim, porque a largura depende da fonte, não da contagem de letras.
+  const medidas = await page.evaluate(() => {
+    const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+    const W = doc.internal.pageSize.getWidth(), M = 40;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(19);
+    const marca = M + 46 + doc.getTextWidth('Avenco');
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9.5);
+    const sub = M + 46 + doc.getTextWidth('Relatório mensal');
+    const blocoEsq = Math.max(marca, sub);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    const meses = [];
+    for (let off = -12; off <= 12; off++) {
+      const txt = window._pdfMesPorExtenso(off);
+      meses.push({ txt, inicio: (W - M) - doc.getTextWidth(txt) });
+    }
+    // A faixa de continuação é uma linha só, alinhada à esquerda.
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+    const faixa = doc.getTextWidth('Avenco · Relatório mensal · ' + window._pdfMesPorExtenso(1));
+    return { blocoEsq, meses, faixa, disponivel: W - 2 * M };
+  });
+  medidas.meses.forEach(m => {
+    expect(m.inicio, `"${m.txt}" invade a marca`).toBeGreaterThan(medidas.blocoEsq + 12);
+  });
+  expect(medidas.faixa, 'a faixa de continuação estoura a largura útil').toBeLessThan(medidas.disponivel);
 });

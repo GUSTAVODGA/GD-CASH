@@ -6027,7 +6027,27 @@ function _pdfSanear(doc) {
   return doc;
 }
 
-/** Nome de arquivo seguro: "Avenco - Agosto 2026.pdf". */
+// O rótulo do modelo vem de `fmtMonthYear`, abreviado ("ago. de 2026") porque
+// nas telas o espaço é curto e o mês está sempre em contexto — há um seletor
+// de mês logo ao lado. O relatório é o caso oposto: sai do app, pode ser
+// impresso, arquivado e lido meses depois, sem nada em volta que diga de quando
+// ele é. Ali o mês vale por extenso.
+//
+// O formatter é local ao PDF de propósito: `fmtMonthYear` é compartilhada por
+// Home, Semana e Mês, e alargar o rótulo lá mudaria três telas para resolver um
+// problema que é só daqui.
+const _PDF_MESES = Object.freeze(['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']);
+
+/** "Agosto de 2026" — o mês do relatório, por extenso. */
+function _pdfMesPorExtenso(off) {
+  // `_monthYM` é a identidade canônica do mês selecionado. Derivar dela evita
+  // repetir a aritmética de offset e passar a discordar do resto do app.
+  const [ano, mes] = _monthYM(Number.isFinite(off) ? off : 0).split('-');
+  return `${_PDF_MESES[Number(mes) - 1]} de ${ano}`;
+}
+
+/** Nome de arquivo seguro: "Avenco - Agosto de 2026.pdf". */
 function _pdfNomeArquivo(rotulo) {
   const limpo = String(rotulo || '').replace(/\./g, '').replace(/[\\/:*?"<>|]/g, '-').trim();
   const capitalizado = limpo.charAt(0).toUpperCase() + limpo.slice(1);
@@ -6040,7 +6060,7 @@ function _shareRelatorioDoc(m) {
   const doc = _pdfSanear(new jsPDF({ unit: 'pt', format: 'a4' }));
   const W = doc.internal.pageSize.getWidth();
   const M = 40, CW = W - 2 * M;
-  const mesTxt = m.periodo.rotulo.charAt(0).toUpperCase() + m.periodo.rotulo.slice(1);
+  const mesTxt = _pdfMesPorExtenso(m.periodo.off);
   const geradoEm = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   // ── Cabeçalho da primeira página ──
@@ -6237,7 +6257,9 @@ function _pdfRodape(doc, mesTxt) {
 // e não persiste snapshot. Falhar aqui não deixa rastro financeiro.
 async function shareMonthReport() {
   const off = monthOffset;                       // o mês EXIBIDO manda
-  const mLabel = fmtMonthYear(off);
+  // Mesmo rótulo do cabeçalho do documento: o arquivo salvo e a folha de
+  // compartilhamento nomeiam o mês como a página impressa.
+  const mLabel = _pdfMesPorExtenso(off);
   try { await _pdfGarantirLib(); }
   catch (e) { console.error(e); gdToast('Não foi possível carregar o gerador de PDF. Tente com internet.', { type: 'error' }); return; }
   let blob, nome;
