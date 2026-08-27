@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="EN Controle">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#F4F4F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E0F11" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex, nofollow">
+<title>EN Controle</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icone.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="./icone-192.png">
+<link rel="stylesheet" href="./style.css?v=1">
+</head>
+<body>
+
+<div class="aplicativo">
+  <header class="topo" id="topo"></header>
+  <main class="tela" id="tela" tabindex="-1"></main>
+  <nav class="abas" id="abas" aria-label="Áreas do sistema"></nav>
+</div>
+
+<div class="folha-camada" id="folha-camada" hidden>
+  <div class="folha-fundo" data-fechar-folha></div>
+  <div class="folha" id="folha" role="dialog" aria-modal="true"></div>
+</div>
+
+<div class="aviso" id="aviso" role="status" aria-live="polite" hidden></div>
+
+<noscript>
+  <p style="padding:24px;font:16px system-ui">O EN Controle precisa de JavaScript para funcionar.</p>
+</noscript>
+
+<script type="module" src="./src/app.js?v=1"></script>
+</body>
+</html>

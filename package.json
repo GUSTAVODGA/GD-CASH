@@ -2,12 +2,13 @@
   "name": "avenco-qa",
   "version": "0.0.0",
   "private": true,
-  "description": "Infraestrutura de testes do Avenco. Não é empacotamento do app: o produto continua sendo servido como arquivos estáticos da raiz.",
+  "description": "Infraestrutura de testes dos aplicativos deste repositório (Avenco e EN Controle). Não é empacotamento: os dois produtos continuam sendo servidos como arquivos estáticos.",
   "license": "UNLICENSED",
   "type": "module",
   "scripts": {
-    "test": "npm run test:unit && npm run test:e2e",
+    "test": "npm run test:unit && npm run test:en-controle && npm run test:e2e",
     "test:unit": "node --test \"tests/unit/**/*.test.mjs\"",
+    "test:en-controle": "node --test \"en-controle/tests/**/*.test.mjs\"",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

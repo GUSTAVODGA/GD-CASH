@@ -42,6 +42,22 @@ jobs:
       - name: Rodar suíte unitária
         run: npm run test:unit
 
+  en-controle:
+    name: Testes unitários do EN Controle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Os motores do EN Controle são módulos ES puros: nenhuma dependência,
+      # nenhum browser, nenhum `npm ci`. O gate roda em segundos e é separado do
+      # gate do Avenco para que uma falha diga, sozinha, de qual produto ela é.
+      - name: Rodar suíte do EN Controle
+        run: npm run test:en-controle
+
   e2e:
     name: Testes E2E (fluxos e UI)
     runs-on: ubuntu-latest
