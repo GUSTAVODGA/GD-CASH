@@ -1025,7 +1025,18 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .overlay.open{opacity:1;pointer-events:auto}
 .sheet{
   background:var(--surface);
-  border-radius:26px 26px 0 0;padding:22px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;
+  border-radius:26px 26px 0 0;padding:22px;width:100%;max-width:560px;overflow-y:auto;
+  /* A folha encosta no rodapé da tela. Sem este respiro, o último controle —
+     "Salvar", "Confirmar", "Cancelar" — nasce dentro da faixa do indicador de
+     home do iPhone, onde o sistema intercepta o toque antes da página: o botão
+     aparece, mas não clica. Em aparelho sem entalhe env() vale 0 e nada muda. */
+  padding-bottom:calc(22px + env(safe-area-inset-bottom,0px));
+  /* `vh` no iOS mede a janela COM a barra de endereço recolhida, então 88vh pode
+     ser maior que o que se vê e o fim da folha fica abaixo da dobra. `dvh`
+     acompanha a janela real; a linha `vh` acima fica de reserva para quem não
+     suporta a unidade. */
+  max-height:88vh;
+  max-height:88dvh;
   transform:translateY(100%);transition:transform var(--dur-slow) cubic-bezier(.32,.72,0,1);
   box-shadow:0 -4px 40px rgba(0,0,0,.5);
 }
@@ -4132,7 +4143,9 @@ button:focus-visible, [role="button"]:focus-visible {
 :root[data-theme="dark"] .parcel-next-lbl { color: rgba(232,237,255,.58); }
 
 /* ══ Central de Dívidas (Fase 2) ══ */
-.sheet-tall { max-height: 88vh; overflow-y: auto; }
+/* Mesma unidade da regra base: `vh` de reserva, `dvh` para quem tem. Sem isto
+   esta linha reporia o `vh` e desfaria a correção só nas folhas altas. */
+.sheet-tall { max-height: 88vh; max-height: 88dvh; overflow-y: auto; }
 /* Resumo */
 .div-resumo { padding: 16px; margin-bottom: 12px; }
 .div-resumo-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 12px; }
