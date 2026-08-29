@@ -5273,12 +5273,25 @@ function deleteCat(i) {
 // OVERLAY
 // ══════════════════════════════════════════
 let _scrollY = 0;
+// Quem tinha o foco antes de a folha abrir, para devolvê-lo ao fechar.
+let _focoAntesDaFolha = null;
+
 function openOverlay(id) {
   _scrollY = window.scrollY;
   document.body.style.position = 'fixed';
   document.body.style.top = `-${_scrollY}px`;
   document.body.style.width = '100%';
-  document.getElementById(id).classList.add('open');
+  const ov = document.getElementById(id);
+  ov.classList.add('open');
+  _acabarFolhas(ov);   // o corpo pode ter sido montado por JS depois do boot
+
+  // O foco ficava no <body> com a folha aberta: quem navega por teclado ou
+  // leitor de tela continuava "fora" dela, tabulando pelo conteúdo de trás.
+  // Move-se o foco para a própria folha — não para o primeiro campo, que num
+  // telefone abriria o teclado por conta própria a cada folha.
+  _focoAntesDaFolha = document.activeElement;
+  const folha = ov.querySelector('.sheet');
+  if (folha) { folha.setAttribute('tabindex', '-1'); folha.focus({ preventScroll: true }); }
 }
 function closeOverlay(id) {
   document.getElementById(id).classList.remove('open');
@@ -5286,6 +5299,11 @@ function closeOverlay(id) {
   document.body.style.top = '';
   document.body.style.width = '';
   window.scrollTo(0, _scrollY);
+  // Devolve o foco a quem abriu a folha, para não jogar o usuário no topo.
+  if (_focoAntesDaFolha && document.contains(_focoAntesDaFolha)) {
+    try { _focoAntesDaFolha.focus({ preventScroll: true }); } catch (e) {}
+  }
+  _focoAntesDaFolha = null;
   // Possível fim da jornada especial. A decisão é adiada até este overlay
   // terminar de sumir — e só vale se nenhum outro tiver assumido.
   if (_jornadaCompromisso && JORNADA_OVERLAYS.includes(id)) _restaurarFabQuandoSeguro(id);
@@ -5299,6 +5317,60 @@ function closeOverlayNav(id) {
   document.body.style.width = '';
   window.scrollTo(0, 0);
 }
+// ── Acabamento das folhas, aplicado uma vez a todas ──────────────────────
+//
+// Três coisas que faltavam nas 39 folhas e que não valia repetir 39 vezes no
+// HTML — o navegador lê o DOM vivo, então declará-las aqui vale o mesmo:
+//
+//   1. `role="dialog"` + `aria-modal="true"`. Sem isso um leitor de tela não
+//      anuncia que abriu uma janela nem confina a leitura a ela.
+//   2. Ligar cada rótulo ao seu campo. O padrão do app é
+//      `<div class="fg"><label class="fl">Nome</label><input id="fi-name">`:
+//      o rótulo está lá e é visível, mas sem `for` ele não pertence ao campo —
+//      25 campos ficavam sem nome para a tecnologia assistiva, e tocar no
+//      rótulo não focava o campo.
+//   3. `inputmode` nos campos numéricos. `type=number` já dá um teclado
+//      numérico no telefone, mas quem digita dinheiro precisa da vírgula:
+//      `decimal` quando o passo é fracionário, `numeric` quando é inteiro
+//      (dia do vencimento, número de parcelas).
+// Vários formulários têm o corpo montado por JS depois do boot (o da dívida, o
+// do dia, o do patrimônio), então isto roda uma vez no início E a cada abertura
+// de folha. É idempotente de propósito: tudo que já foi feito é pulado.
+function _acabarFolhas(raiz) {
+  const alvo = raiz || document;
+  const folhas = raiz && raiz.classList && raiz.classList.contains('overlay')
+    ? [raiz] : [...alvo.querySelectorAll('.overlay')];
+  folhas.forEach(ov => {
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    const titulo = ov.querySelector('.sheet-title');
+    if (titulo) {
+      if (!titulo.id) titulo.id = (ov.id || 'folha') + '-titulo';
+      ov.setAttribute('aria-labelledby', titulo.id);
+    }
+  });
+  // O app tem duas convenções de formulário — `.fg > label.fl` e
+  // `.form-group > label.form-label` — e nada garante que não surja uma
+  // terceira. Em vez de listar classes, a regra é estrutural: um <label> sem
+  // `for`, que não envolve o próprio campo, pertence ao primeiro campo do seu
+  // contêiner. Vale para as duas convenções e para a próxima.
+  alvo.querySelectorAll('label:not([for])').forEach(rot => {
+    if (rot.querySelector('input,select,textarea')) return;   // já envolve o campo
+    const pai = rot.parentElement;
+    if (!pai) return;
+    const campo = pai.querySelector('input:not([type=hidden]),select,textarea');
+    if (!campo || campo.labels && campo.labels.length) return;
+    if (!campo.id) campo.id = 'campo-' + Math.random().toString(36).slice(2, 9);
+    rot.htmlFor = campo.id;
+  });
+  alvo.querySelectorAll('input[type=number]').forEach(campo => {
+    if (campo.getAttribute('inputmode')) return;
+    const passo = campo.getAttribute('step');
+    campo.setAttribute('inputmode', (passo && passo !== 'any' && Number(passo) < 1) ? 'decimal' : 'numeric');
+  });
+}
+_acabarFolhas();
+
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) closeOverlay(o.id); }));
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') document.querySelectorAll('.overlay.open').forEach(o=>closeOverlay(o.id)); });
 window.addEventListener('pagehide', _flushCloudSync);
