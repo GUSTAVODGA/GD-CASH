@@ -4875,6 +4875,8 @@ body { padding-bottom: 0; }
    especificidade de id, e é ele quem desenhava o triângulo decorativo. */
 #page-mes .mes-sheet .sec-title,
 #page-mes .mes-sheet .av-sec-title,
+#page-semana .sem-sheet .sec-title,
+#page-semana .sem-sheet .av-sec-title,
 #page-reserva .sec-title,
 #page-fixos .sec-title,
 #page-pendencias .sec-title,
@@ -4890,6 +4892,7 @@ body { padding-bottom: 0; }
   line-height: 1.2;
 }
 #page-mes .mes-sheet .sec-title::before,
+#page-semana .sem-sheet .sec-title::before,
 #page-reserva .sec-title::before,
 #page-fixos .sec-title::before,
 #page-pendencias .sec-title::before,
@@ -5019,3 +5022,133 @@ body { padding-bottom: 0; }
 .hc-deck .hc-sec-hd { margin-bottom: 12px; }
 .hc-deck .hc-sec-title { font-size: 16px; }
 .hc-deck .hc-section--sep { border-top: none; padding-top: 0; }
+
+/* ── Semana: a faixa de dias ──────────────────────────────────────────────
+   O acordeão empilhava os sete dias com cabeçalho completo cada um: 635px de
+   tela só para escolher um dia, e vários podiam ficar abertos ao mesmo tempo.
+   Agora os cabeçalhos são uma faixa e só o dia escolhido abre.
+
+   (`#days-grid`, logo acima, é markup legado — está com `display:none
+   !important` desde antes desta reforma e ninguém o vê.) */
+.dsem-faixa {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.dsem-dia {
+  flex: 1;
+  min-width: 0;
+  min-height: 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--tx2);
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-default),
+              border-color var(--dur-fast) var(--ease-default),
+              color var(--dur-fast) var(--ease-default);
+  -webkit-tap-highlight-color: transparent;
+}
+.dsem-dia-nome { font-size: 10px; font-weight: 600; letter-spacing: .02em; }
+.dsem-dia-num  { font-family: var(--font-disp); font-size: 16px; font-weight: 700; color: var(--tx); line-height: 1; }
+.dsem-dia-dot  { width: 5px; height: 5px; border-radius: 999px; }
+.dsem-dia.hoje { border-color: var(--ac-b); }
+.dsem-dia.sel {
+  background: var(--ac);
+  border-color: var(--ac);
+  color: var(--on-flood);
+}
+.dsem-dia.sel .dsem-dia-num { color: var(--on-flood); }
+.dsem-dia.sel .dsem-dia-dot { background: var(--on-flood) !important; }
+.dsem-dia:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+:root[data-theme="dark"] .dsem-dia.sel { color: #0A2E22; }
+:root[data-theme="dark"] .dsem-dia.sel .dsem-dia-num { color: #0A2E22; }
+
+/* Cabeçalho do dia aberto: sem seta, porque não há mais o que dobrar. */
+.dsem-cab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 10px;
+}
+.dsem-hoje {
+  font-size: 9px;
+  background: var(--ac-t);
+  color: var(--ac);
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-weight: 700;
+}
+
+/* ── Semana: campo e folha ─────────────────────────────────────────────── */
+#page-semana {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 0;
+}
+#page-semana.active::before { display: none; }
+
+.sem-header {
+  background: var(--flood);
+  color: var(--on-flood);
+  padding: 4px 20px 30px;
+}
+.sem-header .nav-row { margin-bottom: 20px; }
+.sem-header .nav-arrow,
+.sem-header .tab-help-btn {
+  background: var(--on-flood-3);
+  border-color: transparent;
+  color: var(--on-flood);
+  border-radius: 999px;
+}
+.sem-header .nav-title { color: var(--on-flood); font-size: 15px; }
+.sem-header .hero-card {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 0;
+  border-radius: 0;
+}
+.sem-header .hero-lbl { color: var(--on-flood-2); text-transform: none; letter-spacing: 0; font-size: 12.5px; }
+.sem-header .hero-val {
+  font-family: var(--font-disp);
+  color: var(--on-flood);
+  font-weight: 700;
+  letter-spacing: -.035em;
+}
+.sem-header .hero-chips { margin-top: 16px; }
+.sem-header .hero-chip {
+  background: var(--on-flood-3);
+  border-color: transparent;
+  color: var(--on-flood-2);
+}
+.sem-header .hero-chip b { color: var(--on-flood); }
+
+.sem-sheet {
+  background: var(--bg);
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  box-shadow: var(--sheet-shadow);
+  margin-top: -18px;
+  padding: 22px 16px 132px;
+  position: relative;
+  min-height: 40vh;
+}
+.sem-sheet::before {
+  content: "";
+  display: block;
+  width: 38px; height: 4px;
+  border-radius: 999px;
+  background: var(--handle-bg);
+  margin: -8px auto 18px;
+}

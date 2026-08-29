@@ -7190,7 +7190,7 @@ function renderDayAccordion() {
   const dates = weekDates(weekOffset);
   const NAMES = ['Segunda','Terça','Quarta','Quinta','Sexta','Sábado','Domingo'];
 
-  acc.innerHTML = dates.map((d, i) => {
+  const dias = dates.map((d, i) => {
     const dt = parseDate(d);
     const dayLabel = NAMES[i] + ', ' + dt.getDate() + ' ' + dt.toLocaleDateString('pt-BR',{month:'short'}).replace('.','');
     const dayInc = sumDayIncome(d);
@@ -7272,26 +7272,58 @@ function renderDayAccordion() {
 
     const emptyMsg = `<div style="padding:12px 14px;font-size:12px;color:var(--tx3)">Nenhum lançamento ainda.</div>`;
 
-    return `<div class="dacc${isToday?' open':''}" id="dacc-${i}">
-      <div class="dacc-head" onclick="toggleDacc(${i})">
-        <div class="dacc-dot ${hasData?'dacc-dot-active':dayVencs.length?'dacc-dot-venc':'dacc-dot-empty'}"></div>
+    return {
+      i, isToday, hasData, hasContent, dayLabel, subLabel, dayLiq, liqColor, liqSign,
+      temVenc: dayVencs.length > 0,
+      curto: NAMES[i].slice(0, 3),
+      diaNum: dt.getDate(),
+      corpo: (hasContent ? platItems + expItems + vencItems : emptyMsg) + editFooter,
+    };
+  });
+
+  // A semana escolhida pode não conter o dia selecionado antes (ao trocar de
+  // semana com a seta). Cai em hoje, e em segunda-feira quando hoje está fora.
+  if (_semDia == null || _semDia < 0 || _semDia > 6) _semDia = 0;
+  const idxHoje = dates.indexOf(todayStr());
+  if (_semDiaAuto) _semDia = idxHoje >= 0 ? idxHoje : 0;
+
+  const sel = dias[_semDia] || dias[0];
+
+  const faixa = dias.map(x => `
+    <button class="dsem-dia${x.i === sel.i ? ' sel' : ''}${x.isToday ? ' hoje' : ''}"
+            onclick="selecionarDiaSemana(${x.i})"
+            aria-pressed="${x.i === sel.i}"
+            aria-label="${escHtml(x.dayLabel + ', ' + x.subLabel)}">
+      <span class="dsem-dia-nome">${x.curto}</span>
+      <span class="dsem-dia-num">${x.diaNum}</span>
+      <span class="dsem-dia-dot ${x.hasData ? 'dacc-dot-active' : x.temVenc ? 'dacc-dot-venc' : 'dacc-dot-empty'}"></span>
+    </button>`).join('');
+
+  // O `.dacc.open` continua existindo com o mesmo nome: o CSS do corpo e as
+  // linhas `dacc-tx*` são os mesmos de antes, e a suíte clica neles.
+  acc.innerHTML = `
+    <div class="dsem-faixa" role="tablist" aria-label="Dias da semana">${faixa}</div>
+    <div class="dacc open" id="dacc-${sel.i}">
+      <div class="dsem-cab">
         <div class="dacc-info">
-          <div class="dacc-name">${dayLabel}${isToday?' <span style="font-size:9px;background:var(--ac-t);color:var(--ac);border-radius:6px;padding:2px 6px;font-weight:700">HOJE</span>':''}</div>
-          <div class="dacc-sub">${subLabel}</div>
+          <div class="dacc-name">${sel.dayLabel}${sel.isToday ? ' <span class="dsem-hoje">HOJE</span>' : ''}</div>
+          <div class="dacc-sub">${sel.subLabel}</div>
         </div>
-        <div class="dacc-right">
-          ${hasData ? `<div class="dacc-liq" style="color:${liqColor}">${liqSign}${R(dayLiq)}</div>` : ''}
-          <div class="dacc-chev"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></div>
-        </div>
+        ${sel.hasData ? `<div class="dacc-liq" style="color:${sel.liqColor}">${sel.liqSign}${R(sel.dayLiq)}</div>` : ''}
       </div>
-      <div class="dacc-body"><div class="dacc-body-in">${hasContent ? platItems + expItems + vencItems : emptyMsg}${editFooter}</div></div>
+      <div class="dacc-body"><div class="dacc-body-in">${sel.corpo}</div></div>
     </div>`;
-  }).join('');
 }
 
-function toggleDacc(i) {
-  const el = document.getElementById('dacc-' + i);
-  if (el) el.classList.toggle('open');
+// Dia aberto na Semana. `_semDiaAuto` mantém o comportamento antigo — abrir
+// HOJE ao chegar na tela — até o usuário escolher um dia; a partir daí a
+// escolha dele manda, inclusive ao trocar de semana.
+var _semDia = 0, _semDiaAuto = true;
+
+function selecionarDiaSemana(i) {
+  _semDia = i;
+  _semDiaAuto = false;
+  renderDayAccordion();
 }
 
 // ══════════════════════════════════════════

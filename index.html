@@ -319,23 +319,30 @@
 
 <!-- ════ SEMANA ════ -->
 <section class="page" id="page-semana">
-  <div class="nav-row">
-    <button class="nav-arrow" onclick="changeWeek(-1)">‹</button>
-    <div class="nav-title" id="week-lbl">Semana</div>
-    <button class="nav-arrow" onclick="changeWeek(1)">›</button>
-    <button class="tab-help-btn" onclick="showTabHelp('semana')">?</button>
+
+  <!-- ── O CAMPO ── mesma gramática de Início e Mês. -->
+  <div class="sem-header">
+    <div class="nav-row">
+      <button class="nav-arrow" onclick="changeWeek(-1)">‹</button>
+      <div class="nav-title" id="week-lbl">Semana</div>
+      <button class="nav-arrow" onclick="changeWeek(1)">›</button>
+      <button class="tab-help-btn" onclick="showTabHelp('semana')">?</button>
+    </div>
+
+    <div class="hero-card" id="hero-semana">
+      <div class="hero-top">
+        <span class="hero-lbl">Resultado da semana</span>
+        <span class="hero-val" id="ws-liq">$ 0,00</span>
+      </div>
+      <div class="hero-chips">
+        <div class="hero-chip"><span class="chip-dot dot-green"></span>Entradas <b id="ws-inc">$ 0,00</b></div>
+        <div class="hero-chip"><span class="chip-dot dot-red"></span>Saídas <b id="ws-exp">$ 0,00</b></div>
+      </div>
+    </div>
   </div>
 
-  <div class="hero-card" id="hero-semana">
-    <div class="hero-top">
-      <span class="hero-lbl">Resultado da semana</span>
-      <span class="hero-val" id="ws-liq">$ 0,00</span>
-    </div>
-    <div class="hero-chips">
-      <div class="hero-chip"><span class="chip-dot dot-green"></span>Entradas <b id="ws-inc">$ 0,00</b></div>
-      <div class="hero-chip"><span class="chip-dot dot-red"></span>Saídas <b id="ws-exp">$ 0,00</b></div>
-    </div>
-  </div>
+  <!-- ── A FOLHA ── -->
+  <div class="sem-sheet">
 
   <div id="sem-insight-section"></div>
 
@@ -347,6 +354,8 @@
   <div id="days-accordion"></div>
 
   <div class="week-goal-card" id="week-goal-card"></div>
+
+  </div><!-- /.sem-sheet -->
 </section>
 
 <!-- ════ RESERVA ════ -->
