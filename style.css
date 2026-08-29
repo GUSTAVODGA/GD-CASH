@@ -1,28 +1,55 @@
-/* ══ AVENCO — design system ══ */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+/* ══ AVENCO — design system "Cofre" ══
+ *
+ * A cor da marca é um CAMPO que sangra de borda a borda; o conteúdo mora numa
+ * FOLHA que sobe por cima dele, com raio grande e sombra de contato. Daí os
+ * nomes: `--flood` é o campo, `--bg` é a folha.
+ *
+ * Os nomes de token daqui para baixo são os mesmos de sempre — inclusive os
+ * apelidos legados (`--gold`, `--text2`, `--card`). Só os VALORES mudaram, de
+ * propósito: assim a troca de identidade alcança as ~4.400 linhas deste arquivo
+ * sem tocar em um seletor sequer.
+ *
+ * Contraste: os alfas de `--tx2` e `--tx3` não são estéticos, foram resolvidos
+ * para 7,0:1 e 4,6:1 sobre a folha, nos DOIS temas. O `--tx3` antigo dava
+ * 2,3:1 no escuro e 2,0:1 no claro, e era usado 190 vezes.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Onest:wght@400;500;600;700&display=swap');
 
 :root {
+  /* ── Tipografia ── */
+  --font-body: 'Onest','Helvetica Neue',Helvetica,-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-disp: 'Sora','Helvetica Neue',Helvetica,-apple-system,BlinkMacSystemFont,sans-serif;
+  /* ── Campo da marca (sangra de borda a borda) ── */
+  --flood: #0C4F3F;
+  --flood-2: #14705B;
+  --flood-3: #0A4034;
+  --on-flood: #FDF6EC;
+  --on-flood-2: rgba(253,246,236,.72);
+  --on-flood-3: rgba(253,246,236,.14);
   /* ── Surfaces ── */
-  --bg: #F2F0EA;
+  --bg: #FDF6EC;
   --surface: #FFFFFF;
-  --surface2: #F4F6FC;
-  --surface3: #E6EBF6;
-  --topbar-bg: rgba(238,242,250,.96);
-  --nav-bg: rgba(255,255,255,.97);
+  --surface2: #F5EFE3;
+  --surface3: #EBE3D4;
+  --topbar-bg: rgba(12,79,63,.98);
+  --nav-bg: #141914;
+  /* ── Folha ── */
+  --sheet-radius: 30px;
+  --sheet-shadow: 0 -14px 40px rgba(20,25,20,.16);
   /* ── Borders ── */
-  --border: rgba(13,20,64,.07);
-  --border-strong: rgba(13,20,64,.13);
+  --border: rgba(20,25,20,.09);
+  --border-strong: rgba(20,25,20,.16);
   /* ── Shadows ── */
-  --shadow: 0 2px 14px rgba(13,20,64,.07);
-  --shadow-sm: 0 1px 4px rgba(13,20,64,.05), 0 2px 8px rgba(13,20,64,.07);
-  --shadow-card: 0 2px 16px rgba(13,20,64,.09), 0 4px 32px rgba(13,20,64,.06);
-  --shadow-elevated: 0 4px 24px rgba(13,20,64,.13), 0 12px 40px rgba(13,20,64,.09);
+  --shadow: 0 2px 14px rgba(20,25,20,.07);
+  --shadow-sm: 0 1px 4px rgba(20,25,20,.05), 0 2px 8px rgba(20,25,20,.07);
+  --shadow-card: 0 2px 16px rgba(20,25,20,.08), 0 4px 32px rgba(20,25,20,.05);
+  --shadow-elevated: 0 4px 24px rgba(20,25,20,.12), 0 12px 40px rgba(20,25,20,.08);
   /* ── Radius scale ── */
-  --radius-xs: 8px;
-  --radius-sm: 14px;
-  --radius-md: 16px;
-  --radius: 20px;
-  --radius-lg: 26px;
+  --radius-xs: 10px;
+  --radius-sm: 16px;
+  --radius-md: 18px;
+  --radius: 22px;
+  --radius-lg: 30px;
   --radius-full: 9999px;
   /* ── Spacing scale ── */
   --sp-1: 4px;
@@ -47,10 +74,10 @@
   --icon-sm: 16px;
   --icon-md: 20px;
   --icon-lg: 24px;
-  /* ── Text — canonical ── */
-  --tx: #0D1440;
-  --tx2: rgba(13,20,64,.50);
-  --tx3: rgba(13,20,64,.32);
+  /* ── Text — canonical (alfas resolvidos para 7,0:1 e 4,6:1 sobre a folha) ── */
+  --tx: #141914;
+  --tx2: rgba(20,25,20,.73);
+  --tx3: rgba(20,25,20,.60);
   /* Text — legacy aliases → canonical (both names work) */
   --text: var(--tx);
   --text2: var(--tx2);
@@ -63,25 +90,29 @@
   --surface-2: var(--surface2);
   --input-bg: var(--surface);
   /* ── Brand — canonical ── */
-  --ac: #2563EB;
-  --ac-t: rgba(37,99,235,.10);
-  --ac-b: rgba(37,99,235,.20);
-  --ac2: #3B82F6;
-  --gold-glow: rgba(37,99,235,.22);
-  /* Brand aliases */
+  --ac: #0C4F3F;
+  --ac-t: rgba(12,79,63,.10);
+  --ac-b: rgba(12,79,63,.20);
+  --ac2: #1B7A63;
+  --gold-glow: rgba(12,79,63,.20);
+  /* Acentos do Cofre: a menta é o realce, o coral é o alerta. */
+  --mint: #7BE3A8;
+  --coral: #FF7A59;
+  /* Brand aliases — `--gold` guarda o verde da marca desde a v68; o nome
+     sobreviveu à identidade dourada original e é usado em dezenas de lugares. */
   --gold: var(--ac);
   --gold-raw: var(--ac);
   --orange: var(--ac2);
-  /* ── Semantic — canonical ── */
-  --gn: #16A34A;
-  --gn-t: rgba(22,163,74,.10);
-  --rd: #DC2626;
-  --rd-t: rgba(220,38,38,.10);
-  --bl: #0284C7;
-  --bl-t: rgba(2,132,199,.10);
-  --violet: #7C3AED;
-  --green-d: #15803D;
-  --red-d: #B91C1C;
+  /* ── Semantic — canonical (4,6:1+ sobre a folha) ── */
+  --gn: #0C7A52;
+  --gn-t: rgba(12,122,82,.10);
+  --rd: #C7431F;
+  --rd-t: rgba(199,67,31,.10);
+  --bl: #2F6F8F;
+  --bl-t: rgba(47,111,143,.10);
+  --violet: #6B4E9B;
+  --green-d: #0A5F40;
+  --red-d: #A33517;
   /* Semantic aliases */
   --green: var(--gn);
   --red: var(--rd);
@@ -91,24 +122,24 @@
   --c-success-t: var(--gn-t);
   --c-danger: var(--rd);
   --c-danger-t: var(--rd-t);
-  --c-warning: #D97706;
-  --c-warning-t: rgba(217,119,6,.10);
+  --c-warning: #B7791F;
+  --c-warning-t: rgba(183,121,31,.10);
   --c-info: var(--ac);
   --c-info-t: var(--ac-t);
   /* ── Overlay tokens ── */
-  --ol1: rgba(0,0,0,.03);
-  --ol2: rgba(0,0,0,.06);
-  --ol3: rgba(0,0,0,.10);
+  --ol1: rgba(20,25,20,.03);
+  --ol2: rgba(20,25,20,.06);
+  --ol3: rgba(20,25,20,.10);
   /* ── Brand tint scale ── */
-  --gold-t06: rgba(37,99,235,.06);
-  --gold-t12: rgba(37,99,235,.12);
-  --gold-t20: rgba(37,99,235,.20);
-  --gold-t25: rgba(37,99,235,.25);
-  --gold-t30: rgba(37,99,235,.30);
-  --gold-t40: rgba(37,99,235,.40);
-  --gold-t50: rgba(37,99,235,.50);
+  --gold-t06: rgba(12,79,63,.06);
+  --gold-t12: rgba(12,79,63,.12);
+  --gold-t20: rgba(12,79,63,.20);
+  --gold-t25: rgba(12,79,63,.25);
+  --gold-t30: rgba(12,79,63,.30);
+  --gold-t40: rgba(12,79,63,.40);
+  --gold-t50: rgba(12,79,63,.50);
   /* ── Sheet handle ── */
-  --handle-bg: rgba(0,0,0,.10);
+  --handle-bg: rgba(20,25,20,.14);
   /* ── Semantic states ── */
   --pos: var(--gn);
   --neg: var(--rd);
@@ -122,59 +153,74 @@
   --ease-out:     cubic-bezier(0,0,.2,1);
   --ease-spring:  cubic-bezier(.34,1.52,.64,1);
 }
+/* No escuro a composição não muda: o campo continua verde e a folha continua
+   subindo por cima dele. O que muda é a folha, que passa de creme a um
+   quase-preto QUENTE — um cinza-azulado aqui brigaria com o verde do campo. */
 :root[data-theme="dark"] {
+  /* ── Campo da marca ── */
+  --flood: #0A4436;
+  --flood-2: #10604D;
+  --flood-3: #073328;
+  --on-flood: #F1EDE3;
+  --on-flood-2: rgba(241,237,227,.72);
+  --on-flood-3: rgba(241,237,227,.14);
   /* ── Surfaces ── */
-  --bg: #0F1629;
-  --surface: #0F1629;
-  --surface2: #161D35;
-  --surface3: #1D2542;
-  --topbar-bg: rgba(7,9,26,.94);
-  --nav-bg: rgba(7,9,26,.96);
+  --bg: #101410;
+  --surface: #171C16;
+  --surface2: #1D231B;
+  --surface3: #262E24;
+  --topbar-bg: rgba(10,68,54,.98);
+  --nav-bg: #1D231B;
+  /* ── Folha ── */
+  --sheet-shadow: 0 -14px 40px rgba(0,0,0,.55);
   /* ── Borders ── */
-  --border: rgba(255,255,255,.07);
-  --border-strong: rgba(255,255,255,.13);
+  --border: rgba(241,237,227,.10);
+  --border-strong: rgba(241,237,227,.18);
   /* ── Shadows ── */
   --shadow: 0 2px 12px rgba(0,0,0,.6), 0 1px 3px rgba(0,0,0,.4);
   --shadow-sm: 0 1px 6px rgba(0,0,0,.5), 0 2px 10px rgba(0,0,0,.35);
   --shadow-card: 0 4px 24px rgba(0,0,0,.7), 0 1px 4px rgba(0,0,0,.5);
   --shadow-elevated: 0 8px 40px rgba(0,0,0,.85), 0 2px 8px rgba(0,0,0,.6);
-  /* ── Text ── */
-  --tx: #E8EDFF;
-  --tx2: rgba(232,237,255,.50);
-  --tx3: rgba(232,237,255,.28);
-  /* ── Brand ── */
-  --ac: #5B8AF5;
-  --ac-t: rgba(91,138,245,.12);
-  --ac-b: rgba(91,138,245,.24);
-  --ac2: #7EAAFE;
-  --gold-glow: rgba(91,138,245,.35);
+  /* ── Text (7,0:1 e 4,6:1 sobre a folha) ── */
+  --tx: #F1EDE3;
+  --tx2: rgba(241,237,227,.64);
+  --tx3: rgba(241,237,227,.50);
+  /* ── Brand — no escuro quem carrega a marca é a menta; o verde-garrafa
+     some contra a folha. ── */
+  --ac: #7BE3A8;
+  --ac-t: rgba(123,227,168,.12);
+  --ac-b: rgba(123,227,168,.24);
+  --ac2: #A8EFC6;
+  --gold-glow: rgba(123,227,168,.30);
+  --mint: #7BE3A8;
+  --coral: #FF8A6B;
   /* ── Semantic ── */
-  --gn: #4ADE80;
-  --gn-t: rgba(74,222,128,.12);
-  --green-d: #22C55E;
-  --rd: #F87171;
-  --rd-t: rgba(248,113,113,.12);
-  --red-d: #EF4444;
-  --bl: #38BDF8;
-  --bl-t: rgba(56,189,248,.12);
-  --violet: #C084FC;
+  --gn: #7BE3A8;
+  --gn-t: rgba(123,227,168,.12);
+  --green-d: #5ED493;
+  --rd: #FF8A6B;
+  --rd-t: rgba(255,138,107,.12);
+  --red-d: #FF6B45;
+  --bl: #7FC3DE;
+  --bl-t: rgba(127,195,222,.12);
+  --violet: #C0A8E8;
   /* ── Feedback states ── */
-  --c-warning: #FCD34D;
-  --c-warning-t: rgba(252,211,77,.10);
+  --c-warning: #E8C46A;
+  --c-warning-t: rgba(232,196,106,.10);
   /* ── Overlay ── */
-  --ol1: rgba(255,255,255,.03);
-  --ol2: rgba(255,255,255,.06);
-  --ol3: rgba(255,255,255,.10);
+  --ol1: rgba(241,237,227,.03);
+  --ol2: rgba(241,237,227,.06);
+  --ol3: rgba(241,237,227,.10);
   /* ── Brand tint scale ── */
-  --gold-t06: rgba(91,138,245,.06);
-  --gold-t12: rgba(91,138,245,.12);
-  --gold-t20: rgba(91,138,245,.20);
-  --gold-t25: rgba(91,138,245,.25);
-  --gold-t30: rgba(91,138,245,.30);
-  --gold-t40: rgba(91,138,245,.40);
-  --gold-t50: rgba(91,138,245,.50);
+  --gold-t06: rgba(123,227,168,.06);
+  --gold-t12: rgba(123,227,168,.12);
+  --gold-t20: rgba(123,227,168,.20);
+  --gold-t25: rgba(123,227,168,.25);
+  --gold-t30: rgba(123,227,168,.30);
+  --gold-t40: rgba(123,227,168,.40);
+  --gold-t50: rgba(123,227,168,.50);
   /* ── Sheet handle ── */
-  --handle-bg: rgba(255,255,255,.14);
+  --handle-bg: rgba(241,237,227,.16);
 }
 
 /* ── Reduced-motion: disable all animation/transition for users who prefer it ── */
@@ -327,11 +373,14 @@
 .dacc-tx-del { background:none; border:none; color:var(--tx3); font-size:16px; cursor:pointer; padding:4px; margin-left:4px; }
 
 /* ══ FAB REDESIGN ══ */
+/* Cor chapada no lugar do gradiente: o degradê era herança da identidade
+   dourada e é justamente o tipo de enfeite que faz o app parecer template. */
 .global-fab {
-  background:linear-gradient(135deg,var(--gold),var(--orange)) !important;
-  box-shadow:0 4px 20px var(--gold-glow), 0 2px 8px rgba(0,0,0,.3) !important;
+  background:var(--mint) !important;
+  box-shadow:0 8px 24px rgba(20,25,20,.28) !important;
 }
-.global-fab svg { stroke:#fff !important; }
+.global-fab svg { stroke:#0A2E22 !important; }
+:root[data-theme="dark"] .global-fab svg { stroke:#0A2E22 !important; }
 
 /* ══ QUICK ADD SHEET ══ */
 .sheet-qa { padding-bottom:calc(24px + env(safe-area-inset-bottom,0px)); }
@@ -430,7 +479,10 @@ html,body{height:100%;overflow-x:hidden}
 body{
   background:var(--bg);
   color:var(--text);
-  font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-family:var(--font-body);
+  /* Numerais tabulares em todo o app: sem isso, uma coluna de valores dança
+     conforme os dígitos mudam de largura, e este app é uma coluna de valores. */
+  font-variant-numeric:tabular-nums;
   font-size:15px;line-height:1.4;padding-bottom:96px;
 }
 button,input,select{font-family:inherit;color:inherit}
@@ -1986,13 +2038,15 @@ textarea.form-input{resize:none}
   text-overflow: ellipsis;
 }
 
+/* Havia DUAS declarações de `text-transform` aqui: `uppercase` e, logo abaixo,
+   `capitalize`. A segunda vencia, e o mês saía como "Agosto De 2026" — com o
+   tracking de caixa alta ainda aplicado a um texto que já não era caixa alta. */
 .hc-month {
-  font-size: 10px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--tx3);
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--tx2);
   margin-bottom: 10px;
-  text-transform: capitalize;
 }
 
 .hc-bal-label {
@@ -2135,21 +2189,25 @@ textarea.form-input{resize:none}
   flex-shrink: 0;
 }
 
+/* A hierarquia estava INVERTIDA: o título da seção era 9px em `--tx3` (2,3:1)
+   enquanto o link opcional ao lado era 12px em cor de marca saturada. O que
+   diz "o que é isto" perdia para o que diz "veja também". */
 .hc-sec-title {
-  font-size: 9px;
+  font-family: var(--font-disp);
+  font-size: 18px;
   font-weight: 700;
-  color: var(--tx3);
-  text-transform: uppercase;
-  letter-spacing: .13em;
+  color: var(--tx);
+  text-transform: none;
+  letter-spacing: -.02em;
   flex: 1;
 }
 
 .hc-sec-link {
-  font-size: 12px;
-  color: var(--ac);
+  font-size: 12.5px;
+  color: var(--tx2);
   background: none;
   border: none;
-  padding: 0;
+  padding: 8px 0 8px 12px;   /* alvo de toque, sem alterar o desenho */
   cursor: pointer;
   font-weight: 600;
   font-family: inherit;

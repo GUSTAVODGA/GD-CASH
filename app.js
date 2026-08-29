@@ -470,8 +470,8 @@ function refreshAfterDayEdit() {
     animCount(document.getElementById('ws-liq'), liq, 650);
     document.getElementById('hero-semana').className = 'hero-card ' + (liq >= 0 ? 'pos' : 'neg');
     document.getElementById('plat-cards').innerHTML = D.platforms.map(p =>
-      `<div class="plat-c" style="border-top-color:${p.color}" onclick="openPlatSettings()">
-        <div class="plat-c-name" style="color:${p.color}">${p.name}</div>
+      `<div class="plat-c" style="border-top-color:${_corTema(p.color)}" onclick="openPlatSettings()">
+        <div class="plat-c-name" style="color:${_corTema(p.color)}">${p.name}</div>
         <div class="plat-c-val">${R(sumPlatWeek(p.id, weekOffset))}</div>
       </div>`).join('');
   }
@@ -837,7 +837,51 @@ function fabAction(type) {
 // DATA & STORE
 // ══════════════════════════════════════════
 const WEEK_DAYS = ['SEG','TER','QUA','QUI','SEX','SÁB','DOM'];
-const PALETTE = ['#ffb800','#00e6a0','#3ec6ff','#ff6b35','#a78bfa','#ff4d6a','#5eead4','#ffe066'];
+
+// ── Paleta categórica dos gráficos ────────────────────────────────────────
+//
+// A anterior era néon (#ffb800, #00e6a0, #3ec6ff…) e brigava com tudo: nasceu
+// para fundo escuro e ficava fluorescente sobre o creme. Esta sai do verde da
+// marca e abre em oito matizes, com um degrau PRÓPRIO para cada tema — clarear
+// o mesmo hex no escuro estoura a saturação e some com a diferença entre séries.
+//
+// A ordem não é decorativa: as cores são atribuídas em sequência fixa, e a
+// sequência foi escolhida para que categorias VIZINHAS continuem distinguíveis
+// por quem não enxerga vermelho/verde. Verificada nos dois temas contra faixa de
+// luminosidade, piso de croma, separação em daltonismo, piso de visão normal e
+// contraste com a superfície. Trocar um valor ou a ordem exige revalidar.
+const PALETTE_LIGHT = ['#0C7A52','#1A6FA8','#C2622F','#7A5AA6','#B0473C','#1F9B8A','#A8791F','#A33F6B'];
+const PALETTE_DARK  = ['#2A9E68','#3E86B8','#C4762F','#8F6DBE','#CC5748','#2AA897','#B08A2E','#BC5279'];
+
+// `PALETTE` é a paleta CANÔNICA e não depende do tema, de propósito: a cor de
+// uma plataforma é escolhida pelo usuário e GRAVADA em `D`. Se ela variasse com
+// o tema, o dado salvo mudaria de significado ao trocar de tema, e o
+// `indexOf` de `cyclePlatColor` deixaria de encontrar a cor atual.
+const PALETTE = PALETTE_LIGHT;
+
+/** Paleta do tema em uso — só para cor DESENHADA, nunca para cor gravada. */
+function _paleta() {
+  return document.documentElement.getAttribute('data-theme') === 'dark' ? PALETTE_DARK : PALETTE_LIGHT;
+}
+
+/** Lê um token do CSS. Cor de gráfico vive em `canvas`/`style` inline, onde
+ *  `var(--x)` não resolve — daí precisar do valor computado. */
+function _cssVar(nome) {
+  return getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
+}
+
+/** Cinza neutro do tema, para o agrupamento "Outras categorias". */
+function _corNeutra() { return _cssVar('--tx3'); }
+
+/** Traduz uma cor canônica para o degrau equivalente do tema atual.
+ *
+ *  Uma cor gravada continua sendo a canônica; na hora de pintar, troca-se pelo
+ *  degrau do tema. Cor que não está na paleta (escolha manual antiga) passa
+ *  intacta — não cabe a esta função adivinhar intenção do usuário. */
+function _corTema(cor) {
+  const i = PALETTE_LIGHT.indexOf(cor);
+  return i >= 0 ? _paleta()[i] : cor;
+}
 const RING_R = 68, RING_CIRC = 2*Math.PI*RING_R;
 
 function defaultData() {
@@ -1561,7 +1605,7 @@ function _donutSlices(items) {
   const top = items.slice(0, MAX).map((it,i)=>({ ...it, _idx:i }));
   const rest = items.slice(MAX);
   const restVal = rest.reduce((s,i)=>s+i.value,0);
-  top.push({ label:'Outras categorias', value:restVal, color:'#9CA3AF', _idx:null, _group:true });
+  top.push({ label:'Outras categorias', value:restVal, color:_corNeutra(), _idx:null, _group:true });
   return top;
 }
 
@@ -1741,8 +1785,8 @@ function renderSemana() {
   document.getElementById('hero-semana').className='hero-card '+(liq>=0?'pos':'neg');
 
   document.getElementById('plat-cards').innerHTML=D.platforms.map(p=>`
-    <div class="plat-c" style="border-top-color:${p.color}" onclick="openPlatSettings()">
-      <div class="plat-c-name" style="color:${p.color}">${p.name}</div>
+    <div class="plat-c" style="border-top-color:${_corTema(p.color)}" onclick="openPlatSettings()">
+      <div class="plat-c-name" style="color:${_corTema(p.color)}">${p.name}</div>
       <div class="plat-c-val">${R(sumPlatWeek(p.id,weekOffset))}</div>
     </div>`).join('');
 
@@ -1779,7 +1823,7 @@ function renderDayDetail() {
     const val=displayVal>0?displayVal:'';
     return `
     <div class="inc-inp-wrap">
-      <div class="inc-inp-lbl" style="color:${p.color}">${p.name}</div>
+      <div class="inc-inp-lbl" style="color:${_corTema(p.color)}">${p.name}</div>
       <input class="inc-inp" type="number" min="0" step="0.01" placeholder="0.00"
         value="${val}"
         ${hasItems?'readonly title="Total calculado pelos serviços detalhados"':'onchange="saveDayIncomeWithFeedback(\''+date+'\',\''+p.id+'\',this.value,this)"'}
@@ -1828,7 +1872,7 @@ function renderIncomeItems(date) {
       <span class="iitem-status ${it.status==='paid'?'paid':'pending'}"></span>
       <div class="iitem-info">
         <span class="iitem-note">${it.note||platMap[it.platformId]?.name||'Receita'}</span>
-        <span class="iitem-plat" style="color:${platMap[it.platformId]?.color||'#888'}">${platMap[it.platformId]?.name||''}</span>
+        <span class="iitem-plat" style="color:${_corTema(platMap[it.platformId]?.color||'#888')}">${platMap[it.platformId]?.name||''}</span>
       </div>
       <span class="iitem-amt">${R(it.amount)}</span>
       <button class="exp-del" onclick="deleteIncomeItem('${it.id}')">✕</button>
@@ -2217,11 +2261,11 @@ function renderMes() {
     const dk=localDateKey(e.date);
     if(!catLast[key] || dk>catLast[key].date) catLast[key]={ desc:(e.description||e.category||''), date:dk };
   });
-  const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,count:catCount[label]||0,top:catTop[label]||null,last:catLast[label]||null,color:PALETTE[i%PALETTE.length]}));
+  const catItems=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).map(([label,value],i)=>({label,value,count:catCount[label]||0,top:catTop[label]||null,last:catLast[label]||null,color:_paleta()[i%PALETTE.length]}));
   renderCatRows('cat-legend', catItems);                        // lista de barras: protagonista
   renderBigDonut('cat-donut','cat-legend','cat-donut-total',catItems); // donut: resumo visual
 
-  const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:p.color})).filter(i=>i.value>0);
+  const platItems=D.platforms.map(p=>({label:p.name,value:sumMonthPlat(p.id,monthOffset),color:_corTema(p.color)})).filter(i=>i.value>0);
   renderDonut('plat-donut','plat-legend',platItems);
 
   const weeks=getMonthWeeks(monthOffset);
@@ -3533,7 +3577,7 @@ function saveFixed() {
 function openPlatSettings() {
   document.getElementById('plat-settings-body').innerHTML=D.platforms.map((p,i)=>`
     <div class="set-row">
-      <div class="color-dot" style="background:${p.color}" onclick="cyclePlatColor(${i})" title="Trocar cor"></div>
+      <div class="color-dot" style="background:${_corTema(p.color)}" onclick="cyclePlatColor(${i})" title="Trocar cor"></div>
       <input class="fi" type="text" value="${p.name}" style="flex:1;padding:8px 10px;font-size:14px"
         onchange="D.platforms[${i}].name=this.value;save()">
       ${D.platforms.length>1?`<button class="row-del" onclick="deletePlatform(${i})">✕</button>`:''}
@@ -6300,7 +6344,7 @@ function renderCatBudgets() {
     const spent = catMap[cat] || 0;
     const pct = Math.min(100, (spent / limit) * 100);
     const over = spent > limit;
-    const color = over ? '#ff4d6a' : pct > 75 ? '#ffb800' : '#00e6a0';
+    const color = over ? _cssVar('--rd') : pct > 75 ? _cssVar('--c-warning') : _cssVar('--gn');
     return `
       <div class="bud-row">
         <div class="bud-top">
@@ -7047,8 +7091,11 @@ function drawHomeChart() {
   const barGap = groupW * 0.055;
 
   const isDark    = document.documentElement.dataset.theme === 'dark';
-  const incColor  = isDark ? '#5B8AF5' : '#1D4ED8';
-  const expColor  = isDark ? 'rgba(91,138,245,.38)' : '#93C5FD';
+  // Mesma codificação do resto do app: entrada é verde, saída é coral. Antes
+  // este gráfico usava azul para entrada e azul-claro para saída, enquanto a
+  // tela Mês pintava o MESMO dado de verde e vermelho.
+  const incColor  = _cssVar('--gn');
+  const expColor  = _cssVar('--rd');
   const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(12,18,64,.06)';
   const lblColor  = isDark ? 'rgba(232,237,255,.35)' : 'rgba(12,18,64,.33)';
 
@@ -7124,8 +7171,8 @@ function renderDayAccordion() {
           const label = it.note || it.description || p.name;
           const statusTag = it.status === 'pending' ? ' <span style="font-size:10px;opacity:.6">(pendente)</span>' : '';
           return `<div class="dacc-tx">
-            <div class="dacc-tx-ico" style="background:${p.color}22">
-              <svg viewBox="0 0 24 24" style="stroke:${p.color}"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            <div class="dacc-tx-ico" style="background:${_corTema(p.color)}22">
+              <svg viewBox="0 0 24 24" style="stroke:${_corTema(p.color)}"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
             </div>
             <div class="dacc-tx-info"><div class="dacc-tx-lbl">${p.name}${statusTag}</div><div class="dacc-tx-cat">${label !== p.name ? label : 'Receita'}</div></div>
             <div class="dacc-tx-amt" style="color:var(--gn)">+${R(it.amount)}</div>
@@ -7137,8 +7184,8 @@ function renderDayAccordion() {
       const v = getDayIncome(d)[p.id] || 0;
       if (v <= 0) return '';
       return `<div class="dacc-tx">
-        <div class="dacc-tx-ico" style="background:${p.color}22">
-          <svg viewBox="0 0 24 24" style="stroke:${p.color}"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        <div class="dacc-tx-ico" style="background:${_corTema(p.color)}22">
+          <svg viewBox="0 0 24 24" style="stroke:${_corTema(p.color)}"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
         </div>
         <div class="dacc-tx-info"><div class="dacc-tx-lbl">${p.name}</div><div class="dacc-tx-cat">Receita</div></div>
         <div class="dacc-tx-amt" style="color:var(--gn)">+${R(v)}</div>
