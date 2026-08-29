@@ -246,11 +246,21 @@ test.describe('visual dos rótulos', () => {
         expect(tam.sub).toBeLessThan(tam.val);
         expect(tam.sub).toBeLessThan(tam.lbl);
         // O rótulo mais longo ("Aquisição de patrimônio") faz o subtítulo quebrar
-        // em 320px: a linha vai de 84px para 116px. Cresce, não quebra — o texto
-        // continua inteiro, sem transbordo e sem sobrepor o valor. O limite abaixo
-        // existe para pegar quebra de verdade, não essa folga.
-        const alturas = await page.locator('#inicio-tx-list .tx-item').evaluateAll(ns => ns.map(n => n.getBoundingClientRect().height));
-        alturas.forEach(h => expect(h).toBeLessThan(130));
+        // em várias linhas a 320px. Cresce, não quebra — o texto continua
+        // inteiro, sem transbordo e sem sobrepor o valor. O limite abaixo existe
+        // para pegar quebra de verdade, não essa folga.
+        //
+        // O teto é medido em LINHAS, não em pixels. A versão anterior fixava
+        // 130px, calibrado nas métricas da Inter; a Onest é mais larga, o mesmo
+        // texto passou a ocupar 5 linhas em vez de 4, e a linha foi de 116 para
+        // 131px — sem nada ter piorado. Ancorar na altura de linha faz a
+        // asserção sobreviver à próxima troca de tipografia e continuar pegando
+        // o que importa: uma linha que dispara de tamanho.
+        const medidas = await page.locator('#inicio-tx-list .tx-item').evaluateAll(ns => ns.map(n => ({
+          h: n.getBoundingClientRect().height,
+          lh: parseFloat(getComputedStyle(n.querySelector('.tx-sub')).lineHeight),
+        })));
+        medidas.forEach(({ h, lh }) => expect(h).toBeLessThan(lh * 9));
         // O valor nunca é empurrado para fora nem sobreposto pelo subtítulo.
         const colisao = await page.locator('#inicio-tx-list .tx-item').evaluateAll(ns => ns.some(n => {
           const sub = n.querySelector('.tx-sub').getBoundingClientRect();

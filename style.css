@@ -4608,3 +4608,152 @@ body { padding-bottom: 0; }
   box-shadow: 0 10px 30px rgba(0,0,0,.55), 0 0 0 1px rgba(241,237,227,.09);
 }
 :root[data-theme="dark"] .page { box-shadow: var(--sheet-shadow); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COFRE — INÍCIO
+   O resultado do mês deixa de ser um cartão sobre o fundo e passa a ser o
+   próprio topo do app. A folha começa depois dele.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* A Home não usa a folha genérica de `.page`: ela tem campo e folha próprios. */
+#page-inicio {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 0;
+}
+#page-inicio.active::before { display: none; }
+
+/* ── O campo continua do topbar para dentro da tela ── */
+.hc-header {
+  background: var(--flood);
+  color: var(--on-flood);
+  padding: 4px 20px 34px;
+  margin: 0;
+}
+.hc-hero { display: block; }
+
+.hc-greeting {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--on-flood-2);
+}
+.hc-month {
+  margin: 2px 0 26px;
+  font-size: 12px;
+  color: var(--on-flood-2);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.hc-bal-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--on-flood-2);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-bottom: 6px;
+}
+
+/* Escala de cartaz. O número é o único elemento grande da tela — é ele que
+   responde "como estou agora". */
+.hc-balance,
+.hc-balance.pos,
+.hc-balance.neg {
+  font-family: var(--font-disp);
+  font-size: 46px;
+  line-height: 1.02;
+  font-weight: 700;
+  letter-spacing: -.035em;
+  color: var(--on-flood);
+}
+/* Sobre o campo verde, verde e coral saturados perdem legibilidade; o sinal
+   do resultado já vem escrito no próprio número. */
+.hc-balance.neg { color: #FFB9A5; }
+
+/* ── Proporção entrou/saiu ── */
+.hc-prop {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--on-flood-3);
+  overflow: hidden;
+  margin: 22px 0 12px;
+}
+.hc-prop > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: var(--mint);
+  transition: width .9s cubic-bezier(.2,.85,.25,1);
+}
+
+.hc-stats { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.hc-stat {
+  display: flex; align-items: center; gap: 7px;
+  flex: 0 1 auto; min-width: 0;
+}
+.hc-stat-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--mint); flex-shrink: 0; }
+.hc-stat-label {
+  font-size: 12.5px;
+  color: var(--on-flood-2);
+  /* A regra original é 9px em caixa alta com tracking — desenho da versão
+     anterior, onde o rótulo brigava com o valor. Aqui ele é só um rótulo. */
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  margin-bottom: 0;
+}
+.hc-stat-val,
+.hc-stat-val.hc-stat-inc,
+.hc-stat-val.hc-stat-exp {
+  font-family: var(--font-disp);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--on-flood);
+}
+
+/* Leitura das saídas: continua discreta, mas agora sobre o campo. */
+.hc-brk {
+  background: var(--flood);
+  color: var(--on-flood-2);
+  padding: 14px 20px 26px;
+  margin: 0;
+  border-top: none;
+  font-size: 12px;
+  gap: 6px 14px;
+}
+.hc-brk b { color: var(--on-flood); font-weight: 600; }
+/* Sobre o campo verde os tokens de texto da folha não valem: `--tx3` ali é
+   uma tinta escura e some. */
+.hc-brk .hc-brk-item { color: var(--on-flood-2); }
+.hc-brk-dot { opacity: .9; }
+
+/* O triângulo antes de cada título de seção era enfeite de uma versão em que o
+   título era 9px e precisava de ajuda para ser notado. Com o título em 18px
+   cheio, ele só suja a linha. */
+.hc-tri-sm { display: none; }
+
+/* ── A folha da Home ── */
+.hc-sheet {
+  background: var(--bg);
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  box-shadow: var(--sheet-shadow);
+  margin-top: -18px;
+  padding: 22px 16px 132px;
+  position: relative;
+  min-height: 40vh;
+}
+.hc-sheet::before {
+  content: "";
+  display: block;
+  width: 38px; height: 4px;
+  border-radius: 999px;
+  background: var(--handle-bg);
+  margin: -8px auto 18px;
+}
+/* As réguas separavam seções quando tudo era um plano só; dentro da folha o
+   espaçamento já separa, e a régua vira ruído. */
+.hc-sheet .hc-rule { display: none; }
+.hc-section { margin-bottom: 26px; }

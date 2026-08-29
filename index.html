@@ -182,33 +182,38 @@
     <div id="pend-inicio-card"></div>
   </div>
 
-  <!-- ── 1. HERO (assimétrico — Proposta C) ── -->
+  <!-- ── 1. HERO — dentro do CAMPO da marca ──
+       O resultado do mês deixa de ser um cartão sobre o fundo e passa a ser o
+       próprio topo do app, em escala de cartaz. A folha começa logo abaixo. -->
   <div class="hc-header">
-    <div class="hc-brand">
-      <span class="hc-tri"></span>
-      <span class="hc-brand-name">Avenco</span>
-    </div>
     <div class="hc-hero">
-      <div class="hc-hero-left">
-        <p class="hc-greeting" id="home-greeting">Boa tarde</p>
-        <p class="hc-month" id="home-month">—</p>
-        <div class="hc-bal-label">Resultado do mês</div>
-        <div class="hc-balance pos" id="home-balance">—</div>
-      </div>
-      <div class="hc-hero-right">
+      <p class="hc-greeting" id="home-greeting">Boa tarde</p>
+      <p class="hc-month" id="home-month">—</p>
+      <div class="hc-bal-label">Resultado do mês</div>
+      <div class="hc-balance pos" id="home-balance">—</div>
+
+      <!-- Proporção entrou/saiu: a mesma informação dos dois números abaixo,
+           lida de relance. Preenchida por renderHomeNew. -->
+      <div class="hc-prop"><i id="home-prop"></i></div>
+
+      <div class="hc-stats">
         <div class="hc-stat">
-          <div class="hc-stat-label">Entradas</div>
-          <div class="hc-stat-val hc-stat-inc" id="home-inc">—</div>
+          <span class="hc-stat-dot hc-stat-dot--inc"></span>
+          <span class="hc-stat-label">Entrou</span>
+          <span class="hc-stat-val hc-stat-inc" id="home-inc">—</span>
         </div>
         <div class="hc-stat hc-stat--exp">
-          <div class="hc-stat-label">Saídas</div>
-          <div class="hc-stat-val hc-stat-exp" id="home-exp">—</div>
+          <span class="hc-stat-label">Saiu</span>
+          <span class="hc-stat-val hc-stat-exp" id="home-exp">—</span>
         </div>
       </div>
     </div>
     <!-- Leitura semântica discreta das saídas (só aparece se houver saída fora de consumo) -->
     <div id="home-cash-breakdown" class="hc-brk" style="display:none"></div>
   </div>
+
+  <!-- ── A FOLHA ── tudo daqui para baixo sobe por cima do campo. -->
+  <div class="hc-sheet">
 
   <!-- Aviso compacto: gastos fixos vencidos e sem baixa no mês atual -->
   <div id="home-fixos-alert"></div>
@@ -294,7 +299,7 @@
     </div>
   </div>
 
-  <div style="height:56px"></div>
+  </div><!-- /.hc-sheet -->
 
 </section>
 

@@ -6893,6 +6893,15 @@ function renderHomeNew() {
   if (incEl) incEl.textContent = R(inc);
   if (expEl) expEl.textContent = R(exp);
 
+  // Barra de proporção do hero: quanto do movimento do mês foi entrada.
+  // É a MESMA informação dos dois números acima, só que lida de relance —
+  // não entra número novo nem cálculo novo.
+  const propEl = document.getElementById('home-prop');
+  if (propEl) {
+    const mov = inc + exp;
+    propEl.style.width = mov > 0 ? (inc / mov * 100).toFixed(2) + '%' : '0%';
+  }
+
   // Detalhamento discreto das saídas: só aparece quando há saída que não é consumo.
   const brkEl = document.getElementById('home-cash-breakdown');
   if (brkEl) {
