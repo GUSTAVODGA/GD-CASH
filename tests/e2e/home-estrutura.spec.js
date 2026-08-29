@@ -123,3 +123,54 @@ test('a arrumação é só apresentação: não encosta em D nem chama save()', 
   expect(await lerEstado(page, 'JSON.stringify(D)')).toBe(antes);
   expect(await lerEstado(page, 'window.__salvou')).toBe(0);
 });
+
+// ── O gráfico é canvas, e canvas não obedece a CSS ────────────────────────
+//
+// Trocar de tema reescreve os tokens e o resto da tela acompanha sozinho. O
+// gráfico não: os pixels já desenhados ficam onde estão. Sem um redesenho
+// explícito, quem trocasse para o escuro continuava vendo as barras, a grade
+// e os meses pintados para o claro — dentro de um cartão que já era escuro.
+//
+// O teste compara a assinatura dos pixels, e não uma cor específica: assim ele
+// continua valendo se a paleta mudar de novo.
+test('trocar de tema repinta o gráfico da Home', async ({ page }) => {
+  await abrir(page);
+  await page.waitForTimeout(400);
+  const pixels = () => page.evaluate(() => document.getElementById('home-chart').toDataURL());
+
+  const claro = await pixels();
+  await page.evaluate(() => window.setTheme('dark'));
+  await page.waitForTimeout(400);
+  const escuro = await pixels();
+  expect(escuro, 'o gráfico ficou com as cores do tema anterior').not.toBe(claro);
+
+  // E o caminho de volta também.
+  await page.evaluate(() => window.setTheme('light'));
+  await page.waitForTimeout(400);
+  expect(await pixels()).not.toBe(escuro);
+});
+
+test('o rótulo do gráfico vem dos tokens, não de cor cravada', async ({ page }) => {
+  await abrir(page);
+  const r = await page.evaluate(() => {
+    const lum = ([r, g, b]) => { const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); };
+      return .2126 * f(r) + .7152 * f(g) + .0722 * f(b); };
+    const cr = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + .05) / (y + .05); };
+    const parse = s => { const m = s.match(/[\d.]+/g).map(Number); return { rgb: m.slice(0, 3), a: m.length > 3 ? m[3] : 1 }; };
+    const sobre = (fg, bg) => fg.rgb.map((c, i) => c * fg.a + bg[i] * (1 - fg.a));
+    const out = {};
+    for (const tema of ['light', 'dark']) {
+      window.setTheme(tema);
+      const fundo = parse(getComputedStyle(document.getElementById('home-chart').closest('.hc-section')).backgroundColor).rgb;
+      const tx3 = parse(getComputedStyle(document.documentElement).getPropertyValue('--tx3').trim());
+      out[tema] = cr(sobre(tx3, fundo), fundo);
+    }
+    out.fonte = getComputedStyle(document.documentElement).getPropertyValue('--font-body').trim();
+    return out;
+  });
+  // Antes: 2,13:1 no claro e 2,94:1 no escuro, com azul-marinho cravado.
+  expect(r.light, 'rótulo do gráfico no tema claro').toBeGreaterThanOrEqual(4.5);
+  expect(r.dark, 'rótulo do gráfico no tema escuro').toBeGreaterThanOrEqual(4.5);
+  // E a fonte é a do app, não a `Inter` que saiu na repaginação.
+  expect(r.fonte).toContain('Onest');
+});

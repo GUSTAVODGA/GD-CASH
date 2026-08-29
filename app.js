@@ -6900,6 +6900,12 @@ function setTheme(mode) {
   const dark = mode === 'dark' ? true : mode === 'light' ? false
     : window.matchMedia('(prefers-color-scheme: dark)').matches;
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  // O gráfico da Home é canvas: CSS não repinta pixels já desenhados. Sem esta
+  // linha ele continuava exibindo as cores do tema ANTERIOR — barras, grade e
+  // rótulos — até que outra coisa forçasse um redesenho. O próprio
+  // `drawHomeChart` já tem o tema na sua chave de cache, então ele redesenha
+  // uma vez e volta a ser barato.
+  drawHomeChart();
   closeOverlay('modal-theme-sheet');
   const chip = document.getElementById('srow-theme-val');
   if (chip) chip.textContent = ({ light:'Claro', dark:'Escuro', auto:'Sistema' })[mode] || 'Sistema';
