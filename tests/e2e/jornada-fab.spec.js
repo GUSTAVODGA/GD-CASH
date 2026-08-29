@@ -46,11 +46,33 @@ const retanguloDoFab = page => page.evaluate(() => {
   return { left, top, right: left + w, bottom: top + h };
 });
 
-/** O botão de confirmar cobre a área do FAB? (origem do defeito) */
-async function sobrepoeOFab(page, seletor) {
+/** Toca no CENTRO do retângulo do FAB.
+ *
+ *  Antes, o botão de confirmar da folha caía por cima do FAB, e tocar no botão
+ *  já era tocar no FAB — a sobreposição vinha de graça. Com o FAB pousado na
+ *  ponta da pílula de navegação, a folha não o cobre mais, e um toque no botão
+ *  de confirmar não prova mais nada sobre ele.
+ *
+ *  Então o toque fantasma passa a ser mirado: bate exatamente onde o "+" está.
+ *  Isso é mais forte que a pré-condição antiga, que dependia de duas caixas se
+ *  encontrarem por acaso — aqui o cenário perigoso é construído de propósito. */
+async function tocarSobreOFab(page) {
   const f = await retanguloDoFab(page);
-  const b = await page.locator(seletor).boundingBox();
-  return !(b.x + b.width < f.left || b.x > f.right || b.y + b.height < f.top || b.y > f.bottom);
+  const x = (f.left + f.right) / 2, y = (f.top + f.bottom) / 2;
+  await page.mouse.click(x, y);
+  return { x, y };
+}
+
+/** Nenhum item da barra mora sob o FAB — senão o toque fantasma trocaria de
+ *  aba em vez de abrir o "+", e o teste passaria pelo motivo errado. */
+async function navLivreSobOFab(page) {
+  const f = await retanguloDoFab(page);
+  return page.evaluate(({ left, top, right, bottom }) => {
+    return [...document.querySelectorAll('.bottom-nav .nav-item')].every(el => {
+      const b = el.getBoundingClientRect();
+      return b.right < left || b.left > right || b.bottom < top || b.top > bottom;
+    });
+  }, f);
 }
 const RESUMO = `({
   despesas: D.expenses.length,
@@ -90,15 +112,14 @@ test('REGRESSÃO fixo: toque fantasma no "Dar baixa" não abre o + nem duplica',
   await esperarOverlay(page, 'modal-baixa', true);
   await page.locator('#baixa-confirm-btn').scrollIntoViewIfNeeded();
 
-  // O botão de confirmar cobre a área do FAB — é a origem do defeito.
-  expect(await sobrepoeOFab(page, '#baixa-confirm-btn'), 'cenário do defeito não se formou').toBe(true);
-  // …mas o FAB está oculto, então não há nada clicável embaixo.
+  // Durante a folha o FAB fica oculto — é essa a guarda que protege a jornada.
   await expect(fab(page)).toBeHidden();
+  expect(await navLivreSobOFab(page), 'um item da barra mora sob o FAB').toBe(true);
 
-  const ponto = await tocarNoPonto(page, '#baixa-confirm-btn');   // confirma a baixa
+  await tocarNoPonto(page, '#baixa-confirm-btn');                 // confirma a baixa
   await esperarOverlay(page, 'modal-baixa', false);
-  // Segundo toque no MESMO ponto, com a folha ainda desaparecendo.
-  await page.mouse.click(ponto.x, ponto.y);
+  // Toques fantasma MIRADOS no "+", com a folha ainda desaparecendo.
+  const ponto = await tocarSobreOFab(page);
   await page.mouse.click(ponto.x, ponto.y);
 
   await expect(page.locator('#modal-quick-add')).not.toHaveClass(/open/);
@@ -119,12 +140,12 @@ test('REGRESSÃO dívida: toque fantasma no "Registrar" não abre o + nem duplic
   await page.locator('#debt-pay-data').fill('15/06/2026');
   await page.locator('#debt-pay-save').scrollIntoViewIfNeeded();
 
-  expect(await sobrepoeOFab(page, '#debt-pay-save'), 'cenário do defeito não se formou').toBe(true);
   await expect(fab(page)).toBeHidden();
+  expect(await navLivreSobOFab(page), 'um item da barra mora sob o FAB').toBe(true);
 
-  const ponto = await tocarNoPonto(page, '#debt-pay-save');
+  await tocarNoPonto(page, '#debt-pay-save');
   await esperarOverlay(page, 'debt-pay-sheet', false);
-  await page.mouse.click(ponto.x, ponto.y);
+  const ponto = await tocarSobreOFab(page);
   await page.mouse.click(ponto.x, ponto.y);
 
   await expect(page.locator('#modal-quick-add')).not.toHaveClass(/open/);

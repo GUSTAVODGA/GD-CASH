@@ -4451,3 +4451,160 @@ button:focus-visible, [role="button"]:focus-visible {
 .pat-kebab-btn:active { background: var(--surface3, var(--surface2)); }
 .pat-kebab-btn:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
 :root[data-theme="dark"] .pat-kebab-btn { color: rgba(232,237,255,.7); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COFRE — A CASCA
+   ══════════════════════════════════════════════════════════════════════════
+
+   A composição do Cofre: a cor da marca é um CAMPO que sangra de borda a
+   borda, e o conteúdo mora numa FOLHA que sobe por cima dele, com raio grande
+   e sombra de contato. A navegação flutua sobre a folha numa pílula.
+
+   Esta seção fica no FIM do arquivo de propósito. As regras de chrome estão
+   espalhadas por umas seis seções de override (mobile, light-mode fixes, etc.)
+   e reescrever cada uma no lugar seria caçar cascata em 4.400 linhas para
+   chegar ao mesmo resultado com mais chance de errar.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* ── O campo ─────────────────────────────────────────────────────────────
+   Sem blur e sem borda inferior: o topo não é uma barra sobre o conteúdo, é
+   o fundo do app aparecendo. A folha é que o cobre. */
+.topbar {
+  background: var(--flood);
+  border-bottom: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 16px 20px 22px;
+  color: var(--on-flood);
+}
+.topbar .logo-greeting,
+.topbar .logo { color: var(--on-flood); }
+.topbar .logo-greeting b { color: var(--on-flood); font-weight: 600; }
+
+.gear-btn {
+  width: 40px; height: 40px;
+  background: var(--on-flood-3);
+  color: var(--on-flood);
+  position: relative;
+}
+/* Alvo de toque de 44px sem inchar o desenho do botão. */
+.gear-btn::before {
+  content: ""; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%); width: 44px; height: 44px;
+}
+.gear-btn:active { background: var(--on-flood-3); transform: scale(.92); }
+
+/* A marca fica SOBRE o campo verde. Pintá-la com `--ac` a fazia sumir no tema
+   claro, onde `--ac` é o próprio verde do campo. Ela inverte: fundo claro,
+   símbolo na cor do campo. */
+.topbar .av-mark { background: var(--on-flood); }
+.topbar .av-mark svg path,
+.topbar .av-mark svg line { stroke: var(--flood); stroke-opacity: 1; }
+
+.user-avatar-btn { border-color: var(--on-flood-3); }
+.curr-chip {
+  background: var(--on-flood-3);
+  border-color: transparent;
+  color: var(--on-flood);
+}
+
+/* O campo continua atrás de tudo: é ele que aparece pelos cantos da folha. */
+main { background: var(--flood); }
+
+/* ── A folha ─────────────────────────────────────────────────────────────
+   Sobe 18px por cima do campo. O `padding-bottom` reserva o espaço da pílula
+   de navegação — sem ele o último cartão fica embaixo dela, que é o defeito
+   que o FAB tinha antes. */
+.page {
+  background: var(--bg);
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  box-shadow: var(--sheet-shadow);
+  padding: 22px 16px 132px;
+  margin-top: -18px;
+  position: relative;
+  z-index: 1;
+}
+.page.active { min-height: calc(100dvh - 40px); }
+
+/* Alça da folha: o mesmo sinal de "isto se puxa" dos bottom sheets do app. */
+.page.active::before {
+  content: "";
+  display: block;
+  width: 38px; height: 4px;
+  border-radius: 999px;
+  background: var(--handle-bg);
+  margin: -8px auto 16px;
+}
+
+/* ── A pílula de navegação ───────────────────────────────────────────────
+   Flutua sobre a folha em vez de ser uma barra colada na borda. O vão à
+   direita é onde o "+" pousa. */
+.bottom-nav {
+  left: 16px; right: 16px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  background: var(--nav-bg);
+  border: none;
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgba(20,25,20,.28), 0 0 0 1px rgba(20,25,20,.04);
+  /* No escuro a pílula é quase da cor da folha; sem um contorno ela deixa de
+     existir como objeto flutuante e vira um rodapé colado. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  padding: 7px 66px 7px 8px;
+  justify-content: space-between;
+}
+.nav-item {
+  color: rgba(253,246,236,.46);
+  min-height: 44px;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 9.5px;
+  letter-spacing: .01em;
+}
+.nav-item svg { width: 20px; height: 20px; }
+.nav-item.active { color: var(--mint); }
+/* O brilho no ícone ativo era decoração; a cor já diz onde você está. */
+.nav-item.active svg { filter: none; }
+
+/* ── O "+" ───────────────────────────────────────────────────────────────
+   Continua `position: fixed` com `right`/`bottom` numéricos porque é assim
+   que a suíte deriva o retângulo que ele ocupa (jornada-fab). Fica pousado
+   na ponta direita da pílula, e por isso lê como parte dela. */
+.global-fab {
+  right: 22px;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  width: 48px; height: 48px;
+  border-radius: 999px;
+}
+
+/* ── Alvos de toque ─────────────────────────────────────────────────────
+   Medidos a 320 e 390px: `nav-arrow` era 36×36, `tab-help-btn` 26×26 (com o
+   "?" cortado), `bud-del` 18×18. O mínimo confortável é 44. Onde o desenho
+   pede um botão pequeno, o alvo cresce por ::before, sem engordar o visual. */
+.nav-arrow { width: 44px; height: 44px; }
+.tab-help-btn {
+  width: 30px; height: 30px;
+  font-size: 13px;
+  line-height: 1;
+  position: relative;
+  overflow: visible;
+}
+.tab-help-btn::before,
+.bud-del::before,
+.wg-edit::before,
+.dacc-tx-edit::before,
+.dacc-tx-del::before {
+  content: ""; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%); width: 44px; height: 44px;
+}
+.bud-del, .wg-edit, .dacc-tx-edit, .dacc-tx-del { position: relative; }
+
+/* A folha já reserva o espaço da pílula; o padding do body viraria vão morto. */
+body { padding-bottom: 0; }
+
+/* ── Ajustes do tema escuro na casca ─────────────────────────────────────── */
+:root[data-theme="dark"] .bottom-nav {
+  background: var(--surface2);
+  box-shadow: 0 10px 30px rgba(0,0,0,.55), 0 0 0 1px rgba(241,237,227,.09);
+}
+:root[data-theme="dark"] .page { box-shadow: var(--sheet-shadow); }
