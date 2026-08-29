@@ -4930,3 +4930,42 @@ body { padding-bottom: 0; }
   padding: 0;
   justify-content: center;
 }
+
+/* ── Vistas da tela Mês ───────────────────────────────────────────────────
+   Três grupos, um toque de distância. O controle é um segmentado sobre a
+   folha, não mais um bloco de conteúdo — ele diz onde você está. */
+.mes-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface2);
+  border-radius: 999px;
+  padding: 4px;
+  margin-bottom: 22px;
+}
+.mes-tab {
+  flex: 1;
+  min-height: 42px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tx2);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+  -webkit-tap-highlight-color: transparent;
+}
+.mes-tab.active {
+  background: var(--surface);
+  color: var(--tx);
+  box-shadow: var(--shadow-sm);
+}
+:root[data-theme="dark"] .mes-tab.active { background: var(--surface3); }
+.mes-tab:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+.mes-vista { display: none; }
+.mes-vista.active { display: block; animation: fade-in var(--dur-normal) var(--ease-out) both; }
+/* O primeiro título de cada vista não precisa do respiro de topo: a aba já
+   separou. */
+.mes-vista > .sec-title:first-child { margin-top: 0; }

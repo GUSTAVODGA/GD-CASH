@@ -2229,7 +2229,34 @@ function deleteExpense(id) {
 // ══════════════════════════════════════════
 // RENDER: MÊS
 // ══════════════════════════════════════════
+// ── Vistas da tela Mês ────────────────────────────────────────────────────
+//
+// A tela tinha 17 blocos empilhados e 3.150px de rolagem: para ver o histórico
+// era preciso passar por tudo. Os mesmos blocos agora vivem em três vistas,
+// agrupados pela pergunta que respondem. Nada foi removido nem escondido —
+// tudo está a um toque, com nome.
+//
+// A vista escolhida NÃO vai para `D`: é estado de tela, não dado do usuário.
+// Mas sobrevive à troca de mês, senão quem está comparando meses no Histórico
+// voltaria ao Resumo a cada seta.
+var _mesView = 'resumo';
+
+function setMesView(vista) {
+  _mesView = vista;
+  document.querySelectorAll('#page-mes .mes-tab').forEach(b => {
+    const ativa = b.dataset.vista === vista;
+    b.classList.toggle('active', ativa);
+    b.setAttribute('aria-selected', ativa ? 'true' : 'false');
+  });
+  document.querySelectorAll('#page-mes .mes-vista').forEach(v => {
+    v.classList.toggle('active', v.dataset.vista === vista);
+  });
+}
+
 function renderMes() {
+  // Reaplica a vista: o render redesenha o miolo, e as classes precisam
+  // acompanhar (inclusive no primeiro render, que monta as abas).
+  setMesView(_mesView);
   document.getElementById('month-lbl').textContent=fmtMonthYear(monthOffset);
   const summary=buildMonthSummary(monthOffset);
   const sumEl=document.getElementById('month-summary');

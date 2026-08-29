@@ -427,55 +427,73 @@
     </div>
   </div>
 
-  <!-- ── A FOLHA ── -->
+  <!-- ── A FOLHA ──
+       A tela deixa de ser 3.150px de rolagem e passa a ter VISTAS. Nada foi
+       removido nem escondido: os mesmos blocos, agrupados por pergunta e a um
+       toque de distância. -->
   <div class="mes-sheet">
 
-  <div class="month-summary" id="month-summary" style="display:none">
-    <span class="month-summary-icon">💬</span>
-    <p class="month-summary-text" id="month-summary-text"></p>
+  <div class="mes-tabs" role="tablist" aria-label="Vistas do mês">
+    <button class="mes-tab active" role="tab" aria-selected="true"  data-vista="resumo"   onclick="setMesView('resumo')">Resumo</button>
+    <button class="mes-tab"        role="tab" aria-selected="false" data-vista="analise"  onclick="setMesView('analise')">Análise</button>
+    <button class="mes-tab"        role="tab" aria-selected="false" data-vista="evolucao" onclick="setMesView('evolucao')">Evolução</button>
   </div>
 
-  <!-- Compromissos previstos do mês (dívidas) — SEPARADO do resultado realizado -->
-  <div id="mes-previsto"></div>
+  <!-- ── Vista 1: RESUMO — "como foi o mês e o que vence" ── -->
+  <div class="mes-vista active" data-vista="resumo">
+    <div class="month-summary" id="month-summary" style="display:none">
+      <span class="month-summary-icon">💬</span>
+      <p class="month-summary-text" id="month-summary-text"></p>
+    </div>
 
-  <!-- Gastos por categoria — grande -->
-  <div class="sec-title av-sec-title">Gastos por categoria</div>
-  <div class="card av-card big-donut-card">
-    <div class="big-donut-wrap">
-      <svg class="big-donut-svg" id="cat-donut" viewBox="0 0 200 200"></svg>
-      <div class="big-donut-center" id="cat-donut-center">
-        <div class="bdc-top" id="cat-donut-top">Total gasto</div>
-        <div class="bdc-val" id="cat-donut-total">—</div>
-        <div class="bdc-lbl" id="cat-donut-lbl">—</div>
+    <!-- Compromissos previstos do mês (dívidas) — SEPARADO do resultado realizado -->
+    <div id="mes-previsto"></div>
+
+    <!-- Gastos por categoria — grande -->
+    <div class="sec-title av-sec-title">Gastos por categoria</div>
+    <div class="card av-card big-donut-card">
+      <div class="big-donut-wrap">
+        <svg class="big-donut-svg" id="cat-donut" viewBox="0 0 200 200"></svg>
+        <div class="big-donut-center" id="cat-donut-center">
+          <div class="bdc-top" id="cat-donut-top">Total gasto</div>
+          <div class="bdc-val" id="cat-donut-total">—</div>
+          <div class="bdc-lbl" id="cat-donut-lbl">—</div>
+        </div>
+      </div>
+      <div class="cat-list" id="cat-legend"></div>
+    </div>
+  </div>
+
+  <!-- ── Vista 2: ANÁLISE — "como este mês se compara e de onde veio" ── -->
+  <div class="mes-vista" data-vista="analise">
+    <!-- Comparativo com o mês anterior + Destaque do mês -->
+    <div id="mes-comp-section"></div>
+    <div id="mes-insights-section"></div>
+
+    <!-- Receita por plataforma -->
+    <div class="sec-title av-sec-title">Receita por plataforma</div>
+    <div class="card av-card donut-card">
+      <div class="donut-row">
+        <svg class="donut-svg" id="plat-donut" viewBox="0 0 120 120"></svg>
+        <div class="legend" id="plat-legend"></div>
       </div>
     </div>
-    <div class="cat-list" id="cat-legend"></div>
-  </div>
 
-  <!-- Comparativo com o mês anterior + Destaque do mês (após a seção de categorias) -->
-  <div id="mes-comp-section"></div>
-  <div id="mes-insights-section"></div>
-
-  <!-- Receita por plataforma -->
-  <div class="sec-title av-sec-title">Receita por plataforma</div>
-  <div class="card av-card donut-card">
-    <div class="donut-row">
-      <svg class="donut-svg" id="plat-donut" viewBox="0 0 120 120"></svg>
-      <div class="legend" id="plat-legend"></div>
+    <div id="cat-budget-section">
+      <div class="sec-title av-sec-title">Orçamento por categoria</div>
+      <div class="card av-card" id="cat-budget-bars">
+        <div class="empty-state">Nenhum limite definido. Configure em Ajustes.</div>
+      </div>
     </div>
   </div>
 
-  <div class="sec-title av-sec-title">Semana a semana</div>
-  <div class="card av-card" id="s2s-bars"></div>
+  <!-- ── Vista 3: EVOLUÇÃO — "estou melhorando?" ── -->
+  <div class="mes-vista" data-vista="evolucao">
+    <div class="sec-title av-sec-title">Semana a semana</div>
+    <div class="card av-card" id="s2s-bars"></div>
 
-  <div class="sec-title av-sec-title">Histórico 6 meses</div>
-  <div class="card av-card" id="trends-chart"></div>
-
-  <div id="cat-budget-section">
-    <div class="sec-title av-sec-title">Orçamento por categoria</div>
-    <div class="card av-card" id="cat-budget-bars">
-      <div class="empty-state">Nenhum limite definido. Configure em Ajustes.</div>
-    </div>
+    <div class="sec-title av-sec-title">Histórico 6 meses</div>
+    <div class="card av-card" id="trends-chart"></div>
   </div>
 
   <!-- Duas ações, dois pesos: o PDF é a ação do mês; o e-mail é a alternativa.
