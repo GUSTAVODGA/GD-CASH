@@ -4757,3 +4757,176 @@ body { padding-bottom: 0; }
    espaçamento já separa, e a régua vira ruído. */
 .hc-sheet .hc-rule { display: none; }
 .hc-section { margin-bottom: 26px; }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COFRE — MÊS
+   A tela mais densa do app: 17 blocos e 3,4 telas de altura. Aqui ela ganha a
+   mesma gramática da Home — campo em cima, folha embaixo — e os contêineres
+   perdem peso, para que a hierarquia venha do tipo e não da moldura.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+#page-mes {
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+  margin-top: 0;
+}
+#page-mes.active::before { display: none; }
+
+/* ── O campo ── */
+.mes-header {
+  background: var(--flood);
+  color: var(--on-flood);
+  padding: 4px 20px 30px;
+}
+.mes-header .nav-row { margin-bottom: 20px; }
+.mes-header .nav-arrow {
+  background: var(--on-flood-3);
+  border-color: transparent;
+  color: var(--on-flood);
+  border-radius: 999px;
+}
+.mes-header .nav-title,
+.mes-header .nav-title b { color: var(--on-flood); font-size: 15px; }
+.mes-header .nav-title-pick { text-decoration-color: var(--on-flood-3); }
+.mes-header .tab-help-btn {
+  background: var(--on-flood-3);
+  border-color: transparent;
+  color: var(--on-flood);
+}
+
+/* O herói deixa de ser cartão: dentro do campo ele é o próprio campo. */
+.mes-header .hero-card {
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 0;
+  border-radius: 0;
+}
+.mes-header .mes-hero-lbl {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--on-flood-2);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.mes-header .mes-hero-val,
+#hero-mes.pos .mes-hero-val,
+#hero-mes.neg .mes-hero-val {
+  font-family: var(--font-disp);
+  font-weight: 700;
+  letter-spacing: -.035em;
+  color: var(--on-flood);
+}
+/* Verde e coral saturados perdem legibilidade sobre o campo verde; o sinal
+   já vem escrito no número. */
+#hero-mes.neg .mes-hero-val { color: #FFB9A5; }
+.mes-header .mes-stat-lbl {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--on-flood-2);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.mes-header .mes-stat-val,
+.mes-header .mes-stat-inc,
+.mes-header .mes-stat-exp {
+  font-family: var(--font-disp);
+  color: var(--on-flood);
+  font-weight: 600;
+}
+.mes-header .mes-resv-bar {
+  border-top: 1px solid var(--on-flood-3);
+  margin-top: 18px;
+  padding-top: 14px;
+}
+.mes-header .mes-resv-lbl {
+  color: var(--on-flood-2);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 12.5px;
+}
+.mes-header .mes-resv-val { color: var(--on-flood); font-family: var(--font-disp); font-weight: 600; }
+
+/* ── A folha ── */
+.mes-sheet {
+  background: var(--bg);
+  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+  box-shadow: var(--sheet-shadow);
+  margin-top: -18px;
+  padding: 22px 16px 132px;
+  position: relative;
+  min-height: 40vh;
+}
+.mes-sheet::before {
+  content: "";
+  display: block;
+  width: 38px; height: 4px;
+  border-radius: 999px;
+  background: var(--handle-bg);
+  margin: -8px auto 18px;
+}
+
+/* Títulos de seção com o mesmo peso da Home. Era 9px em caixa alta com
+   tracking — menor e mais apagado que o conteúdo que ele organiza.
+   O seletor precisa do id porque `#page-mes .sec-title` (linha ~2847) traz
+   especificidade de id, e é ele quem desenhava o triângulo decorativo. */
+#page-mes .mes-sheet .sec-title,
+#page-mes .mes-sheet .av-sec-title,
+#page-reserva .sec-title,
+#page-fixos .sec-title,
+#page-pendencias .sec-title,
+#page-metas .sec-title {
+  display: block;
+  font-family: var(--font-disp);
+  font-size: 18px;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: -.02em;
+  color: var(--tx);
+  margin: 26px 0 12px;
+  line-height: 1.2;
+}
+#page-mes .mes-sheet .sec-title::before,
+#page-reserva .sec-title::before,
+#page-fixos .sec-title::before,
+#page-pendencias .sec-title::before,
+#page-metas .sec-title::before { content: none; }
+#page-mes .mes-sheet .sec-title:first-child,
+#page-mes .mes-sheet .av-sec-title:first-child { margin-top: 0; }
+
+/* Contêiner mais leve: a folha já é uma superfície, e um cartão branco com
+   sombra em cima dela vira caixa dentro de caixa. */
+.mes-sheet .av-card,
+.mes-sheet .card {
+  background: var(--surface);
+  box-shadow: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+/* ── As duas ações do mês ── */
+.mes-acoes { display: flex; gap: 9px; margin-top: 28px; }
+.share-month-btn--pri {
+  flex: 1;
+  background: var(--ac);
+  color: var(--on-flood);
+  border: none;
+  border-radius: 999px;
+  min-height: 50px;
+}
+.share-month-btn--pri svg { stroke: var(--on-flood); }
+.share-month-btn--sec {
+  width: 54px;
+  flex: 0 0 auto;
+  background: transparent;
+  color: var(--tx2);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  min-height: 50px;
+  padding: 0;
+  justify-content: center;
+}

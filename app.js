@@ -5560,9 +5560,9 @@ function buildDemoData() {
 
   return {
     platforms: [
-      { id:'d1', name:'Uber Eats',  color:'#00e6a0' },
-      { id:'d2', name:'iFood',      color:'#ffb800' },
-      { id:'d3', name:'Freelance',  color:'#3ec6ff' },
+      { id:'d1', name:'Uber Eats',  color:PALETTE[0] },
+      { id:'d2', name:'iFood',      color:PALETTE[1] },
+      { id:'d3', name:'Freelance',  color:PALETTE[2] },
     ],
     dailyIncome: inc,
     daysOff: [w[5], w[6]],
@@ -5784,21 +5784,21 @@ function renderTrendsChart() {
     const hasData = m.inc > 0 || m.exp > 0;
     bars += `
       <rect x="${x}" y="${chartH - ih}" width="${bW}" height="${ih}" rx="5"
-        fill="#00e6a0" opacity="${m.inc > 0 ? 1 : 0.15}"
+        fill="${_cssVar('--gn')}" opacity="${m.inc > 0 ? 1 : 0.15}"
         style="transition:height .5s ${i*0.06}s,y .5s ${i*0.06}s"/>
       <rect x="${x + bW + gap}" y="${chartH - eh}" width="${bW}" height="${eh}" rx="5"
-        fill="#ff4d6a" opacity="${m.exp > 0 ? 1 : 0.15}"
+        fill="${_cssVar('--rd')}" opacity="${m.exp > 0 ? 1 : 0.15}"
         style="transition:height .5s ${i*0.06}s,y .5s ${i*0.06}s"/>
       <text x="${cx}" y="${H - 3}" text-anchor="middle"
-        fill="${hasData ? 'rgba(245,246,248,.55)' : 'rgba(245,246,248,.2)'}"
+        fill="${hasData ? _cssVar('--tx2') : _cssVar('--tx3')}"
         font-size="9.5" font-family="-apple-system,sans-serif" font-weight="700">${m.label}</text>
     `;
   });
   container.innerHTML = `
     <svg viewBox="0 0 ${totalW} ${H}" style="width:100%;overflow:visible;display:block">${bars}</svg>
     <div class="trends-legend">
-      <span class="trends-dot" style="background:#00e6a0"></span><span>Receita</span>
-      <span class="trends-dot" style="background:#ff4d6a"></span><span>Gastos</span>
+      <span class="trends-dot" style="background:${_cssVar('--gn')}"></span><span>Receita</span>
+      <span class="trends-dot" style="background:${_cssVar('--rd')}"></span><span>Gastos</span>
     </div>`;
 }
 
@@ -6693,7 +6693,7 @@ var PEND_CAT_NAMES   = { carro:'Carro', casa:'Casa', documento:'Documento', fina
 var PEND_PRIO_NAMES  = { alta:'Alta prioridade', media:'Média prioridade', baixa:'Baixa prioridade' };
 var PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baixa' };
 var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
-var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
+var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'var(--c-warning)', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
 var _vehDetailId = null;
 var _vehEventTarget = null;
 var _vehLinkExpTarget = null;
@@ -8592,7 +8592,7 @@ function escHtml(s) {
 }
 
 var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
-var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'#f59e0b', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
+var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'var(--c-warning)', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
 
 var _vehDetailId = null;
 

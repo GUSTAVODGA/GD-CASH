@@ -393,39 +393,46 @@
 
 <!-- ════ MÊS ════ -->
 <section class="page" id="page-mes">
-  <div class="nav-row">
-    <button class="nav-arrow" onclick="changeMonth(-1)">‹</button>
-    <div class="nav-title nav-title-pick" id="month-lbl" onclick="openMonthPicker()">Mês</div>
-    <button class="nav-arrow" onclick="changeMonth(1)">›</button>
-    <button class="tab-help-btn" onclick="showTabHelp('mes')">?</button>
+
+  <!-- ── O CAMPO ── seletor de mês e resultado, como na Home. -->
+  <div class="mes-header">
+    <div class="nav-row">
+      <button class="nav-arrow" onclick="changeMonth(-1)">‹</button>
+      <div class="nav-title nav-title-pick" id="month-lbl" onclick="openMonthPicker()">Mês</div>
+      <button class="nav-arrow" onclick="changeMonth(1)">›</button>
+      <button class="tab-help-btn" onclick="showTabHelp('mes')">?</button>
+    </div>
+
+    <div class="hero-card pos" id="hero-mes">
+      <div class="mes-hero-body">
+        <div class="mes-hero-left">
+          <div class="mes-hero-lbl">Resultado do mês</div>
+          <div class="mes-hero-val" id="mes-liq">—</div>
+        </div>
+        <div class="mes-hero-right">
+          <div class="mes-stat">
+            <div class="mes-stat-lbl">Entradas</div>
+            <div class="mes-stat-val mes-stat-inc" id="mes-inc">—</div>
+          </div>
+          <div class="mes-stat">
+            <div class="mes-stat-lbl">Saídas</div>
+            <div class="mes-stat-val mes-stat-exp" id="mes-exp">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="mes-resv-bar">
+        <span class="mes-resv-lbl">Guardado na reserva</span>
+        <span class="mes-resv-val" id="mes-resv">—</span>
+      </div>
+    </div>
   </div>
+
+  <!-- ── A FOLHA ── -->
+  <div class="mes-sheet">
 
   <div class="month-summary" id="month-summary" style="display:none">
     <span class="month-summary-icon">💬</span>
     <p class="month-summary-text" id="month-summary-text"></p>
-  </div>
-
-  <div class="hero-card pos" id="hero-mes">
-    <div class="mes-hero-body">
-      <div class="mes-hero-left">
-        <div class="mes-hero-lbl">Resultado do mês</div>
-        <div class="mes-hero-val" id="mes-liq">—</div>
-      </div>
-      <div class="mes-hero-right">
-        <div class="mes-stat">
-          <div class="mes-stat-lbl">Entradas</div>
-          <div class="mes-stat-val mes-stat-inc" id="mes-inc">—</div>
-        </div>
-        <div class="mes-stat">
-          <div class="mes-stat-lbl">Saídas</div>
-          <div class="mes-stat-val mes-stat-exp" id="mes-exp">—</div>
-        </div>
-      </div>
-    </div>
-    <div class="mes-resv-bar">
-      <span class="mes-resv-lbl">Guardado na reserva</span>
-      <span class="mes-resv-val" id="mes-resv">—</span>
-    </div>
   </div>
 
   <!-- Compromissos previstos do mês (dívidas) — SEPARADO do resultado realizado -->
@@ -471,19 +478,24 @@
     </div>
   </div>
 
-  <button class="share-month-btn" onclick="shareMonthReport()">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-      <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-    </svg>
-    Compartilhar relatório
-  </button>
-  <button class="share-month-btn" onclick="emailMonthReport()">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-    </svg>
-    Enviar resumo por e-mail
-  </button>
+  <!-- Duas ações, dois pesos: o PDF é a ação do mês; o e-mail é a alternativa.
+       Empilhadas e idênticas, competiam entre si. -->
+  <div class="mes-acoes">
+    <button class="share-month-btn share-month-btn--pri" onclick="shareMonthReport()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </svg>
+      Compartilhar relatório
+    </button>
+    <button class="share-month-btn share-month-btn--sec" onclick="emailMonthReport()" title="Enviar resumo por e-mail" aria-label="Enviar resumo por e-mail">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+      </svg>
+    </button>
+  </div>
+
+  </div><!-- /.mes-sheet -->
 </section>
 
 <!-- ════ FIXOS ════ -->
