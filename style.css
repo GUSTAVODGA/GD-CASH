@@ -4947,7 +4947,7 @@ body { padding-bottom: 0; }
 }
 .mes-tab {
   flex: 1;
-  min-height: 42px;
+  min-height: 44px;
   border: none;
   border-radius: 999px;
   background: transparent;
@@ -5034,10 +5034,19 @@ body { padding-bottom: 0; }
   display: flex;
   gap: 6px;
   margin-bottom: 14px;
+  /* Sete alvos de 44px não cabem em 320px (7×44 mais os vãos passa de 330).
+     Em vez de encolher o alvo até um dedo não acertar, a faixa rola nessa
+     largura — do mesmo jeito que as outras faixas do app. */
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.dsem-faixa::-webkit-scrollbar { display: none; }
 .dsem-dia {
-  flex: 1;
-  min-width: 0;
+  flex: 1 0 44px;
+  min-width: 44px;
+  scroll-snap-align: start;
   min-height: 62px;
   display: flex;
   flex-direction: column;
@@ -5151,4 +5160,68 @@ body { padding-bottom: 0; }
   border-radius: 999px;
   background: var(--handle-bg);
   margin: -8px auto 18px;
+}
+
+/* ── Alvos de toque nas telas internas ────────────────────────────────────
+   Levantamento a 390px nas catorze telas: dezesseis botões abaixo de 44px.
+   Cinco já haviam sido tratados na fase da casca; estes são o resto.
+
+   Dois tratamentos, conforme o botão:
+
+   • Onde o desenho pede um botão pequeno (lápis, lixeira, kebab, link de
+     seção), o VISUAL fica como está e só a área cresce, por ::before. Inchar
+     o botão estragaria a linha em que ele vive.
+   • Onde o botão já é largo e só falta altura (pílulas, chips, segmentos),
+     `min-height` resolve sem efeito colateral. */
+.page-back-btn,
+.res-hist-kebab,
+.fixed-kebab,
+.fixed-del,
+.res-meta-link,
+.hc-sec-link { position: relative; }
+
+.page-back-btn::before,
+.res-hist-kebab::before,
+.fixed-kebab::before,
+.fixed-del::before,
+.res-meta-link::before,
+.hc-sec-link::before {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px; height: 44px;
+}
+
+.btn-pill,
+.div-chip,
+.pend-filter-btn,
+.fixed-baixa-btn,
+.srch-seg-btn {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* O "✕" de remover limite em Ajustes media 13×18. Classe própria, e não a
+   `.bud-del` da tela Mês: aquela é `position:absolute` e aqui deslocaria o
+   botão para fora da linha. */
+.bud-del-row {
+  position: relative;
+  background: none;
+  border: none;
+  color: var(--tx2);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.bud-del-row::before {
+  content: "";
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 44px; height: 44px;
 }

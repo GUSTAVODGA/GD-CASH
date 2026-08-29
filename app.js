@@ -6406,7 +6406,7 @@ function renderBudgetSettings() {
        <span>${cat}</span>
        <span style="display:flex;align-items:center;gap:10px">
          <span style="color:var(--gold);font-weight:700">${R(limit)}</span>
-         <button onclick="deleteCatBudget('${cat}')" style="background:none;border:none;color:var(--text3);font-size:15px;cursor:pointer;padding:0">✕</button>
+         <button class="bud-del-row" onclick="deleteCatBudget('${cat}')" aria-label="Remover limite de ${cat}">✕</button>
        </span>
      </div>`).join('');
 }
@@ -7264,7 +7264,7 @@ function renderDayAccordion() {
 
     // "Editar dia completo" footer inside expanded body
     const editFooter = `<div style="padding:10px 14px;border-top:1px solid var(--border)">
-      <button onclick="event.stopPropagation();openDayDetail(${i})" style="width:100%;padding:10px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
+      <button onclick="event.stopPropagation();openDayDetail(${i})" style="width:100%;min-height:44px;padding:12px;border-radius:12px;border:1px solid var(--border);background:var(--surface2);color:var(--tx2);font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Editar dia completo
       </button>
@@ -8231,7 +8231,7 @@ function renderBudgetSettingsInline() {
        <span>${escHtml(cat)}</span>
        <span style="display:flex;align-items:center;gap:10px">
          <span style="color:var(--ac);font-weight:700">${R(limit)}</span>
-         <button onclick="deleteCatBudget('${escHtml(cat)}')" style="background:none;border:none;color:var(--tx3);font-size:15px;cursor:pointer;padding:0">✕</button>
+         <button class="bud-del-row" onclick="deleteCatBudget('${escHtml(cat)}')" aria-label="Remover limite">✕</button>
        </span>
      </div>`).join('');
 }
