@@ -4969,3 +4969,53 @@ body { padding-bottom: 0; }
 /* O primeiro título de cada vista não precisa do respiro de topo: a aba já
    separou. */
 .mes-vista > .sec-title:first-child { margin-top: 0; }
+
+/* ── Home: precisa de você ────────────────────────────────────────────────
+   Três seções empilhadas viraram um grupo. Cada filho continua aparecendo só
+   quando tem o que dizer, e o `gap` some sozinho quando um deles está oculto —
+   por isso `flex` e não `margin` nos filhos. */
+.hc-atencao { display: flex; flex-direction: column; gap: 12px; }
+.hc-atencao:empty { display: none; }
+.hc-atencao > * { margin: 0 !important; }
+.hc-atencao .hc-section { margin-bottom: 0; }
+
+/* ── Home: o baralho ──────────────────────────────────────────────────────
+   Evolução, Reserva e Meta pediam três alturas de tela para dizer três coisas
+   do mesmo peso. Aqui dividem o mesmo espaço, com encaixe por rolagem.
+
+   O sangramento lateral negativo é intencional: o cartão seguinte precisa
+   aparecer cortado na borda, senão nada indica que há mais de um. */
+.hc-deck {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  margin: 22px -16px 26px;
+  padding: 0 16px 4px;
+  scrollbar-width: none;
+}
+.hc-deck::-webkit-scrollbar { display: none; }
+.hc-deck > .hc-section {
+  flex: 0 0 86%;
+  scroll-snap-align: start;
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-width: 0;
+}
+/* Dentro do baralho o cartão JÁ é o contêiner; um segundo por dentro seria
+   caixa dentro de caixa. */
+.hc-deck .hc-chart-box,
+.hc-deck .hc-resv-card,
+.hc-deck .hc-goal-card {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+.hc-deck .hc-sec-hd { margin-bottom: 12px; }
+.hc-deck .hc-sec-title { font-size: 16px; }
+.hc-deck .hc-section--sep { border-top: none; padding-top: 0; }
