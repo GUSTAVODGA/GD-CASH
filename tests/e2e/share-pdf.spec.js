@@ -461,3 +461,57 @@ test('GEOMETRIA: o mês mais longo não colide com a marca no cabeçalho', async
   });
   expect(medidas.faixa, 'a faixa de continuação estoura a largura útil').toBeLessThan(medidas.disponivel);
 });
+
+// ══ IDENTIDADE: O RELATÓRIO TEM A CARA DO APP ════════════════════════════
+//
+// O PDF ficou de fora da repaginação e continuou saindo em azul-marinho: quem
+// recebia via um documento de outro produto. Estes testes prendem a paleta ao
+// verde da identidade e ao piso de contraste — o papel é sempre branco, então
+// não há tema escuro para negociar, e "escureci um pouco" não é argumento.
+
+const CONTRASTE = (a, b) => {
+  const lum = ([r, g, bl]) => {
+    const f = v => { v /= 255; return v <= .03928 ? v / 12.92 : Math.pow((v + .055) / 1.055, 2.4); };
+    return .2126 * f(r) + .7152 * f(g) + .0722 * f(bl);
+  };
+  const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+  return (x + .05) / (y + .05);
+};
+
+test('a paleta do relatório é a da identidade, não a azul anterior', async ({ page }) => {
+  await abrir(page, COMPLETO);
+  // `const PDF_C` vive no escopo do script, não em `window` — mesma armadilha
+  // de `monthOffset`. `window.eval` alcança o binding.
+  const c = await page.evaluate(() => window.eval('PDF_C'));
+
+  // O azul-marinho e o azul-royal da versão antiga não podem voltar por nenhuma via.
+  const proibidos = [[13, 20, 64], [37, 99, 235], [110, 122, 150], [214, 220, 235], [237, 242, 249]];
+  Object.entries(c).forEach(([nome, cor]) => {
+    proibidos.forEach(p => {
+      expect(cor.join(','), `${nome} voltou a uma cor da identidade antiga`).not.toBe(p.join(','));
+    });
+  });
+
+  // O cabeçalho das tabelas é o campo verde da marca.
+  expect(c.cabecalho).toEqual([12, 79, 63]);
+  expect(c.acento).toEqual([12, 79, 63]);
+});
+
+test('todo texto do relatório passa do piso de contraste no papel', async ({ page }) => {
+  await abrir(page, COMPLETO);
+  // `const PDF_C` vive no escopo do script, não em `window` — mesma armadilha
+  // de `monthOffset`. `window.eval` alcança o binding.
+  const c = await page.evaluate(() => window.eval('PDF_C'));
+  const BRANCO = [255, 255, 255];
+
+  // Texto sobre o papel e sobre as duas faixas de fundo das tabelas.
+  [['tinta', c.tinta], ['suave', c.suave], ['verde', c.verde], ['vermelho', c.vermelho]]
+    .forEach(([nome, cor]) => {
+      [['papel', BRANCO], ['zebra', c.zebra], ['total', c.total]].forEach(([onde, fundo]) => {
+        expect(CONTRASTE(cor, fundo), `${nome} sobre ${onde}`).toBeGreaterThanOrEqual(4.5);
+      });
+    });
+
+  // O cabeçalho da tabela leva texto branco por cima.
+  expect(CONTRASTE(BRANCO, c.cabecalho), 'branco sobre o cabeçalho').toBeGreaterThanOrEqual(4.5);
+});

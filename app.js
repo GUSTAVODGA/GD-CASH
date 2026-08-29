@@ -6043,10 +6043,33 @@ async function _pdfGarantirLib() {
 
 // Paleta do documento (RGB para o jsPDF). Impressão é sempre clara: um
 // relatório não muda de cor com o tema do app.
+// Paleta do relatório. Espelha a identidade das telas, resolvida para papel:
+// o PDF sai sempre sobre branco, então os valores vêm da variante clara, já
+// achatados (o jsPDF não tem alfa) e conferidos um a um contra o branco e
+// contra a zebra — o piso é 4,5:1, e o menor aqui é 5,3:1.
+//
+// Cada cor de texto foi conferida contra os TRÊS fundos que o documento usa —
+// papel, zebra e a faixa de "Total" — e o pior caso de cada uma é o que está
+// anotado. O verde e o vermelho da tela reprovavam sobre a faixa de Total
+// (4,20:1 e 4,32:1), então aqui vão um passo mais escuros: é a mesma família,
+// resolvida para papel. A tela não muda.
+//
+//                              papel  zebra  total
+//   tinta     20,25,20         17,8   15,6   14,0
+//   suave     95,99,95          6,1    5,3    4,8
+//   verde     12,115,77         5,9    5,1    4,6
+//   vermelho  168,62,52         6,2    5,4    4,8
+//   cabecalho 12,79,63   — --flood, com texto branco em cima: 9,5:1
+//   zebra     245,239,227— --surface2, o creme da identidade
+//   total     235,227,212— --surface3, a faixa de fecho das tabelas
+//   linha     220,221,220— hairline, decorativa (sem piso)
+//
+// Antes daqui era azul-marinho e azul-royal: o relatório saía com a cara da
+// versão anterior do app, e quem recebia via um documento de outro produto.
 const PDF_C = Object.freeze({
-  tinta: [13, 20, 64], suave: [110, 122, 150], linha: [214, 220, 235],
-  zebra: [246, 247, 251], cabecalho: [13, 20, 64],
-  verde: [22, 122, 62], vermelho: [178, 40, 40], acento: [37, 99, 235],
+  tinta: [20, 25, 20], suave: [95, 99, 95], linha: [220, 221, 220],
+  zebra: [245, 239, 227], total: [235, 227, 212], cabecalho: [12, 79, 63],
+  verde: [12, 115, 77], vermelho: [168, 62, 52], acento: [12, 79, 63],
 });
 
 // ── Codificação: as fontes padrão do jsPDF escrevem em cp1252 ─────────────
@@ -6290,7 +6313,7 @@ function _pdfOpts(M, extra) {
     styles: { font: 'helvetica', fontSize: 9, cellPadding: 5, textColor: PDF_C.tinta, lineColor: PDF_C.linha, lineWidth: 0.5, overflow: 'linebreak' },
     headStyles: { fillColor: PDF_C.cabecalho, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
     alternateRowStyles: { fillColor: PDF_C.zebra },
-    footStyles: { fillColor: [237, 242, 249], textColor: PDF_C.tinta },
+    footStyles: { fillColor: PDF_C.total, textColor: PDF_C.tinta },
     // O total é do MÊS, não da página: repeti-lo em cada página faria a
     // primeira parecer fechada em si mesma. Cabeçalho repete; total, não.
     showFoot: 'lastPage',
@@ -7126,14 +7149,18 @@ function drawHomeChart() {
   const barW   = Math.min(groupW * 0.27, 15);
   const barGap = groupW * 0.055;
 
-  const isDark    = document.documentElement.dataset.theme === 'dark';
   // Mesma codificação do resto do app: entrada é verde, saída é coral. Antes
   // este gráfico usava azul para entrada e azul-claro para saída, enquanto a
   // tela Mês pintava o MESMO dado de verde e vermelho.
   const incColor  = _cssVar('--gn');
   const expColor  = _cssVar('--rd');
-  const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(12,18,64,.06)';
-  const lblColor  = isDark ? 'rgba(232,237,255,.35)' : 'rgba(12,18,64,.33)';
+  // Este canvas ficou de fora da repaginação: pintava rótulo e grade com o
+  // azul-marinho da identidade antiga, em alfa .33/.35 — 2,13:1 no claro e
+  // 2,94:1 no escuro, abaixo do piso de 4,5:1 para texto pequeno. Os meses sob
+  // as barras praticamente sumiam no tema escuro. Lendo os tokens, o rótulo
+  // herda os 4,6:1 já resolvidos em `--tx3` e acompanha qualquer tema futuro.
+  const gridColor = _cssVar('--border');
+  const lblColor  = _cssVar('--tx3');
 
   ctx.clearRect(0, 0, cw, ch);
 
@@ -7159,7 +7186,9 @@ function drawHomeChart() {
 
     ctx.globalAlpha = 1;
     ctx.fillStyle = lblColor;
-    ctx.font = `600 10px Inter, -apple-system, sans-serif`;
+    // `Inter` saiu do app na repaginação; só este canvas continuava pedindo por
+    // nome uma fonte que a página não carrega mais.
+    ctx.font = `600 10px ${_cssVar('--font-body') || 'sans-serif'}`;
     ctx.textAlign = 'center';
     const lbl = m.lbl.charAt(0).toUpperCase() + m.lbl.slice(1, 3);
     ctx.fillText(lbl, cx, padT + chartH + 16);
