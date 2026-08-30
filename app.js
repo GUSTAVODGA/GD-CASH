@@ -502,7 +502,11 @@ function renderMais() {
   const resCur = (D.emergency && D.emergency.current) || 0;
   const resTgt = (D.emergency && D.emergency.target) || 0;
   const resPct = resTgt > 0 ? Math.min(100, Math.round(resCur / resTgt * 100)) : 0;
-  const net = _patNetTotals(_patUnifiedItems()).net;
+  const _itensPat = _patUnifiedItems();
+  const net = _patNetTotals(_itensPat).net;
+  // O menu também lidera pelo custo — mesma razão da capa do módulo.
+  const custoPat = _itensPat.filter(i => i.status === 'ativo')
+    .reduce((soma, i) => soma + ((i.vehId || i.patId) ? _bemCustoMes(i.vehId || i.patId).total : 0), 0);
   const dividasAtivas = (D.debts || []).filter(d => { const s = _debtStatus(d); return s === 'ativa' || s === 'atrasada'; });
   const dividasSaldo = dividasAtivas.reduce((s, d) => s + _debtSaldo(d), 0);
   const themeLbls = { light:'Claro', dark:'Escuro', auto:'Automático' };
@@ -557,7 +561,7 @@ function renderMais() {
       ${item('fixos', ICO.fix, 'Gastos Fixos', `${R(fixTotal)} / mês`)}
       ${item('reserva', ICO.res, 'Reserva de Emergência', resTgt > 0 ? `${R(resCur)} · ${resPct}% da meta` : R(resCur))}
       ${item('metas', ICO.meta, 'Metas', metaInfo)}
-      ${item('patrimonio', ICO.pat, 'Patrimônio', `Líquido ${R(net)}`)}
+      ${item('patrimonio', ICO.pat, 'Patrimônio', custoPat > 0 ? `${R(custoPat)} este mês · líquido ${R(net)}` : `Líquido ${R(net)}`)}
       ${item('dividas', ICO.debt, 'Dívidas', dividasAtivas.length > 0 ? `${dividasAtivas.length} ativa(s) · ${R(dividasSaldo)} devedor` : 'Nenhuma ativa')}
     </div>
     <div class="sec-label mais-sec">Ferramentas</div>
@@ -2081,26 +2085,45 @@ function _ymNow() { const d = new Date(); return `${d.getFullYear()}-${String(d.
 //   fin       → pagamento de dívida do próprio veículo (debt-payment);
 //   aquisicao → compra/entrada de patrimônio vinculada ao veículo (asset-acquisition).
 // Não considera projeções nem saldo devedor — só gasto realizado no mês.
-function _vehCustoMes(vehId, ym) {
+// Custo de posse de QUALQUER bem no mês.
+//
+// A conta existia só para veículo e era usada num único lugar, no fim do
+// detalhe. É a pergunta que importa sobre um bem — "quanto ele está me
+// custando?" — enquanto a capa do módulo mostrava o valor estimado, que é um
+// número que o usuário digitou uma vez e que envelhece virando ficção.
+//
+// Generalizar foi possível porque o vínculo já era genérico: `_expensesDoBem`
+// resolve gasto × bem para veículo e para patrimônio, canônico e legado. O que
+// era específico de veículo aqui era só a comparação da dívida.
+function _bemCustoMes(id, ym) {
   ym = ym || _ymNow();
-  let uso = 0, fin = 0, aquisicao = 0; const seen = new Set();
-  const v = (D.vehicles || []).find(x => x.id === vehId);
-  const isLinked = (e) => e.vehicleId === vehId || (v && (v.linkedExpenses || []).includes(e.id));
+  let uso = 0, fin = 0, aquisicao = 0;
+  const seen = new Set();
+  const rec = _patOwnerRec(id);
+  const patKey = rec ? rec.id : id;
+  const ligados = new Set(_expensesDoBem(id).map(e => e.id));
+
   (D.expenses || []).forEach(e => {
     if (seen.has(e.id) || String(e.date || '').slice(0, 7) !== ym) return;
     const nat = _movementNature(e);
     if (nat === 'debt-payment') {
-      // Financiamento só entra se a dívida for do próprio veículo.
+      // Parcela só entra se a dívida for DESTE bem — por veículo ou por
+      // patrimônio, que é como `D.debts` guarda o vínculo.
       const d = (e.meta && e.meta.debtId) ? getDebt(e.meta.debtId) : null;
-      if (d && d.vehicleId === vehId) { fin += e.amount || 0; seen.add(e.id); }
+      if (d && (d.vehicleId === id || d.patrimonioId === patKey || d.patrimonioId === id)) {
+        fin += e.amount || 0; seen.add(e.id);
+      }
       return; // pagamento de dívida nunca conta como uso/manutenção nem aquisição
     }
-    if (!isLinked(e)) return;
+    if (!ligados.has(e.id)) return;
     if (nat === 'asset-acquisition') { aquisicao += e.amount || 0; seen.add(e.id); }
     else { uso += e.amount || 0; seen.add(e.id); }
   });
   return { uso, fin, aquisicao, total: uso + fin + aquisicao };
 }
+
+// Nome antigo, preservado: o detalhe do veículo o chama.
+function _vehCustoMes(vehId, ym) { return _bemCustoMes(vehId, ym); }
 
 // ══════════════════════════════════════════════════════════════════════════
 // MOTOR SEMÂNTICO (Fase A) — natureza financeira de uma movimentação.
@@ -9835,19 +9858,37 @@ function renderPatrimonioHome(preserveScroll) {
   const counts  = { veiculo: 0, imovel: 0, outro: 0 };
   const activeItems = items.filter(i => i.status === 'ativo');
   const encerradosItems = items.filter(i => i.status !== 'ativo');
+  // A categoria soma CUSTO, não valor estimado — do contrário a tela se
+  // contradizia: um carro custando R$ 2.652 no mês aparecia como "Veículos
+  // R$ 0,00" logo abaixo, porque ninguém tinha digitado uma avaliação para ele.
+  const custos = { veiculo: 0, imovel: 0, outro: 0 };
   activeItems.forEach(i => {
     const k = _patTypeKey(i.tipo);
     totals[k] += i.valorEstimado || 0;
+    const id = i.vehId || i.patId;
+    custos[k] += id ? _bemCustoMes(id).total : 0;
     counts[k]++;
   });
   const activeCount = activeItems.length;
 
   const catNames = { veiculo:'Veículos', imovel:'Imóveis', outro:'Outros bens' };
 
+  // Custo de posse somado dos bens ATIVOS. Não entra no patrimônio líquido —
+  // é outra pergunta: aquele é um saldo, este é uma vazão mensal. Vem antes
+  // porque é o número com que se decide alguma coisa.
+  const custoTotal = activeItems.reduce((soma, i) => {
+    const id = i.vehId || i.patId;
+    return soma + (id ? _bemCustoMes(id).total : 0);
+  }, 0);
+
   cont.innerHTML = `
     <div class="card hero-card" style="margin-bottom:18px">
-      <div class="hero-lbl">Patrimônio líquido</div>
-      <div class="hero-val">${R(net)}</div>
+      <div class="hero-lbl">Custo dos bens este mês</div>
+      <div class="hero-val">${R(custoTotal)}</div>
+      <div class="hero-chips">
+        <div class="hero-chip">Patrimônio líquido&nbsp;<b>${R(net)}</b></div>
+      </div>
+      <div style="height:1px;background:var(--border);margin:14px 0 12px"></div>
       <div class="hero-chips">
         <div class="hero-chip">
           <b>${items.length}</b>&nbsp;${items.length === 1 ? 'bem cadastrado' : 'bens cadastrados'}
@@ -9875,9 +9916,9 @@ function renderPatrimonioHome(preserveScroll) {
           <div class="pat-cat-ico pat-ico-${t}">${_patIcon(t)}</div>
           <div class="pat-cat-body">
             <div class="pat-cat-name">${catNames[t]}</div>
-            <div class="pat-cat-count">${counts[t]} ${counts[t] === 1 ? 'ativo' : 'ativos'}</div>
+            <div class="pat-cat-count">${counts[t]} ${counts[t] === 1 ? 'ativo' : 'ativos'}${custos[t] > 0 ? ' · este mês' : ''}</div>
           </div>
-          <div class="pat-cat-val">${R(totals[t])}</div>
+          <div class="pat-cat-val">${custos[t] > 0 ? R(custos[t]) : '—'}</div>
           ${on ? `<div class="pat-cat-check on">${_patCheckSvg()}</div>` : ''}
         </div>`; }).join('')}
     </div>
@@ -9920,6 +9961,23 @@ function _renderPatListItem(item) {
     ? `onclick="openVehPatDetail('${escHtml(item.vehId)}')"`
     : (item.patId ? `onclick="renderPatDetail('${escHtml(item.patId)}')"` : '');
 
+  // O que o cartão diz em primeiro lugar mudou.
+  //
+  // A capa era o valor estimado — um número que o usuário digitou uma vez e que
+  // envelhece virando ficção, e com o qual não se decide nada. Agora a linha de
+  // cima é o CUSTO DESTE MÊS: parcela, combustível, manutenção. É a pergunta
+  // acionável ("este bem cabe na minha vida?"), medida a partir de lançamento
+  // real, e o app já sabia calculá-la — só a mantinha escondida no fim do
+  // detalhe, e só para veículo.
+  //
+  // O valor estimado não sai; desce para a segunda linha, onde continua
+  // disponível para quem quiser.
+  const idDoBem = item.vehId || item.patId;
+  const custo = (idDoBem && statusCls === 'ativo') ? _bemCustoMes(idDoBem) : null;
+  const custoHtml = (custo && custo.total > 0)
+    ? `<span class="pat-list-custo">${R(custo.total)}<span class="pat-list-custo-un">/mês</span></span>`
+    : `<span class="pat-list-custo pat-list-custo-zero">Sem custo no mês</span>`;
+
   // Veículo sem avaliação positiva → "Valor não informado" (não exibir R$ 0,00
   // como se zero fosse avaliação cadastrada). Demais bens mantêm a regra atual.
   const valorInformado = typeKey !== 'veiculo' || (typeof item.valorEstimado === 'number' && item.valorEstimado > 0);
@@ -9941,6 +9999,7 @@ function _renderPatListItem(item) {
         </div>
       </div>
       <div class="pat-list-right">
+        ${custoHtml}
         ${valHtml}
         ${isClickable ? `<span class="pat-list-chev">${_patChevr().replace(/width="12" height="12"/g, 'width="14" height="14"')}</span>` : ''}
       </div>

@@ -3739,7 +3739,13 @@ button:focus-visible, [role="button"]:focus-visible {
 .pat-list-name { font-size: 14px; font-weight: 700; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
 .pat-list-meta { display: flex; align-items: center; gap: 6px; }
 .pat-list-right { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-.pat-list-val  { font-size: 13px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* O custo do mês é a manchete do cartão; o valor estimado desce para a
+   segunda linha e perde o peso. Ver `_bemCustoMes`: o número acionável é
+   quanto o bem consome, não quanto alguém acha que ele vale. */
+.pat-list-custo { font-size: 15px; font-weight: 800; color: var(--tx); font-variant-numeric: tabular-nums; white-space: nowrap; display: block; }
+.pat-list-custo-un { font-size: 11px; font-weight: 600; color: var(--tx3); margin-left: 1px; }
+.pat-list-custo-zero { font-size: 12px; font-weight: 600; color: var(--tx3); }
+.pat-list-val  { font-size: 12px; font-weight: 600; color: var(--tx3); font-variant-numeric: tabular-nums; white-space: nowrap; display: block; margin-top: 2px; }
 .pat-list-chev svg { width: 14px; height: 14px; stroke: var(--tx3); fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Category chips — paleta oficial Avenco */
