@@ -3545,6 +3545,9 @@ function refreshHomeFixosAlert() {
   const antigo = document.getElementById('home-fixos-alert');
   if (antigo) antigo.innerHTML = '';   // o bloco separado não existe mais
   renderHomeVencimentos();
+  // A sobra livre é a mesma conta que a lista: dar baixa num compromisso tem
+  // de subir a sobra no mesmo instante em que tira a linha da lista.
+  renderHomeManchete();
 }
 // ── Kebab de ações secundárias (Editar / Excluir) ──
 var _fixedMenuTarget = null;
@@ -4067,6 +4070,131 @@ function _obrigacoesEmAberto() {
   });
 
   return itens.sort(_obrigacaoCompare);
+}
+
+// ── Sobra livre: a pergunta que o app não respondia ───────────────────────
+//
+// A Início dizia "Resultado do mês R$ 3.820,00" — correto, e inútil para
+// decidir. Ninguém abre um app de finanças por curiosidade; abre porque precisa
+// decidir se pode gastar. E "resultado do mês" não responde isso, porque ainda
+// há conta para vencer antes do mês acabar.
+//
+//   sobra = entrou − saiu − reserva do mês − o que ainda vence
+//
+// Cada parcela vem de motor que já existia e já era testado:
+//
+//   entrou/saiu   `_monthMovementSummary` (caixa, com a separação por natureza)
+//   reserva       `sumMonthReserva` — depósito na reserva NÃO entra em
+//                 `totalCashOut`, porque o app trata reserva como fora do
+//                 caixa. Para "posso gastar?" ela precisa sair: o dinheiro
+//                 guardado não está disponível. Saque tem sinal negativo e
+//                 volta para a conta, que é o comportamento certo.
+//   a vencer      a espinha de compromissos, filtrada até o fim do mês
+//
+// O QUE FICA DE FORA, de propósito: compromisso sem data. Existe, mas não dá
+// para saber se cai neste mês; contá-lo tornaria a sobra pessimista sem
+// fundamento. Aparece na lista de atenção, não nesta conta.
+//
+// O QUE ENTRA mesmo sendo de outro mês: compromisso ATRASADO. Ele ainda vai
+// sair do seu bolso, e ignorá-lo tornaria a sobra otimista — o erro que custa
+// caro.
+function _sobraLivre(off) {
+  const mes = Number.isFinite(off) ? off : 0;
+  const mov = _monthMovementSummary(mes);
+  const reserva = sumMonthReserva(mes);           // dep − ret: saque volta ao caixa
+  const dias = monthDates(mes);
+  const fimDoMes = dias[dias.length - 1];
+
+  const abertos = _obrigacoesEmAberto().filter(i =>
+    i.atrasada || (i.vencimento && i.vencimento <= fimDoMes));
+
+  // A conta inteira em CENTAVOS inteiros e uma única volta para reais no fim:
+  // são quatro parcelas somadas, e somar float quatro vezes deixa resíduo que
+  // aparece na tela como um centavo que ninguém consegue explicar.
+  const entrouC  = _c(mov.totalCashIn);
+  const saiuC    = _c(mov.totalCashOut);
+  const reservaC = _c(reserva);
+  const aVencerC = abertos.reduce((t, i) => t + _c(i.valorSugerido), 0);
+
+  return {
+    entrou: mov.totalCashIn,
+    saiu: mov.totalCashOut,
+    reserva: _r(reservaC),
+    aVencer: _r(aVencerC),
+    compromissos: abertos.length,
+    // Se há pendência na composição, o total carrega uma ESTIMATIVA e não pode
+    // ser apresentado como número fechado.
+    temEstimativa: abertos.some(i => i.valorEhEstimativa),
+    sobra: _r(entrouC - saiuC - reservaC - aVencerC),
+  };
+}
+
+// ── A manchete da Início responde "posso gastar isto?" ────────────────────
+//
+// O número grande da Início era o RESULTADO DO MÊS: entrou menos saiu. É um
+// número de contador — olha para trás e fecha o passado. Mas ninguém abre o
+// app para saber o que já aconteceu; abre parado na frente de uma compra, com
+// a pergunta "dá?". O resultado do mês não responde isso, e responde ERRADO
+// para mais: ele ignora o aluguel que vence dia 30 e conta como seu o dinheiro
+// que já tem dono.
+//
+// A sobra livre responde. E ela só existe para o mês CORRENTE: "até o fim do
+// mês" não quer dizer nada num mês que já fechou nem num que ainda não começou
+// — ali o resultado volta a ser a manchete certa, e o rótulo volta com ele.
+//
+// Vive fora de `renderHomeNew` porque muda com o que a lista de compromissos
+// muda: dar baixa num fixo tem de mexer na sobra no mesmo instante em que tira
+// a linha da lista, senão a tela se contradiz.
+function renderHomeManchete() {
+  const sobra    = monthOffset === 0 ? _sobraLivre(0) : null;
+  const liq      = monthAggregate(monthOffset).liquido;
+  const destaque = sobra ? sobra.sobra : liq;
+
+  const labelEl = document.getElementById('home-bal-label');
+  if (labelEl) labelEl.textContent = sobra ? 'Sobra livre até o fim do mês' : 'Resultado do mês';
+
+  const balEl = document.getElementById('home-balance');
+  if (balEl) {
+    balEl.className = 'hc-balance ' + (destaque >= 0 ? 'pos' : 'neg');
+    // Zero é um valor válido: sempre exibir R$ 0,00 (nunca esconder com '—').
+    animCount(balEl, destaque, 700);
+  }
+
+  // A prestação de contas da sobra: o que já foi descontado para chegar nela.
+  // Sem esta linha o número é afirmação sem lastro — e a distância entre ele e
+  // o "entrou menos saiu" logo abaixo pareceria erro de conta.
+  const subEl = document.getElementById('home-bal-sub');
+  if (subEl) {
+    if (!sobra) {
+      subEl.style.display = 'none';
+    } else {
+      const partes = [];
+      if (sobra.aVencer > 0) {
+        const quanto  = (sobra.temEstimativa ? 'cerca de ' : '') + R(sobra.aVencer);
+        const quantos = sobra.compromissos === 1 ? '1 compromisso' : sobra.compromissos + ' compromissos';
+        partes.push(`<b>${quanto}</b> de ${quantos} que ainda vencem`);
+      }
+      // Retirada líquida da reserva volta ao caixa e não é desconto: só o que
+      // foi efetivamente guardado sai daqui.
+      if (sobra.reserva > 0) partes.push(`<b>${R(sobra.reserva)}</b> guardados na reserva`);
+      subEl.innerHTML = partes.length
+        ? 'Já descontado ' + partes.join(' e ')
+        : 'Nada mais vence até o fim do mês';
+      subEl.style.display = '';
+    }
+  }
+
+  // O resultado do mês perdeu a manchete, não o lugar: quem quiser fechar o
+  // mês continua tendo o número, na escala da pergunta que ele responde.
+  const mesChip = document.getElementById('home-mes-chip');
+  if (mesChip) {
+    if (sobra) {
+      mesChip.innerHTML = `<span>Resultado do mês</span><b class="${liq >= 0 ? 'pos' : 'neg'}">${R(liq)}</b>`;
+      mesChip.style.display = '';
+    } else {
+      mesChip.style.display = 'none';
+    }
+  }
 }
 
 // ── O que precisa de você, na Início ──────────────────────────────────────
@@ -7164,12 +7292,8 @@ function renderHomeNew() {
   // Resumo semântico do mês (mesmos totais de caixa; apenas separa a composição das saídas).
   const sum = _monthMovementSummary(monthOffset);
 
-  const balEl = document.getElementById('home-balance');
-  if (balEl) {
-    balEl.className = 'hc-balance ' + (liq >= 0 ? 'pos' : 'neg');
-    // Zero é um valor válido: sempre exibir R$ 0,00 (nunca esconder com '—').
-    animCount(balEl, liq, 700);
-  }
+  renderHomeManchete();
+
   const incEl = document.getElementById('home-inc');
   const expEl = document.getElementById('home-exp');
   if (incEl) incEl.textContent = R(inc);

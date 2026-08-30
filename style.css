@@ -4646,6 +4646,16 @@ body { padding-bottom: 0; }
    do resultado já vem escrito no próprio número. */
 .hc-balance.neg { color: #FFB9A5; }
 
+/* A linha que sustenta a sobra: diz o que já foi descontado para chegar
+   naquele número. Sem ela a sobra é um número sem prestação de contas. */
+.hc-bal-sub {
+  margin-top: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--on-flood-2);
+}
+.hc-bal-sub b { color: var(--on-flood); font-weight: 600; }
+
 /* ── Proporção entrou/saiu ── */
 .hc-prop {
   height: 10px;
@@ -4687,6 +4697,26 @@ body { padding-bottom: 0; }
   font-weight: 600;
   color: var(--on-flood);
 }
+
+/* O resultado do mês, depois de ceder a manchete para a sobra livre. Fica na
+   escala dos números de apoio (Entrou/Saiu), não na do cartaz. */
+.hc-mes-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--on-flood-3);
+  font-size: 12.5px;
+  color: var(--on-flood-2);
+}
+.hc-mes-chip b {
+  font-family: var(--font-disp);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--on-flood);
+}
+.hc-mes-chip b.neg { color: #FFB9A5; }
 
 /* Leitura das saídas: continua discreta, mas agora sobre o campo. */
 .hc-brk {
