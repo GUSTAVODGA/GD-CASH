@@ -22,7 +22,13 @@ const CENARIO = {
   debts: [{ id: 'd1', tipo: 'financiamento', titulo: 'Financiamento Teste', credor: 'Banco Teste',
     valorOriginal: 60000, valorParcela: 1450, parcelasTotal: 42, amortizadoInicial: 0,
     dataInicio: '2025-03-10', periodicidade: 'mensal', status: 'ativa' }],
-  pendencias: [{ id: 'p1', titulo: 'Trocar a torneira', valor: 150, status: 'aberta' }],
+  // Campos REAIS de uma pendência: o app lê `title`, `estimatedValue`,
+  // `priority` e `deadline`. Esta fixture usava `titulo`/`valor`, que o app
+  // ignora — a pendência era semeada e nunca aparecia em lugar nenhum, então
+  // qualquer asserção sobre ela passaria por vacuidade.
+  pendencias: [{ id: 'p1', title: 'Trocar a torneira', category: 'casa', priority: 'alta',
+                 deadline: '2026-08-18', estimatedValue: 150, status: 'aberta',
+                 createdAt: '2026-08-01' }],
   expenses: [g('e1', '2026-08-05', 900, 'Alimentação'), g('e2', '2026-08-12', 600, 'Transporte'),
              g('j2', '2026-07-06', 700, 'Alimentação')],
   reservaHistory: [{ date: '2026-08-15', type: 'dep', amount: 300 }],
@@ -43,6 +49,29 @@ test('NADA SE PERDEU: todo bloco da Home antiga continua no documento', async ({
   await abrir(page);
   for (const sel of BLOCOS) {
     await expect(page.locator(sel), `bloco ${sel} sumiu`).toHaveCount(1);
+  }
+});
+
+// O teste acima verifica que os CONTÊINERES existem, e isso deixou de bastar:
+// os gastos fixos vencidos e as pendências saíram de blocos próprios e passaram
+// para a lista única de "o que precisa de você". Os contêineres continuam no
+// documento — outros pontos do app os referenciam — mas vazios, então a
+// asserção de existência passaria mesmo que a informação tivesse sumido.
+//
+// O que protege o usuário é esta: a INFORMAÇÃO continua na tela. Se um dia a
+// fusão comer um tipo de compromisso, é aqui que falha.
+test('NADA SE PERDEU: a informação dos três blocos continua visível na Início', async ({ page }) => {
+  await abrir(page);
+  const inicio = page.locator('#page-inicio');
+  // Do CENARIO: um gasto fixo, uma dívida em atraso e uma pendência aberta.
+  await expect(inicio, 'o gasto fixo sumiu da Início').toContainText('Internet');
+  await expect(inicio, 'a dívida sumiu da Início').toContainText('Financiamento Teste');
+  await expect(inicio, 'a pendência sumiu da Início').toContainText('Trocar a torneira');
+  // E cada um continua alcançável por toque.
+  for (const titulo of ['Internet', 'Financiamento Teste', 'Trocar a torneira']) {
+    const linha = page.locator('.home-venc-item', { hasText: titulo });
+    await expect(linha, `${titulo} não é mais tocável`).toHaveCount(1);
+    expect(await linha.getAttribute('onclick'), `${titulo} perdeu o destino`).toBeTruthy();
   }
 });
 

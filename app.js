@@ -3537,24 +3537,14 @@ function desfazerBaixaFixed(id) {
   refreshAfterDayEdit();
   gdToast('Baixa desfeita.', { type: 'success' });
 }
-// ── Aviso compacto na Home: gastos fixos ativos vencidos e sem baixa no mês ──
+// Gasto fixo vencido agora aparece na lista única de "o que precisa de você",
+// junto de dívida e pendência. Este nome continua existindo porque oito lugares
+// o chamam depois de mudar um fixo — e o que eles querem dizer segue valendo:
+// "a Início precisa se atualizar".
 function refreshHomeFixosAlert() {
-  const el = document.getElementById('home-fixos-alert');
-  if (!el) return;
-  const overdue = fxOverdueCurrent();
-  if (!overdue.length) { el.innerHTML = ''; return; }
-  const total = overdue.reduce((s, f) => s + f.amount, 0);
-  const n = overdue.length;
-  el.innerHTML = `
-    <button class="home-fixos-alert" onclick="switchTab('fixos','inicio')" aria-label="Ver gastos fixos vencidos">
-      <span class="hfa-ico" aria-hidden="true">!</span>
-      <span class="hfa-body">
-        <span class="hfa-title">Gastos fixos vencidos</span>
-        <span class="hfa-sub">${n} ${n === 1 ? 'pagamento pendente' : 'pagamentos pendentes'}</span>
-        <span class="hfa-total">Total: ${R(total)}</span>
-        <span class="hfa-cta" aria-hidden="true">Ver gastos fixos →</span>
-      </span>
-    </button>`;
+  const antigo = document.getElementById('home-fixos-alert');
+  if (antigo) antigo.innerHTML = '';   // o bloco separado não existe mais
+  renderHomeVencimentos();
 }
 // ── Kebab de ações secundárias (Editar / Excluir) ──
 var _fixedMenuTarget = null;
@@ -4079,6 +4069,67 @@ function _obrigacoesEmAberto() {
   return itens.sort(_obrigacaoCompare);
 }
 
+// ── O que precisa de você, na Início ──────────────────────────────────────
+//
+// A Início montava TRÊS blocos independentes na área de atenção — um alerta de
+// fixos vencidos, uma lista de compromissos de dívida e uma lista de pendências
+// — cada um com a própria regra de "o que mostrar" e a própria ordenação. Três
+// respostas para a mesma pergunta, que na cabeça do usuário é uma só: o que
+// vence e quanto.
+//
+// A resposta unificada já existia em `_obrigacoesEmAberto()`, e era consumida
+// só pelo fluxo do "+". Esta função a traz para a Início.
+//
+// DUAS diferenças de escopo tiveram de ser reconciliadas, e as duas na direção
+// de não perder nada do que aparecia antes:
+//
+//   · a espinha exclui pendência SEM valor estimado, porque para ela o critério
+//     é "dá para pagar agora". A Início mostra pendência de alta prioridade
+//     mesmo sem valor, porque a pergunta dela é mais larga: "o que precisa de
+//     você". Essas voltam aqui, marcadas como sem valor.
+//
+//   · os horizontes eram diferentes (dívida 15 dias, fixo só vencido,
+//     pendência vencida ou alta). Unificar exige um só, e adotar o MAIS LARGO
+//     dos três garante superconjunto: nada que aparecia some, e passa a
+//     aparecer o fixo prestes a vencer, que antes só surgia depois de atrasar.
+const ATENCAO_HORIZONTE_DIAS = 15;
+
+function _atencaoInicio() {
+  const hoje = todayStr();
+  const limite = _addDaysISO(hoje, ATENCAO_HORIZONTE_DIAS);
+
+  const itens = _obrigacoesEmAberto().filter(i =>
+    i.atrasada || (i.vencimento && i.vencimento <= limite) ||
+    (i.origem === 'pendencia' && !i.vencimento));
+
+  // Pendências de alta prioridade que a espinha descarta por não terem valor.
+  const jaTem = new Set(itens.filter(i => i.origem === 'pendencia').map(i => i.id));
+  (D.pendencias || []).forEach(p => {
+    if (p.status !== 'aberta' || jaTem.has(p.id)) return;
+    const vencida = !!(p.deadline && p.deadline <= hoje);
+    if (!vencida && p.priority !== 'alta') return;
+    if ((Number(p.estimatedValue) || 0) > 0) return;   // essa a espinha já trouxe
+    itens.push({
+      origem: 'pendencia', id: p.id,
+      titulo: p.title || 'Pendência', subtitulo: p.category || '',
+      valorSugerido: 0, valorEhEstimativa: false, semValor: true,
+      vencimento: p.deadline || '', atrasada: vencida,
+      acao: OBRIGACAO_ACOES.pendencia,
+    });
+  });
+
+  return itens.sort(_obrigacaoCompare);
+}
+
+// Destino de cada linha da área de atenção. Mantém EXATAMENTE onde cada bloco
+// levava antes da unificação — a fusão é de apresentação e ordenação, não de
+// navegação.
+function _atencaoDestino(item) {
+  if (item.origem === 'divida')    return `openDebtDetail('${escHtml(item.id)}')`;
+  if (item.origem === 'fixo')      return `switchTab('fixos','inicio')`;
+  return `switchTab('pendencias','inicio')`;
+}
+
 // Agregado derivado da lista — fonte ÚNICA para qualquer superfície que resuma
 // compromissos (folha e faixa do "+"). Não consulta D, não guarda estado e não
 // reimplementa regra financeira: só conta e soma o que o resolvedor devolveu.
@@ -4246,7 +4297,9 @@ function renderObrigacoes() {
   listaEl.innerHTML = `<div class="home-venc-list obr-lista">${itens.map(_obrigacaoRowHtml).join('')}</div>`;
 }
 
-// Abre a folha. Nesta fase não há entrada na UI: só chamada direta.
+// Abre a folha de compromissos em aberto. Duas entradas: a faixa do "+" e o
+// "Ver todos" da área de atenção da Início — que mostra os cinco mais urgentes
+// e manda para cá quem quiser o resto.
 // Sai do formulário de lançamento ANTES de abrir, para que os dois nunca
 // coexistam: sobrepostos, o "+" ficaria por cima (vem depois no DOM) e roubaria
 // os toques da folha.
@@ -4321,23 +4374,63 @@ function _afterDebtChange() {
   if (active('page-semana')) renderDayAccordion();
   if (active('page-mes')) renderMes();
 }
+// A área de atenção da Início: UMA lista, vinda da espinha.
+//
+// Eram três blocos com três regras. Agora dívida, gasto fixo e pendência
+// aparecem juntos e ordenados pela mesma urgência — atrasado primeiro, depois
+// por vencimento —, que é como a pergunta existe na cabeça de quem olha.
+//
+// Cada linha continua levando exatamente aonde levava antes (ver
+// `_atencaoDestino`); o que mudou é a apresentação e a ordem.
 function renderHomeVencimentos() {
   const el = document.getElementById('home-dividas-venc'); if (!el) return;
-  const today = todayStr();
-  const horizon = _addDaysISO(today, 15); // atrasados (sem piso) + próximos 15 dias
-  // UM compromisso por dívida: o 1º pendente já prioriza atrasada > hoje > 1ª futura
-  // (parcelas são sequenciais, então a atrasada É a primeira pendente). Assim uma única
-  // dívida não ocupa vários cartões enquanto outras ficam escondidas — as demais parcelas
-  // seguem disponíveis na Central, no detalhe, na Semana e no Mês.
-  const all = _debtProximosPorDivida().filter(v => v.dueDate && v.dueDate <= horizon);
-  const ord = { atrasada: 0, hoje: 1, previsto: 2 };
-  all.sort((a, b) => (ord[a.status] - ord[b.status]) || String(a.dueDate).localeCompare(String(b.dueDate)));
-  const items = all.slice(0, 4);
-  if (!items.length) { el.innerHTML = ''; return; }
+  const itens = _atencaoInicio();
+  if (!itens.length) { el.innerHTML = ''; return; }
+
+  const mostrados = itens.slice(0, 5);
+  const resumo = _obrigacoesResumo(itens.filter(i => !i.semValor));
+  const sobra = itens.length - mostrados.length;
+
   el.innerHTML = `<div class="hc-section home-venc-sec">
-    <div class="hc-sec-hd"><span class="hc-tri-sm"></span><span class="hc-sec-title">Próximos compromissos</span><button class="hc-sec-link" onclick="switchTab('dividas','inicio')">Ver dívidas</button></div>
-    <div class="home-venc-list">${items.map(_vencRowHtml).join('')}</div>
+    <div class="hc-sec-hd">
+      <span class="hc-tri-sm"></span>
+      <span class="hc-sec-title">O que precisa de você</span>
+      <button class="hc-sec-link" onclick="abrirCompromissos()">Ver todos</button>
+    </div>
+    <div class="home-venc-list">${mostrados.map(_atencaoRowHtml).join('')}</div>
+    ${resumo.total > 0 ? `<div class="home-atencao-total">
+      ${resumo.atrasados > 0 ? `<span class="home-atencao-atraso">${resumo.atrasados} em atraso</span>` : ''}
+      <span>Total ${_obrigacoesTotalTexto(resumo)}</span>
+    </div>` : ''}
+    ${sobra > 0 ? `<button class="home-atencao-mais" onclick="abrirCompromissos()">e mais ${sobra}</button>` : ''}
   </div>`;
+}
+
+const ATENCAO_ORIGEM_LBL = Object.freeze({ divida:'Dívida', fixo:'Gasto fixo', pendencia:'Pendência' });
+
+function _atencaoRowHtml(item) {
+  const ctx = [ATENCAO_ORIGEM_LBL[item.origem], item.subtitulo].filter(Boolean).join(' · ');
+  const chip = item.atrasada
+    ? `<span class="venc-chip venc-atrasada">Em atraso</span>`
+    : '';
+  // Pendência sem valor não inventa número; pendência com valor avisa que é
+  // estimativa, para o usuário não ler "R$ 150,00" como conta fechada.
+  const valor = item.semValor ? ''
+    : `<div class="home-venc-val">${item.valorEhEstimativa ? '~' : ''}${R(item.valorSugerido)}</div>`;
+  const data = item.vencimento ? `<span class="home-venc-date">${_fmtDataBR(item.vencimento)}</span>` : '';
+  const aria = [item.titulo, ATENCAO_ORIGEM_LBL[item.origem], item.atrasada ? 'em atraso' : '',
+                item.semValor ? '' : R(item.valorSugerido), item.vencimento ? _fmtDataBR(item.vencimento) : '']
+                .filter(Boolean).join(', ');
+  return `<button class="home-venc-item" onclick="${_atencaoDestino(item)}" aria-label="${escHtml(aria)}">
+    <div class="home-venc-main">
+      <div class="home-venc-title" title="${escHtml(item.titulo)}">${escHtml(item.titulo)}</div>
+      <div class="home-venc-sub">${escHtml(ctx)}</div>
+    </div>
+    <div class="home-venc-end">
+      ${valor}
+      <div class="home-venc-meta">${chip}${data}</div>
+    </div>
+  </button>`;
 }
 
 // Registra UM pagamento: cria a despesa real e o marcador de pagamento (uma única vez).
@@ -7153,44 +7246,14 @@ function renderHomeNew() {
     }
   }
 
-  // 6. Pendências relevantes (vencidas ou alta prioridade)
-  const relevantPend = (D.pendencias || [])
-    .filter(p => p.status === 'aberta' && ((p.deadline && p.deadline <= hoje) || p.priority === 'alta'))
-    .sort((a, b) => {
-      const aS = (a.deadline && a.deadline < hoje) ? 0 : a.priority === 'alta' ? 1 : 2;
-      const bS = (b.deadline && b.deadline < hoje) ? 0 : b.priority === 'alta' ? 1 : 2;
-      return aS - bS || (a.deadline || '9999').localeCompare(b.deadline || '9999');
-    })
-    .slice(0, 5);
-
+  // Pendências passaram para a lista única de "o que precisa de você" — a
+  // seção separada seria uma segunda aparição do mesmo item. O contêiner
+  // permanece vazio e oculto; quem preenche agora é `renderHomeVencimentos`.
   const pendSection = document.getElementById('home-pend-section');
   const pendListEl  = document.getElementById('home-pend-list');
   if (pendSection && pendListEl) {
-    if (relevantPend.length > 0) {
-      pendSection.style.display = '';
-      pendListEl.innerHTML = relevantPend.map(p => {
-        const isOv  = p.deadline && p.deadline < hoje;
-        const isTod = p.deadline === hoje;
-        const dt    = p.deadline ? parseDate(p.deadline).toLocaleDateString('pt-BR', {day:'2-digit',month:'short'}) : '';
-        const barCls = p.priority === 'alta' ? 'hc-pend-bar--alta' : p.priority === 'media' ? 'hc-pend-bar--media' : 'hc-pend-bar--baixa';
-        const dateCls = isOv ? ' hc-pend-overdue' : isTod ? ' hc-pend-today' : '';
-        // Contexto: nome do bem vinculado (patrimonioId > vehicleId legado) + categoria
-        const assetName = _pendAssetName(p);
-        const catLbl = (PEND_CAT_LABELS[p.category] || p.category || '').replace(/^[^\p{L}]*\s*/u, '');
-        const ctx = [assetName, catLbl].filter(Boolean).join(' · ');
-        return `<div class="hc-pend-item" onclick="switchTab('pendencias','inicio')">
-          <div class="hc-pend-bar ${barCls}"></div>
-          <div class="hc-pend-info">
-            <div class="hc-pend-name">${p.title}</div>
-            ${ctx ? `<div class="hc-pend-ctx">${escHtml(ctx)}</div>` : ''}
-            ${dt ? `<div class="hc-pend-date${dateCls}">${isOv?'Venceu ':''}${dt}</div>` : ''}
-          </div>
-          ${p.estimatedValue ? `<div class="hc-pend-amount">${R(p.estimatedValue)}</div>` : ''}
-        </div>`;
-      }).join('');
-    } else {
-      pendSection.style.display = 'none';
-    }
+    pendSection.style.display = 'none';
+    pendListEl.innerHTML = '';
   }
 
   // Reserva — resumo curto: saldo + progresso/meta + acesso (sem repetir o hero da Reserva)

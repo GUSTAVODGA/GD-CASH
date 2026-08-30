@@ -5199,3 +5199,20 @@ body { padding-bottom: 0; }
   transform: translate(-50%, -50%);
   width: 44px; height: 44px;
 }
+
+/* ── Área de atenção da Início: uma lista só ──────────────────────────────
+   Dívida, gasto fixo e pendência aparecem juntos e ordenados pela mesma
+   urgência. O total e o "e mais N" fecham o bloco sem competir com as linhas. */
+.home-atencao-total {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  font-size: 12.5px; color: var(--tx2); font-variant-numeric: tabular-nums;
+}
+.home-atencao-atraso { color: var(--rd); font-weight: 700; }
+.home-atencao-mais {
+  display: block; width: 100%; margin-top: 8px; padding: 9px 0;
+  background: none; border: 0; border-radius: var(--radius-xs);
+  font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--tx3);
+  cursor: pointer; min-height: 40px;
+}
+.home-atencao-mais:active { background: var(--surface2); }
