@@ -9147,6 +9147,9 @@ function saveVehicle() {
   // preserva debtId + pagamentos ao editar; nunca duplica pelo mesmo fluxo).
   let finDebt = null;
   if (finFields) finDebt = _patUpsertFinDebt({ vehicleId: id }, finFields);
+  // Sem isto o espelho do veículo em D.patrimonios só se atualizaria no próximo
+  // login: durante toda a sessão ele guardaria o nome, a placa e a km antigos.
+  _migrateVehiclesToPatrimonios();
   save();
   // Fluxo "cadastrar um bem a partir do lançamento": volta ao "+" com o veículo
   // novo já selecionado. Um eventual financiamento criado acima permanece
@@ -9445,6 +9448,7 @@ function saveVehStatus() {
   const v = (D.vehicles || []).find(x => x.id === vehId);
   if (!v) return;
   v.status = document.getElementById('vs-status')?.value || 'em_uso';
+  _migrateVehiclesToPatrimonios();   // o espelho acompanha a troca de status
   save();
   closeOverlay('modal-veh-status');
   _refreshVehDetail(vehId);
@@ -9626,12 +9630,13 @@ function _migrateVehiclesToPatrimonios() {
     console.error('[patrimônio] backup pré-migração falhou:', e);
   }
 
-  // IDs já migrados (idempotência) — cobre tanto _idOriginal quanto o
-  // próprio id, já que o patrimônio migrado reutiliza o id do veículo.
-  const migratedIds = new Set();
+  // Patrimônio já existente para cada veículo, indexado pelo id do veículo —
+  // cobre tanto `_idOriginal` quanto o próprio id, já que o registro migrado
+  // reutiliza o id do veículo.
+  const patPorVeiculo = new Map();
   D.patrimonios.forEach(p => {
-    if (p._migradoDe === 'vehicles' && p._idOriginal) migratedIds.add(p._idOriginal);
-    if (p.id) migratedIds.add(p.id);
+    if (p._migradoDe === 'vehicles' && p._idOriginal) patPorVeiculo.set(p._idOriginal, p);
+    if (p.id) patPorVeiculo.set(p.id, p);
   });
 
   const STATUS_MAP = {
@@ -9642,9 +9647,48 @@ function _migrateVehiclesToPatrimonios() {
     arquivado:  'inativo',
   };
 
-  let count = 0;
+  // Campos que PERTENCEM ao veículo. Só estes são sincronizados; o que é do
+  // patrimônio (valor estimado, data de aquisição, financiamentos, etiquetas,
+  // histórico próprio) nunca é tocado aqui.
+  const doVeiculo = v => ({
+    nome:   v.name  || '',
+    foto:   v.photo || null,
+    status: STATUS_MAP[v.status] || 'ativo',
+    detalhes: {
+      placa:  v.plate || '', marca: v.brand || '', modelo: v.model || '',
+      ano:    v.year  || '', cor:   v.color || '',
+      quilometragem: v.km != null ? v.km : null,
+    },
+  });
+
+  let count = 0, sincronizados = 0;
   for (const v of D.vehicles) {
-    if (migratedIds.has(v.id)) continue;
+    const jaExiste = patPorVeiculo.get(v.id);
+    if (jaExiste) {
+      // Antes, migrar era um evento único: quem já tinha registro era PULADO,
+      // para sempre. O espelho então apodrecia — renomear o carro, rodar mais
+      // 15 mil km ou pô-lo à venda deixava o patrimônio congelado no dia da
+      // migração. O app não mostrava esse dado podre porque desviava dele em
+      // todo lugar (buscando a identidade em D.vehicles e filtrando veículos
+      // das listas de patrimônio), e esse desvio é o imposto que se paga em
+      // cada leitura nova.
+      //
+      // Migrar passa a ser sincronizar: os campos do veículo são reescritos a
+      // cada execução, e os do patrimônio ficam intocados.
+      const novo = doVeiculo(v);
+      const mudou = jaExiste.nome !== novo.nome || jaExiste.foto !== novo.foto ||
+        jaExiste.status !== novo.status ||
+        Object.keys(novo.detalhes).some(k => (jaExiste.detalhes || {})[k] !== novo.detalhes[k]);
+      if (mudou) {
+        jaExiste.nome = novo.nome;
+        jaExiste.foto = novo.foto;
+        jaExiste.status = novo.status;
+        jaExiste.detalhes = Object.assign({}, jaExiste.detalhes, novo.detalhes);
+        jaExiste.updatedAt = Date.now();
+        sincronizados++;
+      }
+      continue;
+    }
 
     const historico = (v.history || []).map(h => ({
       id:          h.id     || uid(),
@@ -9694,8 +9738,10 @@ function _migrateVehiclesToPatrimonios() {
   }
 
   D._patrimoniosMigrated = true;
-  if (count > 0) D.updatedAt = Date.now();
-  return { ran: count > 0, migrated: count };
+  if (count > 0 || sincronizados > 0) D.updatedAt = Date.now();
+  // `ran` continua significando "houve escrita", agora incluindo sincronização:
+  // é esse valor que o chamador usa para decidir se persiste.
+  return { ran: count > 0 || sincronizados > 0, migrated: count, sincronizados };
 }
 
 // Rollback da migração — restaura D.patrimonios para o estado pré-migração.
