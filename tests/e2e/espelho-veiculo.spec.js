@@ -154,3 +154,81 @@ test('sem veículo nenhum, a migração não inventa patrimônio', async ({ page
   await abrir(page, { ...BASE, vehicles: [] });
   expect(await lerEstado(page, 'D.patrimonios.length')).toBe(0);
 });
+
+// ══ FASE B: a identidade passa a vir do espelho ═══════════════════════════
+//
+// As quatro funções-costura — `_patNomeOf`, `_patTipoOf`, `_patIsVeiculo`,
+// `_patLifecycleOf` — perguntavam ao VEÍCULO primeiro. Agora perguntam ao
+// patrimônio, com o veículo como rede de segurança. Trocar a ordem nesse
+// punhado de funções vale por trocá-la em todos os chamadores.
+//
+// O que estes testes protegem não é "lê do lugar novo" — é que a rede de
+// segurança continua existindo, e que o vocabulário de status do veículo não
+// vaza mais para fora da tradução.
+
+test('a identidade do bem vem do espelho, não do veículo', async ({ page }) => {
+  await abrir(page);
+  // Divergência artificial: só um teste consegue produzir isto, e é
+  // exatamente o que revela de onde a leitura vem.
+  await page.evaluate(() => { D.patrimonios[0].nome = 'NOME DO ESPELHO'; });
+  expect(await lerEstado(page, `_patNomeOf('v1')`)).toBe('NOME DO ESPELHO');
+  expect(await lerEstado(page, `_patTipoOf('v1')`)).toBe('veiculo');
+  expect(await lerEstado(page, `_patIsVeiculo('v1')`)).toBe(true);
+
+  const item = await lerEstado(page, `_patUnifiedItems().find(i => i.vehId === 'v1')`);
+  expect(item.nome, 'a lista de bens ainda lia o nome do veículo').toBe('NOME DO ESPELHO');
+});
+
+test('REDE DE SEGURANÇA: veículo sem espelho ainda aparece inteiro', async ({ page }) => {
+  await abrir(page);
+  // Simula o instante antes da migração rodar — ou uma nuvem a meio caminho.
+  await page.evaluate(() => { D.patrimonios = []; });
+  expect(await lerEstado(page, `_patNomeOf('v1')`)).toBe('Gol 2015');
+  expect(await lerEstado(page, `_patTipoOf('v1')`)).toBe('veiculo');
+  expect(await lerEstado(page, `_patIsVeiculo('v1')`)).toBe(true);
+  expect(await lerEstado(page, `_patLifecycleOf('v1')`)).toBe('ativo');
+
+  const item = await lerEstado(page, `_patUnifiedItems().find(i => i.vehId === 'v1')`);
+  expect(item.nome, 'o veículo sumiu da lista sem espelho').toBe('Gol 2015');
+  expect(item.status).toBe('ativo');
+});
+
+test('o ciclo de vida do bem responde pelo espelho', async ({ page }) => {
+  await abrir(page);
+  expect(await lerEstado(page, `_patLifecycleOf('v1')`)).toBe('ativo');
+  await page.evaluate(() => { D.vehicles[0].status = 'vendido'; window._migrateVehiclesToPatrimonios(); });
+  expect(await lerEstado(page, `_patLifecycleOf('v1')`)).toBe('encerrado');
+  const item = await lerEstado(page, `_patUnifiedItems().find(i => i.vehId === 'v1')`);
+  expect(item.status).toBe('encerrado');
+});
+
+test('NA OFICINA e À VENDA continuam sendo bem ativo', async ({ page }) => {
+  await abrir(page);
+  for (const st of ['na_oficina', 'a_venda', 'em_uso']) {
+    await page.evaluate(s => { D.vehicles[0].status = s; window._migrateVehiclesToPatrimonios(); }, st);
+    expect(await lerEstado(page, `_patLifecycleOf('v1')`), `status ${st}`).toBe('ativo');
+  }
+});
+
+test('NADA SE PERDEU: a lista de bens continua trazendo veículo e imóvel', async ({ page }) => {
+  await abrir(page, { ...BASE, patrimonios: [{ id: 'pat-im', tipo: 'imovel', nome: 'Apartamento',
+    status: 'ativo', valorEstimado: 300000, historico: [], detalhes: {}, financiamentos: [] }] });
+  const itens = await lerEstado(page, '_patUnifiedItems()');
+  expect(itens.length, 'a lista perdeu um bem').toBe(2);
+  expect(itens.map(i => i.tipo).sort()).toEqual(['imovel', 'veiculo']);
+  expect(itens.find(i => i.tipo === 'imovel').valorEstimado).toBe(300000);
+  expect(itens.find(i => i.tipo === 'veiculo').nome).toBe('Gol 2015');
+});
+
+test('a inversão é só leitura: não escreve em D nem chama save()', async ({ page }) => {
+  await abrir(page);
+  const antes = await lerEstado(page, 'JSON.stringify(D)');
+  const salvou = await page.evaluate(() => {
+    let n = 0; const s = window.save; window.save = () => { n++; return s && s(); };
+    window._patUnifiedItems(); window._patNomeOf('v1'); window._patTipoOf('v1');
+    window._patLifecycleOf('v1'); window._patIsVeiculo('v1');
+    window.save = s; return n;
+  });
+  expect(salvou).toBe(0);
+  expect(await lerEstado(page, 'JSON.stringify(D)')).toBe(antes);
+});

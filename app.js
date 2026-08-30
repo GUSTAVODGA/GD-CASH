@@ -9794,11 +9794,14 @@ function _patStatusLabel(status, tipo) {
   return _patEncerradoLabel(tipo);
 }
 // Estado de ciclo de vida a partir de um id (patId ou vehId).
+// Mesma inversão de `_patNomeOf`: o espelho responde primeiro, o veículo é a
+// rede de segurança. O vocabulário do veículo (em_uso/na_oficina/a_venda/
+// vendido/arquivado) já chega traduzido no espelho pela sincronia da fase A.
 function _patLifecycleOf(id) {
+  const p = _bemRegistro(id);
+  if (p) return (p.status === 'ativo' || !p.status) ? 'ativo' : 'encerrado';
   const veh = (D.vehicles || []).find(v => v.id === id);
   if (veh) return (veh.status === 'vendido' || veh.status === 'arquivado') ? 'encerrado' : 'ativo';
-  const p = (D.patrimonios || []).find(x => x.id === id);
-  if (p) return (p.status === 'ativo') ? 'ativo' : 'encerrado';
   return 'ativo';
 }
 // Guarda de somente-leitura: recusa qualquer edição/criação/exclusão de item de um
@@ -9844,14 +9847,26 @@ function _patUnifiedItems() {
 
   const items = [];
 
-  // 1) Veículos — fonte de verdade é D.vehicles, sempre visíveis
+  // 1) Veículos. A LISTA de quais veículos existem ainda vem de D.vehicles —
+  //    é lá que o fluxo legado cria e apaga. Mas a IDENTIDADE de cada um passa
+  //    a vir do espelho, que a fase A tornou fiel: nome, foto e status saem do
+  //    patrimônio, junto com o valor e os financiamentos que já saíam de lá.
+  //
+  //    Enquanto a identidade vinha do veículo, este era o único lugar do app
+  //    que sabia traduzir `em_uso`/`na_oficina`/`a_venda` para `ativo` — e
+  //    qualquer tela nova que lesse o patrimônio direto pegaria um vocabulário
+  //    que não entende. Agora só existe um vocabulário aqui dentro.
+  //
+  //    O veículo segue como rede de segurança para o caso de ainda não haver
+  //    espelho (primeiro acesso, nuvem a meio caminho).
   vehs.forEach(v => {
     const p = patByVehId[v.id] || null;
     items.push({
       tipo:           'veiculo',
-      nome:           v.name  || '',
-      foto:           v.photo || null,
-      status:         VEH2PAT_STATUS[v.status] || 'ativo',
+      nome:           p ? (p.nome  || '') : (v.name  || ''),
+      foto:           p ? (p.foto  || null) : (v.photo || null),
+      status:         p ? ((p.status === 'ativo' || !p.status) ? 'ativo' : 'encerrado')
+                        : (VEH2PAT_STATUS[v.status] || 'ativo'),
       valorEstimado:  p ? (p.valorEstimado  || 0)  : 0,
       financiamentos: p ? (p.financiamentos || []) : [],
       vehId:          v.id,
@@ -10515,9 +10530,46 @@ function patMenuDelete() {
 // ══════════════════════════════════════════
 // CICLO DE VIDA DO PATRIMÔNIO — Venda/Encerramento, Reabertura e Exclusão guardada
 // ══════════════════════════════════════════
-function _patIsVeiculo(id) { return (D.vehicles || []).some(v => v.id === id); }
-function _patNomeOf(id) { const v = (D.vehicles || []).find(x => x.id === id); if (v) return v.name || ''; const p = getPatrimonio(id); return p ? (p.nome || '') : ''; }
-function _patTipoOf(id) { if (_patIsVeiculo(id)) return 'veiculo'; const p = getPatrimonio(id); return p ? (p.tipo || 'outro') : 'outro'; }
+// ── A costura: um bem, um lugar para perguntar sobre ele ──────────────────
+//
+// Um veículo tem registro nos dois armazéns — identidade em `D.vehicles`,
+// dinheiro no espelho de `D.patrimonios`. Estas funções são o ponto por onde
+// o resto do app pergunta "como se chama", "que tipo é", "ainda está ativo".
+//
+// Elas perguntavam ao VEÍCULO primeiro, e o espelho existia só para o valor.
+// Agora que o espelho acompanha as edições (fase A), a ordem se inverte: o
+// patrimônio é a fonte, e o veículo é a rede de segurança para o caso de um
+// registro ainda não ter espelho — primeiro acesso, sync da nuvem a meio
+// caminho, dado importado.
+//
+// Trocar a ordem AQUI vale por trocá-la em todos os chamadores, e é o que
+// permite as próximas fases mexerem num lugar só.
+
+/** O registro de patrimônio de um bem, aceitando id de patrimônio OU de
+ *  veículo (o espelho reusa o id do veículo, ou o guarda em `_idOriginal`). */
+function _bemRegistro(id) {
+  if (!id) return null;
+  const pats = D.patrimonios || [];
+  return pats.find(p => p.id === id) ||
+         pats.find(p => p.tipo === 'veiculo' && p._idOriginal === id) || null;
+}
+
+function _patIsVeiculo(id) {
+  const p = _bemRegistro(id);
+  if (p) return p.tipo === 'veiculo';
+  return (D.vehicles || []).some(v => v.id === id);
+}
+function _patNomeOf(id) {
+  const p = _bemRegistro(id);
+  if (p) return p.nome || '';
+  const v = (D.vehicles || []).find(x => x.id === id);
+  return v ? (v.name || '') : '';
+}
+function _patTipoOf(id) {
+  const p = _bemRegistro(id);
+  if (p) return p.tipo || 'outro';
+  return (D.vehicles || []).some(v => v.id === id) ? 'veiculo' : 'outro';
+}
 // Financiamentos vinculados ao bem (fonte única D.debts).
 function _debtsDoBem(id) {
   const rec = _patOwnerRec(id);
