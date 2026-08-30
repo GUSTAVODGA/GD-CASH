@@ -307,3 +307,49 @@ test('voltar do detalhe leva à home do Patrimônio, não a uma tela invisível'
   });
   expect(visivel, 'o retorno do CRUD não chega à home do Patrimônio').toBe(true);
 });
+
+// ══ FASE D (parcial): os últimos leitores de nome passam pela costura ═════
+//
+// Sobravam três lugares que perguntavam o nome do bem direto a `D.vehicles`:
+// o resultado da Pesquisa, o agrupamento de custo por veículo, e o nome do bem
+// numa dívida — este último chegando a reescrever à mão a busca por
+// `_idOriginal` que `_bemRegistro` já faz, e na ordem antiga.
+//
+// Cada um desses era uma cópia da regra "para veículo, a identidade mora do
+// outro lado". Agora todos perguntam a `_patNomeOf`.
+
+test('o nome do bem numa dívida vem da costura', async ({ page }) => {
+  await abrir(page, { ...BASE, debts: [{ id:'d1', tipo:'financiamento', titulo:'Financiamento',
+    credor:'Banco', valorOriginal:60000, valorParcela:1450, parcelasTotal:42, amortizadoInicial:0,
+    dataInicio:'2026-01-10', periodicidade:'mensal', status:'ativa', vehicleId:'v1' }] });
+  expect(await lerEstado(page, `_debtBemNome(getDebt('d1'))`)).toBe('Gol 2015');
+
+  // Divergência artificial prova de qual lado veio.
+  await page.evaluate(() => { D.patrimonios.find(x=>x.tipo==='veiculo').nome = 'DO ESPELHO'; });
+  expect(await lerEstado(page, `_debtBemNome(getDebt('d1'))`)).toBe('DO ESPELHO');
+});
+
+test('a dívida cujo bem foi apagado não quebra nem inventa nome', async ({ page }) => {
+  await abrir(page, { ...BASE, debts: [{ id:'d1', tipo:'financiamento', titulo:'Financiamento',
+    credor:'Banco', valorOriginal:60000, valorParcela:1450, parcelasTotal:42, amortizadoInicial:0,
+    dataInicio:'2026-01-10', periodicidade:'mensal', status:'ativa', vehicleId:'sumiu' }] });
+  expect(await lerEstado(page, `_debtBemNome(getDebt('d1'))`)).toBe('');
+});
+
+test('a Pesquisa nomeia o bem do gasto pela costura', async ({ page }) => {
+  await abrir(page, { ...BASE, expenses: [{ id:'e1', date:'2026-08-05', amount:300,
+    category:'Transporte', description:'Pneu', vehicleId:'v1' }] });
+  expect(await lerEstado(page, `_srchLinkName(D.expenses[0])`)).toBe('Gol 2015');
+  await page.evaluate(() => { D.patrimonios.find(x=>x.tipo==='veiculo').nome = 'DO ESPELHO'; });
+  expect(await lerEstado(page, `_srchLinkName(D.expenses[0])`)).toBe('DO ESPELHO');
+});
+
+test('NADA SE PERDEU: o custo por veículo continua somando e nomeando', async ({ page }) => {
+  await abrir(page, { ...BASE, expenses: [
+    { id:'e1', date:'2026-08-05', amount:300, category:'Transporte', description:'Pneu', vehicleId:'v1' },
+    { id:'e2', date:'2026-08-12', amount:250, category:'Transporte', description:'Gasolina', vehicleId:'v1' },
+  ] });
+  const custo = await lerEstado(page, `_vehCustoMes('v1')`);
+  expect(custo, 'o custo mensal do bem sumiu').toBeTruthy();
+  expect(custo.uso, 'a soma de uso e manutenção mudou').toBe(550);
+});

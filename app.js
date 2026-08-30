@@ -595,9 +595,10 @@ function _srchNorm(s) {
 
 // Nome do veículo/patrimônio vinculado a um gasto, se houver (canônico + legado).
 function _srchLinkName(e) {
+  // `_patNomeOf` sabe onde a identidade do bem mora; aqui só se pergunta.
   if (e.vehicleId) {
-    const v = (D.vehicles||[]).find(x => x.id === e.vehicleId);
-    if (v) return v.name || '';
+    const nome = _patNomeOf(e.vehicleId);
+    if (nome) return nome;
   }
   if (e.patrimonioId) {
     const p = (D.patrimonios||[]).find(x => x.id === e.patrimonioId);
@@ -1559,8 +1560,7 @@ function getMonthData(off, opts) {
     vehCostMap[e.vehicleId] = (vehCostMap[e.vehicleId] || 0) + e.amount;
   });
   var byVehicle = Object.entries(vehCostMap).map(function(entry) {
-    var veh = (D.vehicles || []).find(function(v) { return v.id === entry[0]; });
-    return { id: entry[0], name: veh ? veh.name : 'Veículo', cost: entry[1] };
+    return { id: entry[0], name: _patNomeOf(entry[0]) || 'Veículo', cost: entry[1] };
   }).sort(function(a, b) { return b.cost - a.cost; });
 
   var pendCompleted = (D.pendencias || []).filter(function(p) {
@@ -4574,10 +4574,11 @@ let _dividasFiltro = 'todas';
 // Resolve o nome do bem vinculado (sem alterar vínculos na renderização).
 function _debtBemNome(d) {
   if (d.patrimonioId) { const p = getPatrimonio(d.patrimonioId); if (p) return p.nome; }
+  // Isto reescrevia à mão a busca por `_idOriginal` que `_bemRegistro` já faz,
+  // e na ordem antiga: veículo primeiro, espelho como plano B.
   if (d.vehicleId) {
-    const v = (D.vehicles || []).find(x => x.id === d.vehicleId); if (v) return v.name;
-    const pv = (D.patrimonios || []).find(x => x.tipo === 'veiculo' && (x._idOriginal === d.vehicleId || x.id === d.vehicleId));
-    if (pv) return pv.nome;
+    const nome = _patNomeOf(d.vehicleId);
+    if (nome) return nome;
   }
   return '';
 }
