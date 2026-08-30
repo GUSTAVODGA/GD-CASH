@@ -5008,7 +5008,7 @@ function abrirBemDaDivida(id) {
   if (d.patrimonioId && getPatrimonio(d.patrimonioId)) { renderPatDetail(d.patrimonioId); return; }
   if (d.vehicleId) {
     const v = (D.vehicles || []).find(x => x.id === d.vehicleId);
-    if (v) { _vehDetailMode = 'integrated'; renderVehPatDetail(v.id); return; }
+    if (v) { renderVehPatDetail(v.id); return; }
   }
   renderPatrimonioHome();
 }
@@ -7739,7 +7739,7 @@ function qaAbrirOrigem() {
   _restaurarFabQuandoSeguro('modal-quick-add');
   if (alvo.tipo === 'divida') { switchTab('dividas', _currentMainTab); openDebtDetail(alvo.id); return; }
   switchTab('patrimonio', 'mais');
-  if (alvo.tipo === 'veiculo') { _vehDetailId = alvo.id; _vehDetailMode = 'integrated'; renderVehPatDetail(alvo.id); return; }
+  if (alvo.tipo === 'veiculo') { _vehDetailId = alvo.id; renderVehPatDetail(alvo.id); return; }
   if (alvo.tipo === 'patrimonio') { renderPatDetail(alvo.id); return; }
 }
 
@@ -8800,38 +8800,29 @@ var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'var(--c-warning)', 
 var _vehDetailId = null;
 
 function renderPatrimonio() {
-  // Detalhe legacy persiste ao voltar para a aba (comportamento antigo).
-  // Detalhe integrado de veículo volta à home (como o detalhe de imóvel).
-  if (_vehDetailId && _vehDetailMode === 'legacy') renderVehDetail(_vehDetailId);
-  else if (_patLegacyMode) _renderLegacyVehList();
-  else renderPatrimonioHome();
+  renderPatrimonioHome();
 }
 
+// As vistas que o Patrimônio alterna. `veh-list-view` e `veh-detail-view`
+// saíram junto com o fluxo legado; o cabeçalho e o botão "Novo" que só
+// apareciam nelas saíram com eles.
 function _vehShowView(id) {
-  ['pat-home-view','veh-list-view','veh-detail-view','veh-form-view','pat-form-view','pat-detail-view','pat-veh-detail-view'].forEach(v => {
+  ['pat-home-view','veh-form-view','pat-form-view','pat-detail-view','pat-veh-detail-view'].forEach(v => {
     const el = document.getElementById(v);
     if (el) el.style.display = (v === id) ? '' : 'none';
   });
-  const legacyHeader = document.getElementById('veh-legacy-header');
-  if (legacyHeader) legacyHeader.style.display = (id === 'veh-list-view') ? '' : 'none';
-  const addBtn = document.getElementById('veh-add-btn');
-  if (addBtn) addBtn.style.display = (id === 'veh-list-view') ? '' : 'none';
   const fab = document.getElementById('pat-fab');
   if (fab) fab.style.display = (id === 'pat-home-view') ? 'flex' : 'none';
 }
 
 // ── Fluxo legado de Veículos — preservado e acessível durante os testes ──
-// renderVehList() continua sendo o ponto de retorno de todo o CRUD antigo
-// (voltar do detalhe, salvar/cancelar formulário, excluir). Fora do modo
-// legado ele leva à home do Patrimônio 2.0; no modo legado, à lista antiga.
-var _patLegacyMode = false;
-
-function openLegacyVehList() { _patLegacyMode = true; _renderLegacyVehList(); }
-function exitLegacyVehList() { _patLegacyMode = false; renderPatrimonioHome(); }
-
+// Ponto de retorno de todo o CRUD de veículo — voltar do detalhe, salvar ou
+// cancelar o formulário, arquivar, excluir. Levava à lista LEGADA quando o app
+// estivesse em "modo legado"; esse modo não tinha mais como ser ligado
+// (`openLegacyVehList` ficou sem nenhum chamador quando o link que o abria saiu
+// da tela), então o ramo só existia no papel. Agora existe um destino só.
 function renderVehList() {
-  if (!_patLegacyMode) { renderPatrimonioHome(); return; }
-  _renderLegacyVehList();
+  renderPatrimonioHome();
 }
 
 // ── Cabeçalho padrão das telas internas: Voltar (ícone) + título + ação opcional ──
@@ -8848,140 +8839,7 @@ function _pageHeader(backOnclick, title, rightHtml) {
     </div>`;
 }
 
-function _renderLegacyVehList() {
-  _vehDetailId = null;
-  _vehDetailMode = 'legacy';
-  _vehShowView('veh-list-view');
-  window.scrollTo(0, 0);
-  const list = document.getElementById('veh-list');
-  if (!list) return;
-  const vehicles = D.vehicles || [];
-  const active   = vehicles.filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
-  const inactive = vehicles.filter(v => v.status === 'arquivado' || v.status === 'vendido');
-  if (vehicles.length === 0) {
-    list.innerHTML = `<div class="veh-empty"><div class="veh-empty-ico">🚗</div><p>Nenhum veículo cadastrado.</p><button class="btn btn-primary" onclick="openVehForm()">Adicionar veículo</button></div>`;
-    return;
-  }
-  const carSvg = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>`;
-  const cardHtml = v => {
-    const col = VEH_STATUS_COLORS[v.status] || 'var(--tx3)';
-    const lbl = VEH_STATUS_LABELS[v.status] || v.status;
-    const sub = [v.brand, v.model, v.year].filter(Boolean).join(' · ');
-    return `<div class="veh-card" onclick="renderVehDetail('${v.id}')">
-      ${v.photo
-        ? `<img class="veh-card-photo" src="${v.photo}" alt="${escHtml(v.name)}">`
-        : `<div class="veh-card-photo veh-card-no-photo">${carSvg}</div>`}
-      <div class="veh-card-info">
-        <div class="veh-card-name">${escHtml(v.name)}</div>
-        ${sub ? `<div class="veh-card-sub">${escHtml(sub)}</div>` : ''}
-        ${v.km != null ? `<div class="veh-card-km">${Number(v.km).toLocaleString('pt-BR')} km</div>` : ''}
-      </div>
-      <span class="veh-status-chip" style="background:${col}20;color:${col}">${lbl}</span>
-    </div>`;
-  };
-  let html = active.length === 0
-    ? `<div class="veh-empty" style="padding:24px 0"><p style="margin:0;color:var(--tx3)">Nenhum veículo ativo.</p></div>`
-    : active.map(cardHtml).join('');
-  if (inactive.length > 0) {
-    html += `<div class="veh-section-title veh-archive-heading">Vendidos e arquivados (${inactive.length})</div>`;
-    html += inactive.map(cardHtml).join('');
-  }
-  list.innerHTML = html;
-}
 
-function renderVehDetail(id) {
-  const v = (D.vehicles || []).find(x => x.id === id);
-  if (!v) { renderVehList(); return; }
-  _vehDetailId = id;
-  _vehDetailMode = 'legacy';
-  _vehShowView('veh-detail-view');
-  const cont = document.getElementById('veh-detail-cont');
-  if (!cont) return;
-  // Voltar: se o detalhe legacy foi aberto pelo detalhe integrado, retorna a ele.
-  const backFromLegacy = (_vehReturnCtx === id) ? `backFromLegacyVehDetail('${id}')` : 'renderVehList()';
-  const backFromLegacyLbl = (_vehReturnCtx === id) ? 'Detalhe' : 'Lista';
-  const col = VEH_STATUS_COLORS[v.status] || 'var(--tx3)';
-  const lbl = VEH_STATUS_LABELS[v.status] || v.status;
-  const sub = [v.brand, v.model, v.year, v.color].filter(Boolean).join(' · ');
-  const carSvg = `<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17H3v-5l3-5h12l3 5v5h-2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M9 12h6"/></svg>`;
-
-  const linkedExps  = (v.linkedExpenses  || []).map(eid => (D.expenses  || []).find(e => e.id === eid)).filter(Boolean);
-  const linkedPends = (() => {
-    const seen = new Set();
-    const out = [];
-    (v.linkedPendencias || []).forEach(pid => {
-      const p = (D.pendencias || []).find(x => x.id === pid);
-      if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p); }
-    });
-    // União: pendências cujo resolvedor aponta para este veículo
-    (D.pendencias || []).forEach(p => {
-      if (seen.has(p.id)) return;
-      const ref = _pendAssetRef(p);
-      if (ref && ref.kind === 'vehicle' && ref.id === v.id) { seen.add(p.id); out.push(p); }
-    });
-    return out;
-  })();
-  const history = (v.history || []).slice().reverse();
-  const canHardDelete = history.length === 0 && (v.linkedExpenses||[]).length === 0 && (v.linkedPendencias||[]).length === 0;
-
-  cont.innerHTML = `
-    ${_pageHeader(backFromLegacy, 'Veículo')}
-    <div class="veh-detail-header">
-      ${v.photo ? `<img class="veh-detail-photo" src="${v.photo}" alt="${escHtml(v.name)}">` : `<div class="veh-detail-photo veh-detail-no-photo">${carSvg}</div>`}
-      <div class="veh-detail-meta">
-        <div class="veh-detail-name">${escHtml(v.name)}</div>
-        ${sub ? `<div class="veh-detail-sub">${escHtml(sub)}</div>` : ''}
-        ${v.plate ? `<div class="veh-detail-plate">${escHtml(v.plate)}</div>` : ''}
-        ${v.km != null ? `<div class="veh-detail-km">${Number(v.km).toLocaleString('pt-BR')} km</div>` : ''}
-      </div>
-    </div>
-    <div class="veh-detail-status-row">
-      <span class="veh-status-chip" style="background:${col}20;color:${col}">${lbl}</span>
-      <button class="btn-inline-ghost" onclick="openVehStatus('${v.id}')">Alterar status</button>
-    </div>
-    ${v.notes ? `<div class="veh-detail-notes">${escHtml(v.notes)}</div>` : ''}
-    <div class="veh-actions-row">
-      <button class="btn-pill" onclick="openVehEvent('${v.id}')">+ Apontamento</button>
-      <button class="btn-pill" onclick="openVehLinkExp('${v.id}')">Vincular despesa</button>
-      <button class="btn-pill" onclick="openVehLinkPend('${v.id}')">Vincular pendência</button>
-    </div>
-    ${linkedExps.length ? `
-    <div class="veh-section-title">Despesas vinculadas</div>
-    <div class="veh-linked-list">${linkedExps.map(e => `
-      <div class="veh-linked-item">
-        <div class="veh-linked-info">
-          <span class="veh-linked-desc">${escHtml(e.description || e.category)}</span>
-          <span class="veh-linked-meta">${fmtShort(e.date)} · ${R(e.amount)}</span>
-        </div>
-        <button class="veh-unlink-btn" onclick="unlinkVehExp('${v.id}','${e.id}')">✕</button>
-      </div>`).join('')}</div>` : ''}
-    ${linkedPends.length ? `
-    <div class="veh-section-title">Pendências vinculadas</div>
-    <div class="veh-linked-list">${linkedPends.map(p => `
-      <div class="veh-linked-item">
-        <div class="veh-linked-info">
-          <span class="veh-linked-desc">${escHtml(p.title)}</span>
-          <span class="veh-linked-meta">${p.status === 'aberta' ? 'Aberta' : 'Concluída'}${p.estimatedValue ? ' · ' + R(p.estimatedValue) : ''}</span>
-        </div>
-        <button class="veh-unlink-btn" onclick="unlinkVehPend('${v.id}','${p.id}')">✕</button>
-      </div>`).join('')}</div>` : ''}
-    ${history.length ? `
-    <div class="veh-section-title">Histórico</div>
-    <div class="veh-history-list">${history.map(h => `
-      <div class="veh-hist-item">
-        <div class="veh-hist-dot ${h.type === 'km_update' ? 'km' : ''}"></div>
-        <div class="veh-hist-info">
-          <div class="veh-hist-main">${h.type === 'km_update' ? Number(h.km).toLocaleString('pt-BR') + ' km' : escHtml(h.note || 'Evento')}</div>
-          <div class="veh-hist-meta">${fmtShort(h.date)}${h.amount ? ' · ' + R(h.amount) : ''}</div>
-        </div>
-        <button class="veh-unlink-btn" onclick="deleteVehHistItem('${v.id}','${h.id}')">✕</button>
-      </div>`).join('')}</div>` : ''}
-    <div class="veh-detail-footer">
-      <button class="btn btn-secondary" onclick="openVehForm('${v.id}')">Editar</button>
-      <button class="btn btn-secondary" onclick="archiveVehicle('${v.id}')">Arquivar</button>
-    </div>
-    ${canHardDelete ? `<div class="veh-hard-delete-row"><button class="btn-text-danger" onclick="deleteVehicle('${v.id}')">Excluir definitivamente</button></div>` : ''}`;
-}
 
 function openVehForm(id) {
   if (id && _patEncerradoBloqueado(id)) return;
@@ -9167,7 +9025,7 @@ function saveVehicle() {
     const ld = getDebt(linkPendingId);
     if (ld && !_debtHasBem(ld)) { _relinkDebtToBem(ld, id); save(); }
     _finFlowReturn = null;
-    _vehDetailId = id; _vehDetailMode = 'integrated'; renderVehPatDetail(id);
+    _vehDetailId = id; renderVehPatDetail(id);
     gdToast('Dívida vinculada a ' + name + '.', { type: 'success' });
     return;
   }
@@ -9939,7 +9797,7 @@ function closePatSheet() {
 
 function patAddTipo(tipo) {
   closePatSheet();
-  if (tipo === 'veiculo') { _vehDetailMode = 'integrated'; openVehForm(); return; }
+  if (tipo === 'veiculo') { openVehForm(); return; }
   openPatForm(tipo);
 }
 
@@ -11248,15 +11106,17 @@ function deletePatEvt(patId, evtId) {
 // (valor atual, histórico de reavaliação). Não migra, não duplica, não
 // modifica ids. A tela legacy continua acessível por links secundários.
 
-var _vehDetailMode = 'legacy';   // 'integrated' | 'legacy'
-var _vehReturnCtx  = null;        // vehId quando o detalhe legacy foi aberto pelo integrado
 var _patHomeScroll = 0;           // posição de scroll da home ao abrir o detalhe
 
-// Re-render consciente do modo: mantém o usuário no detalhe corrente após
-// uma ação. No modo legacy é idêntico ao comportamento anterior.
+// Mantém o usuário no detalhe corrente após uma ação.
+//
+// Isto despachava entre dois renderizadores conforme `_vehDetailMode`, cujo
+// valor INICIAL era 'legacy'. Na prática todo caminho de entrada definia
+// 'integrated' antes, mas bastava alguém chamar esta função sem ter aberto um
+// detalhe para cair na tela legada — que está `display:none` desde sempre e
+// não é alcançável por toque nenhum. Um destino só remove a armadilha.
 function _refreshVehDetail(id) {
-  if (_vehDetailMode === 'integrated') renderVehPatDetail(id);
-  else renderVehDetail(id);
+  renderVehPatDetail(id);
 }
 
 // Abre o detalhe integrado guardando o scroll da home para o Voltar.
@@ -11276,15 +11136,6 @@ function _backToPatHomePreserveScroll() {
   });
 }
 
-// Link secundário do detalhe integrado → detalhe legacy do mesmo veículo.
-function openLegacyVehFromIntegrated(vehId) {
-  _vehReturnCtx = vehId; // ao voltar do legacy, retorna ao detalhe integrado
-  renderVehDetail(vehId);
-}
-function backFromLegacyVehDetail(vehId) {
-  _vehReturnCtx = null;
-  renderVehPatDetail(vehId);
-}
 
 // SVG de carro (fallback quando não há foto), coerente com o Avenco.
 function _vehIconSvg(size) {
@@ -11331,7 +11182,6 @@ function renderVehPatDetail(id) {
   const v = (D.vehicles || []).find(x => x.id === id);
   if (!v) { renderPatrimonioHome(); return; }
   _vehDetailId = id;
-  _vehDetailMode = 'integrated';
   _vehShowView('pat-veh-detail-view');
   window.scrollTo(0, 0);
   if (document.body) document.body.scrollTop = 0;

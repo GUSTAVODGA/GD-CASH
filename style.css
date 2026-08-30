@@ -2692,39 +2692,6 @@ textarea.form-input{resize:none}
 .veh-btn-danger { background: var(--red); color: #fff; }
 .veh-btn-danger:active { opacity: .85; }
 
-/* Veh header button */
-.veh-add-btn {
-  display: flex; align-items: center; gap: 5px;
-  background: var(--ac); color: #fff;
-  border: none; border-radius: 10px;
-  padding: 7px 13px; font-size: 13px; font-weight: 700; cursor: pointer;
-}
-
-/* List */
-.veh-list { padding: 10px 0 100px; display: flex; flex-direction: column; gap: 10px; }
-
-.veh-card {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 16px; padding: 12px; cursor: pointer;
-  transition: background .15s, transform .1s;
-}
-.veh-card:active { transform: scale(.98); }
-
-.veh-card-photo {
-  width: 64px; height: 64px; border-radius: 12px; object-fit: cover; flex-shrink: 0;
-}
-.veh-card-no-photo {
-  width: 64px; height: 64px; border-radius: 12px;
-  background: var(--ol1); border: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--tx3); flex-shrink: 0;
-}
-.veh-card-info { flex: 1; min-width: 0; }
-.veh-card-name { font-size: 15px; font-weight: 700; color: var(--tx); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.veh-card-sub  { font-size: 12px; color: var(--tx2); margin-top: 2px; }
-.veh-card-km   { font-size: 12px; color: var(--tx3); margin-top: 2px; font-variant-numeric: tabular-nums; }
-
 /* Status chip */
 .veh-status-chip {
   display: inline-block; border-radius: 20px; padding: 4px 10px;
@@ -3707,9 +3674,6 @@ button:focus-visible, [role="button"]:focus-visible {
 .gear-btn { transition: background var(--dur-normal) var(--ease-default), transform var(--dur-fast) var(--ease-default); }
 .gear-btn:active { transform:scale(.9); }
 
-/* ── Vehicle card active ── */
-.veh-card { transition: background var(--dur-fast) var(--ease-default), transform var(--dur-fast) var(--ease-default); }
-
 /* ── Dark-mode card shadow via token ── */
 :root[data-theme="dark"] .av-card { box-shadow: 0 2px 14px rgba(0,0,0,.28); }
 
@@ -3819,15 +3783,6 @@ button:focus-visible, [role="button"]:focus-visible {
 
 /* Bottom sheet overlay inside page */
 #pat-sheet { position: fixed; }
-
-/* Link discreto para a tela antiga de veículos (durante os testes) */
-.pat-legacy-link {
-  display: block; width: 100%; margin: 0 0 4px; padding: 10px;
-  background: none; border: none; cursor: pointer; text-align: center;
-  font-size: 12px; font-weight: 600; color: var(--tx3);
-  text-decoration: underline; text-underline-offset: 3px;
-  -webkit-tap-highlight-color: transparent;
-}
 
 /* Tablet / desktop — 3-col category grid */
 @media (min-width: 640px) {
@@ -3941,7 +3896,7 @@ button:focus-visible, [role="button"]:focus-visible {
 :root[data-theme="dark"] #pat-home-cont .hero-chip { color: rgba(232,237,255,.66) !important; }
 :root[data-theme="dark"] #pat-home-cont .hero-chip b { color: var(--tx); }
 :root[data-theme="dark"] .pat-cat-count { color: rgba(232,237,255,.62); }
-:root[data-theme="dark"] .pat-legacy-link { color: rgba(232,237,255,.58); }
+
 :root[data-theme="dark"] .s-vendido .pat-status-lbl,
 :root[data-theme="dark"] .s-inativo .pat-status-lbl { color: rgba(232,237,255,.62); }
 :root[data-theme="dark"] .s-vendido .pat-status-dot { background: rgba(232,237,255,.62); }

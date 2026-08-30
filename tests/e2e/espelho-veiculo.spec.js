@@ -21,7 +21,7 @@
 // Migrar passou a ser sincronizar. Estes testes prendem as duas metades da
 // regra: o que é do veículo acompanha, e o que é do patrimônio não é tocado.
 import { test, expect } from '@playwright/test';
-import { abrirAppEmDemo, semearDados, lerEstado } from './_helpers.js';
+import { abrirAppEmDemo, semearDados, lerEstado, irParaAba } from './_helpers.js';
 
 const AGORA = new Date(2026, 7, 20, 12, 0, 0);
 
@@ -231,4 +231,79 @@ test('a inversão é só leitura: não escreve em D nem chama save()', async ({ 
   });
   expect(salvou).toBe(0);
   expect(await lerEstado(page, 'JSON.stringify(D)')).toBe(antes);
+});
+
+// ══ FASE C: o fluxo legado de Veículos sai de cena ════════════════════════
+//
+// Havia TRÊS renderizadores de detalhe de bem. Um deles, `renderVehDetail`,
+// pertencia a uma tela de Veículos anterior ao Patrimônio — com lista, header
+// próprio e botão "Novo". Essa tela já não era alcançável: `openLegacyVehList`
+// tinha ZERO chamadores (o link que a abria saiu, deixando até o CSS
+// `.pat-legacy-link` órfão), e o markup estava `display:none`.
+//
+// Pior que morta, ela era uma armadilha: `_vehDetailMode` nascia 'legacy', e
+// qualquer chamada a `_refreshVehDetail` antes de um caminho de entrada teria
+// levado o usuário para uma tela invisível. Só não acontecia por sorte de
+// ordem.
+//
+// Estes testes protegem o que ficou: a tela de bem que sobrou é a integrada, e
+// ela continua completa.
+
+test('o fluxo legado de Veículos não existe mais em lugar nenhum', async ({ page }) => {
+  await abrir(page);
+  const restos = await page.evaluate(() => ({
+    funcoes: ['renderVehDetail', '_renderLegacyVehList', 'openLegacyVehList',
+              'exitLegacyVehList', 'openLegacyVehFromIntegrated', 'backFromLegacyVehDetail']
+      .filter(f => typeof window[f] === 'function'),
+    markup: ['veh-legacy-header', 'veh-list-view', 'veh-detail-view', 'veh-list', 'veh-detail-cont']
+      .filter(id => !!document.getElementById(id)),
+  }));
+  expect(restos.funcoes, 'função do fluxo legado ainda existe').toEqual([]);
+  expect(restos.markup, 'markup do fluxo legado ainda está no documento').toEqual([]);
+});
+
+test('NADA SE PERDEU: o detalhe do veículo continua inteiro', async ({ page }) => {
+  const erros = await abrir(page);
+  await irParaAba(page, 'patrimonio');
+  await page.waitForTimeout(300);
+  await page.evaluate(() => window.abrirVehPatDetail
+    ? window.abrirVehPatDetail('v1') : window.renderVehPatDetail('v1'));
+  await page.waitForTimeout(300);
+
+  const vista = page.locator('#pat-veh-detail-view');
+  await expect(vista).toBeVisible();
+  await expect(vista).toContainText('Gol 2015');
+  // O detalhe integrado põe placa, marca, modelo e ano no cabeçalho, sem
+  // rótulo — então o que se verifica é o VALOR, não a palavra.
+  for (const dado of ['ABC1D23', 'VW', 'Gol', '2015']) {
+    await expect(vista, `o detalhe perdeu o dado "${dado}"`).toContainText(dado);
+  }
+  // E as ações do bem continuam alcançáveis.
+  const acoes = await vista.evaluate(el => (el.textContent || '').replace(/\s+/g, ' '));
+  expect(acoes.length, 'o detalhe veio vazio').toBeGreaterThan(80);
+  expect(erros).toEqual([]);
+});
+
+test('a tela Patrimônio só alterna vistas que existem', async ({ page }) => {
+  await abrir(page);
+  await irParaAba(page, 'patrimonio');
+  const ok = await page.evaluate(() => {
+    const vistas = ['pat-home-view','veh-form-view','pat-form-view','pat-detail-view','pat-veh-detail-view'];
+    return vistas.every(v => !!document.getElementById(v));
+  });
+  expect(ok, 'o alternador de vistas aponta para um id que não existe').toBe(true);
+});
+
+test('voltar do detalhe leva à home do Patrimônio, não a uma tela invisível', async ({ page }) => {
+  await abrir(page);
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.renderVehPatDetail('v1'));
+  await page.waitForTimeout(250);
+  await page.evaluate(() => window.renderVehList());   // ponto de retorno do CRUD
+  await page.waitForTimeout(250);
+  const visivel = await page.evaluate(() => {
+    const h = document.getElementById('pat-home-view');
+    return h ? getComputedStyle(h).display !== 'none' : false;
+  });
+  expect(visivel, 'o retorno do CRUD não chega à home do Patrimônio').toBe(true);
 });
