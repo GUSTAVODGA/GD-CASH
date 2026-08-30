@@ -57,10 +57,58 @@ const retanguloDoFab = page => page.evaluate(() => {
  *  Isso é mais forte que a pré-condição antiga, que dependia de duas caixas se
  *  encontrarem por acaso — aqui o cenário perigoso é construído de propósito. */
 async function tocarSobreOFab(page) {
+  const p = await pontoDoFab(page);
+  await page.mouse.click(p.x, p.y);
+  return p;
+}
+
+/** Centro do FAB, sem tocar. */
+async function pontoDoFab(page) {
   const f = await retanguloDoFab(page);
-  const x = (f.left + f.right) / 2, y = (f.top + f.bottom) / 2;
-  await page.mouse.click(x, y);
-  return { x, y };
+  return { x: (f.left + f.right) / 2, y: (f.top + f.bottom) / 2 };
+}
+
+// ── A janela do toque fantasma, sem relógio de parede ──────────────────────
+//
+// A invariante sob teste é: ENQUANTO a folha ainda desaparece, um toque no
+// ponto do FAB não pode abrir o "+". Essa janela é real e o produto a protege
+// — mas ela dura o tempo de uma transição de opacidade (~200ms), e o teste
+// precisava caber nela junto com TRÊS idas e voltas ao navegador: esperar a
+// folha fechar, medir o FAB, tocar.
+//
+// Sob quatro workers isso estourava. Rastreando `_restaurarFabQuandoSeguro`:
+//
+//   3483 armar(modal-baixa)
+//   3679 transitionend alvo=modal-baixa prop=opacity  → JORNADA ENCERRADA
+//
+// 196ms. Quando o toque chegava depois disso, o FAB tinha voltado
+// LEGITIMAMENTE e o "+" abria como deveria — o teste acusava regressão onde
+// não havia. Medido na v70 intocada: 12 falhas em 108 execuções.
+//
+// A correção não afrouxa a asserção; ela tira o relógio de parede da conta.
+// `concluir()` tem exatamente duas saídas, e as duas são fechadas de propósito:
+//
+//   · `transitionend` — `transition-property: none` faz a opacidade mudar sem
+//     transição alguma, então o evento nunca nasce;
+//   · `setTimeout(concluir, 400)` — `clock.pauseAt` congela o tempo do
+//     documento, então o temporizador não corre.
+//
+// Com as duas fechadas a janela fica aberta o tempo que o teste precisar, e o
+// toque fantasma chega garantidamente dentro dela. Depois `soltarAJanela`
+// adianta o relógio para disparar a PRÓPRIA rede de segurança do produto e
+// provar que o FAB volta — a asserção final continua sendo sobre o produto.
+//
+// (Congelar só o relógio não bastava: sem `transition-property: none` o
+// `transitionend` real ainda encerrava a jornada em ~200ms. E só matar a
+// transição também não: aí o temporizador de 400ms assumia. Precisa das duas.)
+async function segurarAJanelaDaJornada(page) {
+  await page.addStyleTag({ content: '.overlay { transition-property: none !important; }' });
+  // Mira um instante à FRENTE: entre ler o relógio e mandar pausar, o tempo
+  // do documento já andou, e `pauseAt` recusa um alvo no passado.
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now()) + 2000));
+}
+async function soltarAJanela(page) {
+  await page.clock.runFor(500);   // > 400ms de _restaurarFabQuandoSeguro
 }
 
 /** Nenhum item da barra mora sob o FAB — senão o toque fantasma trocaria de
@@ -116,17 +164,23 @@ test('REGRESSÃO fixo: toque fantasma no "Dar baixa" não abre o + nem duplica',
   await expect(fab(page)).toBeHidden();
   expect(await navLivreSobOFab(page), 'um item da barra mora sob o FAB').toBe(true);
 
+  const ponto = await pontoDoFab(page);
+  await segurarAJanelaDaJornada(page);
+
   await tocarNoPonto(page, '#baixa-confirm-btn');                 // confirma a baixa
   await esperarOverlay(page, 'modal-baixa', false);
+  // A jornada TEM de estar viva aqui — é ela que o toque vai testar.
+  expect(await lerEstado(page, '_jornadaCompromisso'), 'a janela fechou antes do toque').toBe(true);
   // Toques fantasma MIRADOS no "+", com a folha ainda desaparecendo.
-  const ponto = await tocarSobreOFab(page);
+  await page.mouse.click(ponto.x, ponto.y);
   await page.mouse.click(ponto.x, ponto.y);
 
   await expect(page.locator('#modal-quick-add')).not.toHaveClass(/open/);
   const r = await lerEstado(page, RESUMO);
   expect(r).toMatchObject({ despesas: 1, deFixo: 1, manuais: 0, fixedPayments: 1, debtPayments: 0 });
 
-  // Terminada a transição, o FAB volta normalmente.
+  // Encerrada a jornada pela rede de segurança do produto, o FAB volta.
+  await soltarAJanela(page);
   await expect(fab(page)).toBeVisible();
   await expect(page.locator('.overlay.open')).toHaveCount(0);
 });
@@ -143,9 +197,13 @@ test('REGRESSÃO dívida: toque fantasma no "Registrar" não abre o + nem duplic
   await expect(fab(page)).toBeHidden();
   expect(await navLivreSobOFab(page), 'um item da barra mora sob o FAB').toBe(true);
 
+  const ponto = await pontoDoFab(page);
+  await segurarAJanelaDaJornada(page);
+
   await tocarNoPonto(page, '#debt-pay-save');
   await esperarOverlay(page, 'debt-pay-sheet', false);
-  const ponto = await tocarSobreOFab(page);
+  expect(await lerEstado(page, '_jornadaCompromisso'), 'a janela fechou antes do toque').toBe(true);
+  await page.mouse.click(ponto.x, ponto.y);
   await page.mouse.click(ponto.x, ponto.y);
 
   await expect(page.locator('#modal-quick-add')).not.toHaveClass(/open/);
@@ -154,6 +212,7 @@ test('REGRESSÃO dívida: toque fantasma no "Registrar" não abre o + nem duplic
   const saldo = await page.evaluate(() => window._debtSaldo(window.getDebt('divida-teste')));
   expect(saldo).toBe(6300);
 
+  await soltarAJanela(page);
   await expect(fab(page)).toBeVisible();
   await expect(page.locator('.overlay.open')).toHaveCount(0);
 });
