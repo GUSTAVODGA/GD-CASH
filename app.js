@@ -527,14 +527,36 @@ function renderMais() {
     conv: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>',
     srch: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
     adj:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>',
+    lem:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
+    meta: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg>',
   };
+
+  // Duas telas prontas que não tinham porta nenhuma. Metas só era alcançável
+  // pelo cartão da Início, que por sua vez só aparece para quem JÁ tem uma meta
+  // — a porta ficava do lado de dentro. Lembretes não era alcançável de lugar
+  // nenhum: só pelo console.
+  const lemProx = (() => {
+    const hoje = todayStr();
+    const futuros = (D.reminders || []).filter(r => r.date && r.date >= hoje)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!(D.reminders || []).length) return 'Nenhum lembrete';
+    if (!futuros.length) return `${D.reminders.length} lembrete(s) · nenhum à frente`;
+    return `Próximo: ${fmtShort(futuros[0].date)}`;
+  })();
+
+  const metasAtivas = (D.goals || []).filter(g => (g.saved || 0) < (g.target || 0));
+  const metaInfo = !(D.goals || []).length ? 'Nenhuma meta ainda'
+    : metasAtivas.length ? `${metasAtivas.length} em andamento`
+    : `${D.goals.length} concluída(s)`;
 
   root.innerHTML = `
     <div class="sec-label mais-sec">Resumos</div>
     <div class="mais-group">
       ${item('pendencias', ICO.pend, 'Pendências', pendAbertas > 0 ? `${pendAbertas} em aberto` : 'Nenhuma em aberto')}
+      ${item('lembretes', ICO.lem, 'Lembretes', lemProx)}
       ${item('fixos', ICO.fix, 'Gastos Fixos', `${R(fixTotal)} / mês`)}
       ${item('reserva', ICO.res, 'Reserva de Emergência', resTgt > 0 ? `${R(resCur)} · ${resPct}% da meta` : R(resCur))}
+      ${item('metas', ICO.meta, 'Metas', metaInfo)}
       ${item('patrimonio', ICO.pat, 'Patrimônio', `Líquido ${R(net)}`)}
       ${item('dividas', ICO.debt, 'Dívidas', dividasAtivas.length > 0 ? `${dividasAtivas.length} ativa(s) · ${R(dividasSaldo)} devedor` : 'Nenhuma ativa')}
     </div>
@@ -6597,8 +6619,23 @@ function saveLembrete() {
   save(); closeOverlay('modal-lembrete'); renderLembretes();
 }
 
+// O ✕ da lista chamava esta função direto: era a única exclusão do app que
+// apagava sem perguntar. O resto — gasto fixo, pendência, meta — passa por
+// gdConfirm. Lembretes não passava porque a tela estava órfã e nunca recebeu o
+// polimento que as outras receberam.
 function deleteLembrete(id) {
-  D.reminders = D.reminders.filter(r => r.id !== id);
+  const r = (D.reminders || []).find(x => x.id === id);
+  if (!r) return;
+  gdConfirm({
+    title: 'Excluir lembrete',
+    msg: `Deseja excluir "${r.name}" permanentemente?`,
+    confirmText: 'Excluir',
+    variant: 'danger',
+    onConfirm: () => { _deleteLembreteAgora(id); haptic(10); gdToast('Lembrete excluído.', { type: 'success' }); },
+  });
+}
+function _deleteLembreteAgora(id) {
+  D.reminders = (D.reminders || []).filter(r => r.id !== id);
   save(); renderLembretes();
 }
 
