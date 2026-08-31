@@ -5051,7 +5051,7 @@ function _afterDebtChange() {
 //
 // Aparece UMA vez, e a chave carrega a versão: se um dia o ícone mudar de novo,
 // basta uma chave nova, e quem já dispensou este não é incomodado de novo.
-const AVISO_ICONE_CHAVE = 'gdcash_aviso_icone_v79';
+const AVISO_ICONE_CHAVE = 'gdcash_aviso_icone_v80';
 
 function _estaInstalado() {
   try {
@@ -8998,7 +8998,7 @@ function renderAjustes() {
       <div class="sdivider"></div>
       <div class="srow srow-muted">
         <span class="srow-icon">${ic.info}</span>
-        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v79</div></div>
+        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v80</div></div>
       </div>
       <div class="sdivider"></div>
       <div class="srow srow-muted">

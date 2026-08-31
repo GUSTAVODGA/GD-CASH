@@ -236,7 +236,7 @@ test('AVISO: só aparece para quem está com o app INSTALADO', async ({ page }) 
   await abrir(page, { goals: [RESERVA] });
   // No navegador comum não há o que reinstalar — o aviso seria ação impossível.
   const noNavegador = await page.evaluate(() => {
-    localStorage.removeItem('gdcash_aviso_icone_v79');
+    localStorage.removeItem('gdcash_aviso_icone_v80');
     window.matchMedia = (q) => ({ matches: false, media: q, addListener(){}, removeListener(){} });
     window.checkAvisoIcone();
     return !!document.getElementById('_av_dlg');
@@ -256,7 +256,7 @@ test('AVISO: só aparece para quem está com o app INSTALADO', async ({ page }) 
 test('AVISO: aparece UMA vez e não volta a incomodar', async ({ page }) => {
   await abrir(page, { goals: [RESERVA] });
   await page.evaluate(() => {
-    localStorage.removeItem('gdcash_aviso_icone_v79');
+    localStorage.removeItem('gdcash_aviso_icone_v80');
     window.matchMedia = (q) => ({ matches: q.includes('standalone'), media: q, addListener(){}, removeListener(){} });
     window.checkAvisoIcone();
   });
@@ -264,7 +264,7 @@ test('AVISO: aparece UMA vez e não volta a incomodar', async ({ page }) => {
   await page.locator('#_av_dlg').getByRole('button', { name: 'Entendi' }).click();
   await page.waitForTimeout(300);
 
-  expect(await page.evaluate(() => localStorage.getItem('gdcash_aviso_icone_v79')),
+  expect(await page.evaluate(() => localStorage.getItem('gdcash_aviso_icone_v80')),
     'dispensar o aviso não ficou registrado').toBe('1');
 
   const voltou = await page.evaluate(() => { window.checkAvisoIcone(); return !!document.getElementById('_av_dlg'); });
@@ -276,7 +276,7 @@ test('AVISO: o diálogo respeita as quebras de linha do passo a passo', async ({
   await abrir(page, { goals: [RESERVA] });
   await page.evaluate(() => {
     window.matchMedia = (q) => ({ matches: q.includes('standalone'), media: q, addListener(){}, removeListener(){} });
-    localStorage.removeItem('gdcash_aviso_icone_v79');
+    localStorage.removeItem('gdcash_aviso_icone_v80');
     window.checkAvisoIcone();
   });
   await expect(page.locator('.av-dialog-msg')).toBeVisible();
