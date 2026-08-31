@@ -4586,6 +4586,27 @@ function _custoVariavelPorDiaRodado(janelaDias) {
   const dias = new Set();
   for (let i = 1; i <= n; i++) dias.add(_addDaysISO(hoje, -i));   // hoje não fechou
 
+  // ── GASTO ÚNICO NÃO É GASTO DE DIA TÍPICO ──
+  //
+  // A entrada de um carro, uma revisão grande, uma multa: entram uma vez e
+  // somem. Tratá-las como as outras arrasta a média para cima e mantém a linha
+  // do dia inflada por trinta dias inteiros — até a janela rolar e o número
+  // despencar sozinho, sem explicação.
+  //
+  // Foi exatamente o que aconteceu: R$ 2.000,00 de entrada de um carro no meio
+  // de ~50 gastos pequenos empurraram a linha do dia em R$ 71,43. Quem olhou
+  // disse "não vejo sentido, o dia está caríssimo" — e estava certo. Um número
+  // em que não se acredita é pior que número nenhum.
+  //
+  // A REGRA, e ela é dita ao usuário: um lançamento que SOZINHO pesa um quinto
+  // ou mais de tudo o que se gastou na janela não é gasto de dia típico. Fica
+  // de fora do valor por dia, e aparece separado — nada é escondido.
+  //
+  // Só vale com padrão para comparar: abaixo de `MIN_LANC` não existe "fora do
+  // padrão", existe pouca informação, e aí excluir seria arbitrário.
+  const MIN_LANC = 8;
+  const FATIA_ATIPICA = 0.20;
+
   let gastoC = 0, lancamentos = 0;
   // A composição POR CATEGORIA existe para que a explicação seja um recibo, não
   // uma suposição. A primeira versão desta tela dizia "você gastou X de
@@ -4593,12 +4614,34 @@ function _custoVariavelPorDiaRodado(janelaDias) {
   // o dado disse. Um usuário leu e perguntou de onde tinham saído: a resposta
   // era "da minha cabeça". O total sempre foi dele; o rótulo era meu.
   const porCategoria = {};
+  // Primeira passada: recolhe tudo que é candidato, sem julgar. O limiar do
+  // "fora do padrão" depende do total, e o total só existe no fim.
+  const candidatos = [];
   (D.expenses || []).forEach(e => {
     if (!dias.has(localDateKey(e.date))) return;
     if (_movementNature(e) !== 'consumo') return;          // dívida e patrimônio ficam fora
     const src = e.meta && e.meta.source;
     if (src === 'fixed-payment') return;                   // já contado como fixo
+    candidatos.push(e);
+  });
+
+  const brutoC = candidatos.reduce((s, e) => s + _c(e.amount), 0);
+  const limiarC = candidatos.length >= MIN_LANC ? brutoC * FATIA_ATIPICA : Infinity;
+
+  const foraDoPadrao = [];
+  candidatos.forEach(e => {
     const v = _c(e.amount);
+    if (v >= limiarC) {
+      foraDoPadrao.push({
+        id: e.id,
+        descricao: e.description || '',
+        categoria: (e.category != null && String(e.category).trim()) ? String(e.category) : 'Sem categoria',
+        data: localDateKey(e.date),
+        total: _r(v),
+        pct: brutoC > 0 ? Math.round(v / brutoC * 100) : 0,
+      });
+      return;
+    }
     gastoC += v;
     lancamentos++;
     const cat = (e.category != null && String(e.category).trim()) ? String(e.category) : 'Sem categoria';
@@ -4615,9 +4658,15 @@ function _custoVariavelPorDiaRodado(janelaDias) {
                     pct: gastoC > 0 ? Math.round(porCategoria[nome] / gastoC * 100) : 0 }))
     .sort((a, b) => _c(b.total) - _c(a.total));
 
+  foraDoPadrao.sort((a, b) => _c(b.total) - _c(a.total));
+
   return {
     dias: n, rodados, lancamentos, categorias,
     total: _r(gastoC),
+    // O que ficou de fora continua visível: o dinheiro saiu, ele só não define
+    // quanto custa um dia comum.
+    foraDoPadrao,
+    totalForaDoPadrao: _r(foraDoPadrao.reduce((s, x) => s + _c(x.total), 0)),
     porDiaRodado: rodados > 0 ? _r(Math.round(gastoC / rodados)) : 0,
   };
 }
@@ -4674,9 +4723,23 @@ function _custoDoDia(off) {
     ? diasRodagem
     : (varInfo.rodados > 0 ? Math.round(varInfo.rodados * total / varInfo.dias) : 0);
 
-  // O que o mês inteiro precisa render: o fixo dele mais o que a rua vai
-  // consumir nos dias em que se roda.
-  const mensalTotalC = mensalC + variavelC * rodagemPrevista;
+  // ── O gasto único sai da conta POR DIA, mas não some do MÊS ──
+  //
+  // Ele ficou de fora da média por dia porque não define quanto custa um dia
+  // comum. Mas o dinheiro saiu de verdade, e o mês precisa cobri-lo. Somá-lo
+  // aqui uma vez é o que impede o mês de declarar "já se pagou" cedo demais —
+  // o mesmo defeito que a v84 corrigiu por outro caminho.
+  //
+  // Só entram os que caem no MÊS exibido: a janela do variável é de 30 dias
+  // corridos, e um gasto de três semanas atrás pode pertencer ao mês passado.
+  const diasDoMes = new Set(dias);
+  const unicosDoMesC = (varInfo.foraDoPadrao || [])
+    .filter(x => diasDoMes.has(x.data))
+    .reduce((s, x) => s + _c(x.total), 0);
+
+  // O que o mês inteiro precisa render: o fixo dele, mais o que a rua vai
+  // consumir nos dias em que se roda, mais os gastos únicos deste mês.
+  const mensalTotalC = mensalC + variavelC * rodagemPrevista + unicosDoMesC;
 
   return {
     dias: total,
@@ -4695,6 +4758,10 @@ function _custoDoDia(off) {
     variavelTotal: varInfo.total,
     variavelLancamentos: varInfo.lancamentos,
     variavelCategorias: varInfo.categorias,
+    // Os gastos únicos, para a folha poder mostrá-los em vez de escondê-los.
+    variavelForaDoPadrao: varInfo.foraDoPadrao,
+    variavelTotalFora: varInfo.totalForaDoPadrao,
+    unicosDoMes: _r(unicosDoMesC),
     temVariavel: variavelC > 0,
     fixoDaLinha: _r(fixoDaLinhaC),
     rodagemPrevista,
@@ -5790,6 +5857,30 @@ function abrirRitmo() {
     linhas.push('Você não gasta isso todo dia — ninguém abastece diariamente. A janela'
       + ` é de ${c.variavelJanela} dias justamente para o irregular virar média: o dia`
       + ' em que você enche o tanque paga pelo dia em que não abastece.');
+
+    // O que ficou de fora aparece SEMPRE, e com nome, valor e data. Esconder
+    // uma exclusão é pior que fazer a exclusão errada: quem não vê não corrige.
+    const unicos = c.variavelForaDoPadrao || [];
+    if (unicos.length) {
+      linhas.push('');
+      linhas.push(`FORA DA CONTA POR DIA: ${R(c.variavelTotalFora)}`);
+      unicos.forEach(u => {
+        const nome = u.descricao || u.categoria;
+        linhas.push(`  · ${nome} — ${R(u.total)} em ${fmtShort(u.data)}`);
+      });
+      linhas.push(unicos.length === 1
+        ? 'Esse gasto sozinho pesa mais de um quinto de tudo que você gastou no'
+          + ' mês. Um gasto único não define quanto custa um dia comum, então ele'
+          + ' não entra na média por dia.'
+        : 'Cada um deles sozinho pesa mais de um quinto de tudo que você gastou'
+          + ' no mês. Gastos únicos não definem quanto custa um dia comum, então'
+          + ' não entram na média por dia.');
+      linhas.push('O dinheiro saiu de verdade e continua cobrado no total do mês —'
+        + ' ele só não infla a sua linha diária por trinta dias.');
+      linhas.push('Se isso foi a entrada de um carro ou de outro bem, edite o'
+        + ' lançamento e marque como aquisição de patrimônio: ele passa a contar'
+        + ' no seu patrimônio, no lugar certo.');
+    }
   } else {
     linhas.push('2) O QUE VOCÊ GASTOU NO DIA A DIA — ainda sem histórico');
     linhas.push('Assim que você lançar alguns gastos, esta parte aparece sozinha e a'
