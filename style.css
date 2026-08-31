@@ -595,8 +595,54 @@ main{background:var(--bg);min-height:100dvh}
   opacity:0;animation:card-up var(--dur-slow) var(--ease-spring) both;
   animation-delay:var(--sd,0s);
 }
-/* ── List item stagger ── */
-.tx-item,.fixed-item,.res-hist-item,.iitem,/* ── A fila de confirmações ──
+/* ── List item stagger ──
+   Esta regra foi PARTIDA AO MEIO três vezes seguidas (v77, v79 e agora), sempre
+   do mesmo jeito: inserindo CSS novo com `.goal-card{` como âncora. `.goal-card`
+   aparece primeiro AQUI, dentro desta lista de seletores — então a inserção
+   entrava no meio da lista, a regra de stagger perdia o corpo, e `.tx-item`,
+   `.fixed-item`, `.res-hist-item` e `.iitem` passavam a herdar o corpo do bloco
+   recém-inserido. Na v79 isso pintou fundo, borda e `min-height:44px` em toda
+   linha de lançamento do app, e foi publicado assim.
+   O teste `estrutura-css.spec.js` existe para que isto não passe uma quarta vez. */
+.tx-item,.fixed-item,.res-hist-item,.iitem,.goal-card{
+  animation:fade-in var(--dur-normal) var(--ease-out) both;
+  animation-delay:var(--sd,0s);
+}
+
+/* ── Linha de sincronização nos Ajustes ── */
+.srow-alerta { border-left: 3px solid var(--rd); }
+.srow-extra { font-size: 11.5px; color: var(--tx3); margin-left: auto; padding-left: 10px; white-space: nowrap; }
+
+/* ── O aviso de sincronização ──
+   Mais forte que a faixa da fila, de propósito: a fila é uma tarefa, isto é um
+   defeito. E não tem "adiar" — falha de gravação não é lembrete. */
+.home-sync-faixa {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 44px; padding: 12px 14px; margin-bottom: 12px;
+  border-radius: 14px; text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.home-sync-erro {
+  background: var(--rd-t, rgba(168,62,52,.12));
+  border: 1px solid var(--rd, #A83E34);
+  color: var(--tx);
+}
+.home-sync-alerta {
+  background: var(--c-warning-t, rgba(190,140,20,.12));
+  border: 1px solid var(--c-warning, #BE8C14);
+  color: var(--tx);
+}
+.home-sync-faixa:active { opacity: .8; }
+.home-sync-faixa:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+.home-sync-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.home-sync-tit { font-size: 14px; font-weight: 700; }
+.home-sync-sub {
+  font-size: 12px; color: var(--tx2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.home-sync-seta { font-size: 20px; color: var(--tx3); flex-shrink: 0; line-height: 1; }
+
+/* ── A fila de confirmações ──
    A faixa da Início e a folha que ela abre. A faixa é discreta de propósito:
    ela pede trinta segundos, não atenção total, e some sozinha quando a fila
    esvazia. */

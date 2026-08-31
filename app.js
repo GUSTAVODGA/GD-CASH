@@ -306,6 +306,11 @@ async function loadFromCloud() {
   }
 }
 
+// Recuo progressivo entre tentativas. Antes era 5s fixo, para sempre: com um
+// documento acima do teto isso vira uma tentativa a cada 5 segundos pelo resto
+// da sessão, queimando bateria e cota para falhar sempre pelo mesmo motivo.
+const SYNC_RECUOS = [5000, 15000, 60000, 300000];
+
 async function saveToCloud() {
   if (!currentUser || !db) return;
   if (_saveCloudInFlight) return;
@@ -314,12 +319,24 @@ async function saveToCloud() {
   try {
     D.updatedAt = Date.now();
     await db.collection('users').doc(currentUser.uid).collection('data').doc('main').set(D);
+    // Deu certo: zera o estado de falha e registra quando foi.
+    _syncEstado    = 'ok';
+    _syncUltimoOk  = Date.now();
+    _syncDesde     = 0;
+    _syncUltimoErro = '';
+    _syncTentativa = 0;
   } catch(e) {
     console.error('Erro ao salvar na nuvem:', e);
-    _cloudSyncPending = true;
-    _saveCloudTimer   = setTimeout(saveToCloud, 5000);
+    _cloudSyncPending  = true;
+    if (_syncEstado !== 'erro') { _syncEstado = 'erro'; _syncDesde = Date.now(); }
+    _syncUltimoErro = (e && (e.message || e.code)) || 'falha desconhecida';
+    const espera = SYNC_RECUOS[Math.min(_syncTentativa, SYNC_RECUOS.length - 1)];
+    _syncTentativa++;
+    _saveCloudTimer = setTimeout(saveToCloud, espera);
   } finally {
     _saveCloudInFlight = false;
+    // A Início mostra a falha; sem isto ela só apareceria na próxima navegação.
+    if (typeof renderHomeSync === 'function') renderHomeSync();
   }
 }
 
@@ -1142,14 +1159,66 @@ window.gdLoading = function(show, text = 'Carregando...') {
 let _saveCloudTimer    = null;
 let _cloudSyncPending  = false;
 let _saveCloudInFlight = false;
+
+// ══════════════════════════════════════════════════════════════════════════
+// O ESTADO DA SINCRONIZAÇÃO — e por que ele precisa existir
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Gravar na nuvem podia falhar PARA SEMPRE sem que ninguém soubesse. O erro ia
+// para `console.error`, o timer tentava de novo a cada 5s até o fim dos tempos,
+// e o app continuava funcionando com o dado local — então TUDO PARECIA NORMAL.
+// A tela de Ajustes ainda dizia "Firebase ativo", texto fixo que nunca olhou
+// para a realidade. Você usaria o app por semanas achando que está
+// sincronizado; trocaria de celular e descobriria que a nuvem congelou em maio.
+//
+// Num app de finanças isso é o pior defeito possível: não é um número errado
+// na tela, é o histórico inteiro que não existe mais.
+//
+// O TETO QUE CAUSA ISSO: o documento inteiro (lançamentos, dívidas, patrimônio
+// e as FOTOS em base64) vai num único documento do Firestore, cujo limite
+// rígido é 1 MiB. Uma foto de 400px em JPEG 0.75 vira ~120 KB de data URI no
+// pior caso — oito delas estouram o teto sozinhas. Não é iminente, mas é um
+// penhasco, não uma ladeira: no dia em que passa, toda gravação passa a falhar.
+const SYNC_TETO       = 1048576;   // 1 MiB — limite rígido do Firestore
+const SYNC_ALERTA     = 800 * 1024; // avisar ANTES, com espaço para agir
+let _syncEstado    = 'ok';      // 'ok' | 'pendente' | 'erro'
+let _syncDesde     = 0;         // quando a falha começou
+let _syncUltimoOk  = 0;         // última gravação bem-sucedida
+let _syncUltimoErro = '';
+let _syncTamanho   = 0;         // bytes do último documento serializado
+let _syncTentativa = 0;
+
+/** O que o app sabe sobre a própria sincronização. Somente leitura. */
+function syncStatus() {
+  return {
+    estado: _syncEstado, desde: _syncDesde, ultimoOk: _syncUltimoOk,
+    erro: _syncUltimoErro, tamanho: _syncTamanho,
+    teto: SYNC_TETO, perto: _syncTamanho >= SYNC_ALERTA,
+    fotos: _syncBytesFotos(),
+  };
+}
+
+/** Quanto do documento é foto — é o que dá para reduzir quando aperta. */
+function _syncBytesFotos() {
+  let n = 0;
+  const conta = v => { if (typeof v === 'string' && v.startsWith('data:image')) n += v.length; };
+  (D.patrimonios || []).forEach(p => conta(p.foto));
+  (D.vehicles || []).forEach(v => conta(v.photo));
+  return n;
+}
+
 function save() {
-  try { localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch(e) {
+  let bruto = '';
+  try { bruto = JSON.stringify(D); } catch (e) { bruto = ''; }
+  _syncTamanho = bruto.length;
+  try { localStorage.setItem('gdcash_v1', bruto); } catch(e) {
     if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22)) {
       gdToast('⚠️ Armazenamento cheio. Exporte seus dados ou ative a sincronização na nuvem.');
     }
   }
   if (CLOUD_ENABLED) {
     _cloudSyncPending = true;
+    if (_syncEstado === 'ok') _syncEstado = 'pendente';
     clearTimeout(_saveCloudTimer);
     _saveCloudTimer = setTimeout(saveToCloud, 1500);
   }
@@ -5108,6 +5177,91 @@ function renderDeckDots() {
   }
 }
 
+// ── A falha de sincronização, visível ─────────────────────────────────────
+//
+// A faixa só aparece quando há o que dizer, como todo o resto da Início. Mas a
+// regra aqui é diferente das outras: ela NÃO some sozinha e não tem "adiar".
+// Uma falha de gravação não é um lembrete que dá para empurrar — é o app
+// avisando que parou de guardar o que você faz.
+//
+// Espera um minuto antes de aparecer: rede oscilando por dez segundos é vida
+// normal, e um alarme a cada solavanco ensina o usuário a ignorar o alarme.
+const SYNC_AVISO_APOS = 60000;
+
+function renderHomeSync() {
+  const el = document.getElementById('home-sync'); if (!el) return;
+  const st = syncStatus();
+
+  // Perto do teto: avisa ANTES de quebrar, e diz o que dá para reduzir.
+  if (st.estado !== 'erro' && st.perto) {
+    const pct = Math.round(st.tamanho / st.teto * 100);
+    el.innerHTML = `<button class="home-sync-faixa home-sync-alerta" onclick="abrirDiagnosticoSync()">
+      <span class="home-sync-txt">
+        <span class="home-sync-tit">Seus dados estão perto do limite</span>
+        <span class="home-sync-sub">${pct}% do espaço da nuvem${st.fotos > 0 ? ` · fotos ocupam ${_kb(st.fotos)}` : ''}</span>
+      </span>
+      <span class="home-sync-seta" aria-hidden="true">›</span>
+    </button>`;
+    return;
+  }
+
+  if (st.estado !== 'erro' || !st.desde || (Date.now() - st.desde) < SYNC_AVISO_APOS) {
+    el.innerHTML = ''; return;
+  }
+
+  const quando = st.ultimoOk
+    ? 'Última vez: ' + new Date(st.ultimoOk).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : 'Ainda não salvou nesta conta';
+  el.innerHTML = `<button class="home-sync-faixa home-sync-erro" onclick="abrirDiagnosticoSync()">
+    <span class="home-sync-txt">
+      <span class="home-sync-tit">Não está salvando na nuvem</span>
+      <span class="home-sync-sub">${escHtml(quando)}</span>
+    </span>
+    <span class="home-sync-seta" aria-hidden="true">›</span>
+  </button>`;
+}
+
+function _kb(n) {
+  return n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB';
+}
+
+function abrirDiagnosticoSync() {
+  const st = syncStatus();
+  const pct = Math.round(st.tamanho / st.teto * 100);
+  const linhas = [];
+
+  if (st.estado === 'erro') {
+    linhas.push('O app continua guardando tudo NESTE aparelho — nada foi perdido aqui. O que parou é a cópia na nuvem, que é o que protege você se trocar de celular.');
+    linhas.push('');
+    linhas.push(st.ultimoOk
+      ? 'Última gravação: ' + new Date(st.ultimoOk).toLocaleString('pt-BR')
+      : 'Nenhuma gravação bem-sucedida nesta conta.');
+    if (st.tamanho >= SYNC_ALERTA) {
+      linhas.push('');
+      linhas.push(`Provável causa: seus dados ocupam ${_kb(st.tamanho)} de ${_kb(st.teto)}` +
+        (st.fotos > 0 ? `, e ${_kb(st.fotos)} disso são fotos de patrimônio.` : '.'));
+    }
+  } else {
+    linhas.push(`Seus dados ocupam ${_kb(st.tamanho)} de ${_kb(st.teto)} (${pct}%).`);
+    if (st.fotos > 0) {
+      linhas.push('');
+      linhas.push(`Desse total, ${_kb(st.fotos)} são fotos de patrimônio — é o que mais pesa e o que dá para reduzir.`);
+    }
+    linhas.push('');
+    linhas.push('Quando o limite é atingido, o app para de salvar na nuvem. Este aviso existe para você agir antes disso.');
+  }
+  linhas.push('');
+  linhas.push('Exporte um backup agora: ele fica no seu aparelho e não depende da nuvem.');
+
+  gdConfirm({
+    title: st.estado === 'erro' ? 'A nuvem não está recebendo' : 'Perto do limite da nuvem',
+    msg: linhas.join('\n'),
+    confirmText: 'Exportar backup',
+    cancelText: 'Fechar',
+    onConfirm: () => { try { exportData(); } catch (e) { gdToast('Não foi possível exportar.', { type: 'error' }); } },
+  });
+}
+
 function renderHomeConfirmar() {
   const el = document.getElementById('home-confirmar'); if (!el) return;
   const itens = _confirmacoesPendentes();
@@ -5135,6 +5289,7 @@ function renderHomeConfirmar() {
 }
 
 function renderHomeVencimentos() {
+  renderHomeSync();
   renderHomeConfirmar();
   const el = document.getElementById('home-dividas-venc'); if (!el) return;
   const itens = _atencaoInicio();
@@ -8844,7 +8999,20 @@ function renderAjustes() {
     ? 'Último: ' + lastBackup.split('-').reverse().join('/')
     : 'Nunca exportado';
 
-  const syncLabel = CLOUD_ENABLED ? 'Firebase ativo' : 'Somente local';
+  // Dizia "Firebase ativo" como texto fixo — afirmava que estava sincronizando
+  // mesmo com semanas de falha acumulada. Agora responde pelo estado real.
+  const _sy = syncStatus();
+  const syncLabel = !CLOUD_ENABLED ? 'Somente local'
+    : _sy.estado === 'erro'
+      ? 'Falhando' + (_sy.ultimoOk
+          ? ' · última em ' + new Date(_sy.ultimoOk).toLocaleDateString('pt-BR')
+          : ' · nunca salvou')
+    : _sy.ultimoOk ? 'Em dia · ' + new Date(_sy.ultimoOk).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : 'Aguardando primeira gravação';
+  const syncCls = (CLOUD_ENABLED && _sy.estado === 'erro') ? ' srow-alerta' : '';
+  const syncEspaco = CLOUD_ENABLED
+    ? `${_kb(_sy.tamanho)} de ${_kb(_sy.teto)}` + (_sy.perto ? ' · perto do limite' : '')
+    : '';
 
   const userName  = currentUser?.displayName || 'Usuário';
   const userEmail = currentUser?.email || '';
@@ -8965,12 +9133,13 @@ function renderAjustes() {
         <div class="srow-right">${chev}</div>
       </button>
       <div class="sdivider"></div>
-      <div class="srow srow-muted">
+      <div class="srow${syncCls}"${CLOUD_ENABLED ? ' onclick="abrirDiagnosticoSync()" role="button" tabindex="0"' : ''}>
         <span class="srow-icon">${ic.cloud}</span>
         <div class="srow-body">
           <div class="srow-label">Sincronização</div>
           <div class="srow-value">${syncLabel}</div>
         </div>
+        ${syncEspaco ? `<div class="srow-extra">${syncEspaco}</div>` : ''}
       </div>
     </div>
     <input type="file" id="import-file-input" accept="application/json" style="display:none" onchange="importData(event)">
