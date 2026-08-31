@@ -4506,6 +4506,103 @@ function _obrigacoesEmAberto() {
 // O QUE ENTRA mesmo sendo de outro mês: compromisso ATRASADO. Ele ainda vai
 // sair do seu bolso, e ignorá-lo tornaria a sobra otimista — o erro que custa
 // caro.
+// ══════════════════════════════════════════════════════════════════════════
+// O CUSTO DO DIA — "hoje já se pagou?"
+// ══════════════════════════════════════════════════════════════════════════
+//
+// A Início responde "posso gastar isto?" (a sobra livre) e "o que precisa de
+// você" (os compromissos). Falta a pergunta que se faz às três da tarde, com o
+// carro ligado, decidindo entre voltar para casa ou rodar mais duas horas:
+//
+//     quanto o dia de hoje ainda precisa render para valer a pena?
+//
+// Sem esse número não há nada segurando ninguém na rua, e o dinheiro que entra
+// some dentro das contas sem nunca parecer que sobrou algo. Com ele, o dia tem
+// uma linha de chegada — e, depois dela, uma frase que ninguém tinha: daqui
+// para a frente é seu.
+//
+// O CUSTO É DERIVADO, NUNCA DIGITADO por padrão. Sai do que o usuário já
+// cadastrou: gastos fixos ativos mais as parcelas de dívida que vencem no mês.
+// Um número digitado à mão envelheceria em silêncio — aumentou o aluguel, a
+// linha de chegada continuaria no lugar antigo e o app passaria a mentir para
+// menos, que é o erro que faz parar mais cedo achando que deu.
+//
+// DIVIDE PELOS DIAS DO MÊS, não pelos dias trabalhados. Aluguel corre no
+// domingo também. Para quem não tem rotina isso é o mais honesto: não julga a
+// folga, só mostra que o dia parado custou o mesmo e que outro dia vai pagar.
+//
+// NASCE DESLIGADO. Quem não ligar não vê nada mudar na tela.
+const RITMO_DIAS_MEDIA = 14;   // janela para a média por dia rodado
+
+function _ritmoLigado() { return !!(D.ritmo && D.ritmo.ligado); }
+
+/** O custo de um dia do mês `off`, e do que ele é feito. */
+function _custoDoDia(off) {
+  const mes = Number.isFinite(off) ? off : 0;
+  const dias = monthDates(mes);
+  const total = dias.length || 30;
+
+  const fixosC = (D.fixedExpenses || [])
+    .filter(f => !f.paused)
+    .reduce((s, f) => s + _c(f.amount), 0);
+
+  // Parcela de dívida é custo de existir tanto quanto aluguel. Deixá-la de fora
+  // faria a linha de chegada nascer baixa demais — e uma linha baixa demais é
+  // pior que nenhuma: ela dá permissão para parar cedo.
+  const dividasC = _debtVencimentosNoPeriodo(dias[0], dias[dias.length - 1])
+    .reduce((s, v) => s + _c(v.valorRestante != null ? v.valorRestante : v.valorNominal), 0);
+
+  // Um ajuste manual existe para o custo que não cabe como gasto fixo mensal;
+  // quando presente, ele SUBSTITUI o derivado e a composição diz isso.
+  const manual = (D.ritmo && D.ritmo.custoMensalManual != null)
+    ? _c(D.ritmo.custoMensalManual) : null;
+  const mensalC = manual != null ? manual : (fixosC + dividasC);
+
+  return {
+    dias: total,
+    mensal: _r(mensalC),
+    porDia: _r(Math.round(mensalC / total)),
+    fixos: _r(fixosC),
+    dividas: _r(dividasC),
+    manual: manual != null,
+    // Sem nenhum custo cadastrado a linha de chegada seria zero, e "o dia se
+    // pagou" perderia o sentido. Quem chama decide o que fazer com isto.
+    semBase: mensalC <= 0,
+  };
+}
+
+/** Onde o dia de hoje (ou de `dataISO`) está em relação à linha de chegada. */
+function _diaSePagou(dataISO) {
+  const data = dataISO || todayStr();
+  const custo = _custoDoDia(0);
+  const entrouC = _c(sumDayIncome(data));
+  const alvoC   = _c(custo.porDia);
+  const faltaC  = alvoC - entrouC;
+  return {
+    data,
+    entrou: _r(entrouC),
+    alvo: custo.porDia,
+    pagou: faltaC <= 0,
+    falta: _r(Math.max(0, faltaC)),
+    sobra: _r(Math.max(0, -faltaC)),          // o que já é seu
+    pct: alvoC > 0 ? Math.min(100, Math.round(entrouC / alvoC * 100)) : 0,
+    semBase: custo.semBase,
+  };
+}
+
+/** Média por DIA RODADO — dia sem receita não é fracasso, é dia que não houve. */
+function _mediaPorDiaRodado(janelaDias) {
+  const n = janelaDias || RITMO_DIAS_MEDIA;
+  const hoje = todayStr();
+  let soma = 0, rodados = 0;
+  for (let i = 1; i <= n; i++) {                 // ontem para trás; hoje não fechou
+    const d = _addDaysISO(hoje, -i);
+    const v = _c(sumDayIncome(d));
+    if (v > 0) { soma += v; rodados++; }
+  }
+  return { dias: n, rodados, media: rodados ? _r(Math.round(soma / rodados)) : 0, total: _r(soma) };
+}
+
 function _sobraLivre(off) {
   const mes = Number.isFinite(off) ? off : 0;
   const mov = _monthMovementSummary(mes);
@@ -5187,6 +5284,86 @@ function renderDeckDots() {
 // Espera um minuto antes de aparecer: rede oscilando por dez segundos é vida
 // normal, e um alarme a cada solavanco ensina o usuário a ignorar o alarme.
 const SYNC_AVISO_APOS = 60000;
+
+// ── O dia, na Início ──────────────────────────────────────────────────────
+//
+// Fica logo abaixo da manchete: a sobra livre responde pelo mês, isto responde
+// por hoje. Só aparece com o recurso ligado E com custo cadastrado — uma linha
+// de chegada em zero não seguraria ninguém na rua.
+function renderHomeDia() {
+  const el = document.getElementById('home-dia'); if (!el) return;
+  if (!_ritmoLigado()) { el.innerHTML = ''; return; }
+
+  const d = _diaSePagou();
+  if (d.semBase) {
+    el.innerHTML = `<button class="home-dia home-dia-vazio" onclick="switchTab('fixos','inicio')">
+      <span class="home-dia-tit">Cadastre seus gastos fixos</span>
+      <span class="home-dia-sub">Sem eles o app não sabe quanto o seu dia custa.</span>
+    </button>`;
+    return;
+  }
+
+  const media = _mediaPorDiaRodado();
+  // A média entra só como referência do que É possível para você — nunca como
+  // cobrança, e nunca comparando com ninguém.
+  const rodape = media.rodados >= 3
+    ? `<div class="home-dia-media">Sua média por dia rodado: <b>${R(media.media)}</b></div>` : '';
+
+  if (d.pagou) {
+    el.innerHTML = `<div class="home-dia home-dia-ok">
+      <div class="home-dia-tit">O dia se pagou</div>
+      <div class="home-dia-val">${R(d.sobra)} <span class="home-dia-val-sub">são seus</span></div>
+      <div class="home-dia-barra"><i style="width:100%"></i></div>
+      <div class="home-dia-sub">Entrou ${R(d.entrou)} · o dia custa ${R(d.alvo)}</div>
+      ${rodape}
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = `<div class="home-dia">
+    <div class="home-dia-tit">Para o dia se pagar</div>
+    <div class="home-dia-val">faltam ${R(d.falta)}</div>
+    <div class="home-dia-barra"><i style="width:${d.pct}%"></i></div>
+    <div class="home-dia-sub">Entrou ${R(d.entrou)} de ${R(d.alvo)}</div>
+    ${rodape}
+  </div>`;
+}
+
+// O interruptor. Explica o que liga ANTES de ligar, e mostra a conta que vai
+// ser usada — ninguém deve descobrir a própria linha de chegada por surpresa.
+function abrirRitmo() {
+  const c = _custoDoDia(0);
+  const partes = [];
+  if (c.manual) {
+    partes.push(`Custo mensal ajustado à mão: ${R(c.mensal)}.`);
+  } else {
+    partes.push(`Gastos fixos: ${R(c.fixos)}` + (c.dividas > 0 ? `\nParcelas de dívida do mês: ${R(c.dividas)}` : ''));
+    partes.push(`Total do mês: ${R(c.mensal)}`);
+  }
+  partes.push(`Dividido por ${c.dias} dias: ${R(c.porDia)} por dia.`);
+
+  const msg = _ritmoLigado()
+    ? 'A Início mostra quanto falta para o dia de hoje se pagar, e quanto já é seu depois disso.\n\n'
+      + partes.join('\n') + '\n\nO número sai do que você já cadastrou e se corrige sozinho quando um custo muda.'
+    : 'Liga um número na Início: quanto falta para o dia de hoje se pagar.\n\n'
+      + partes.join('\n')
+      + '\n\nSai do que você já cadastrou. Dia que você escolhe não rodar não fica vermelho — só não conta.';
+
+  gdConfirm({
+    title: _ritmoLigado() ? 'O dia de hoje' : 'Mostrar o custo do dia?',
+    msg,
+    confirmText: _ritmoLigado() ? 'Desligar' : 'Ligar',
+    cancelText: 'Fechar',
+    onConfirm: () => {
+      if (!D.ritmo) D.ritmo = {};
+      D.ritmo.ligado = !_ritmoLigado();
+      save();
+      renderInicio();
+      if (typeof renderAjustes === 'function') renderAjustes();
+      gdToast(D.ritmo.ligado ? 'O custo do dia aparece na Início.' : 'Desligado.', { type: 'success' });
+    },
+  });
+}
 
 function renderHomeSync() {
   const el = document.getElementById('home-sync'); if (!el) return;
@@ -7891,6 +8068,7 @@ function renderHomeNew() {
   const sum = _monthMovementSummary(monthOffset);
 
   renderHomeManchete();
+  renderHomeDia();
   setTimeout(renderDeckDots, 60);
 
   const incEl = document.getElementById('home-inc');
@@ -9001,6 +9179,13 @@ function renderAjustes() {
 
   // Dizia "Firebase ativo" como texto fixo — afirmava que estava sincronizando
   // mesmo com semanas de falha acumulada. Agora responde pelo estado real.
+  // O custo do dia é opcional e nasce desligado: o subtítulo diz o estado e,
+  // quando ligado, o número que está valendo.
+  const _rc = _custoDoDia(0);
+  const ritmoSub = !_ritmoLigado() ? 'Desligado'
+    : _rc.semBase ? 'Ligado · sem gastos fixos cadastrados'
+    : `${R(_rc.porDia)} por dia`;
+
   const _sy = syncStatus();
   const syncLabel = !CLOUD_ENABLED ? 'Somente local'
     : _sy.estado === 'erro'
@@ -9111,6 +9296,15 @@ function renderAjustes() {
         <div class="srow-right">${chev}</div>
       </button>
       ${budgetCount ? `<div class="sdivider sdivider-full"></div><div id="budget-settings-list" class="srow-budget-inline"></div>` : `<div id="budget-settings-list" style="display:none"></div>`}
+      <div class="sdivider"></div>
+      <button class="srow" onclick="abrirRitmo()">
+        <span class="srow-icon">${ic.sliders}</span>
+        <div class="srow-body">
+          <div class="srow-label">Custo do dia</div>
+          <div class="srow-value">${ritmoSub}</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
     </div>
 
     <div class="sgrp-title">Dados e segurança</div>

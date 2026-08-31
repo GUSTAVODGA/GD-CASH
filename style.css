@@ -613,6 +613,39 @@ main{background:var(--bg);min-height:100dvh}
 .srow-alerta { border-left: 3px solid var(--rd); }
 .srow-extra { font-size: 11.5px; color: var(--tx3); margin-left: auto; padding-left: 10px; white-space: nowrap; }
 
+/* ── O dia, no campo do hero ──
+   Vive sobre o verde, então usa os tokens do campo (`--on-flood`), não os da
+   folha: `--tx3` ali é tinta escura e sumiria. */
+.home-dia {
+  margin-top: 16px; padding-top: 14px;
+  border-top: 1px solid var(--on-flood-3);
+  width: 100%; text-align: left; color: var(--on-flood);
+}
+.home-dia-tit { font-size: 12.5px; color: var(--on-flood-2); margin-bottom: 4px; }
+.home-dia-val {
+  font-family: var(--font-disp); font-size: 22px; font-weight: 700;
+  letter-spacing: -.02em; line-height: 1.1;
+}
+.home-dia-val-sub { font-size: 13px; font-weight: 500; color: var(--on-flood-2); letter-spacing: 0; }
+.home-dia-barra {
+  height: 6px; border-radius: 999px; background: var(--on-flood-3);
+  overflow: hidden; margin: 10px 0 8px;
+}
+.home-dia-barra > i {
+  display: block; height: 100%; border-radius: 999px; background: var(--mint);
+  transition: width var(--dur-slow, .34s) cubic-bezier(.2,.85,.25,1);
+}
+.home-dia-sub { font-size: 12px; color: var(--on-flood-2); }
+.home-dia-media { font-size: 12px; color: var(--on-flood-2); margin-top: 6px; }
+.home-dia-media b { color: var(--on-flood); font-weight: 600; }
+.home-dia-ok .home-dia-val { color: var(--mint); }
+.home-dia-vazio {
+  background: none; border: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; min-height: 44px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.home-dia-vazio:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+
 /* ── O aviso de sincronização ──
    Mais forte que a faixa da fila, de propósito: a fila é uma tarefa, isto é um
    defeito. E não tem "adiar" — falha de gravação não é lembrete. */
