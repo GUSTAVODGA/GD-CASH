@@ -390,7 +390,7 @@ test('"POR QUE ESSE NÚMERO?" tem porta no cartão, e a resposta é em portuguê
   const dlg = page.locator('#_av_dlg');
   await expect(dlg).toBeVisible();
   await expect(dlg).toContainText('UM PEDAÇO DAS SUAS CONTAS DO MÊS');
-  await expect(dlg).toContainText('A GASOLINA E A COMIDA DO PRÓPRIO DIA');
+  await expect(dlg).toContainText('O QUE VOCÊ GASTOU NO DIA A DIA');
   await expect(dlg).toContainText('R$ 150,00');
   await expect(dlg, 'a palavra "rua" sobreviveu como rótulo').not.toContainText('de rua');
 });

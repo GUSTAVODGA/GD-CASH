@@ -3614,6 +3614,11 @@ button.srow-muted:active { background: none; }
   border-radius: var(--radius-lg);
   padding: 30px 24px 22px;
   width: 100%; max-width: 356px;
+  /* Sem teto de altura, um diálogo longo empurrava os próprios botões para
+     fora da tela: a folha que explica o custo do dia ficava com "Entendi"
+     inalcançável. O corpo rola; título e botões ficam. */
+  max-height: 86dvh;
+  display: flex; flex-direction: column;
   box-shadow: 0 8px 40px rgba(13,20,64,.18), 0 2px 12px rgba(13,20,64,.12);
   transform: scale(.88) translateY(18px);
   opacity: 0;
@@ -3646,7 +3651,15 @@ button.srow-muted:active { background: none; }
   /* As quebras de linha da mensagem colapsavam: qualquer diálogo com mais de
      um parágrafo virava um bloco só de texto. */
   white-space: pre-line;
+  /* O que rola é o corpo, não o diálogo inteiro. */
+  overflow-y: auto; min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
+/* Texto CORRIDO, de vários parágrafos, não é confirmação curta: centralizado
+   ele obriga o olho a procurar o começo de cada linha. Uma explicação de dez
+   linhas se lê alinhada à esquerda. */
+.av-dialog-msg--texto { text-align: left; }
 
 /* ── Dialog actions ── */
 .av-dialog-actions { display: flex; flex-direction: column; gap: 8px; }

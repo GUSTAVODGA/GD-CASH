@@ -1046,7 +1046,7 @@ try { if (_migrateLembretesParaPendencias().ran) localStorage.setItem('gdcash_v1
 /* ── Dialog helpers ── */
 function _esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function _gdDialog({ title, msg, icon, iconCls, actions, onEscOrBackdrop } = {}) {
+function _gdDialog({ title, msg, msgCls, icon, iconCls, actions, onEscOrBackdrop } = {}) {
   const prev = document.getElementById('_av_dlg');
   if (prev) prev.remove();
 
@@ -1063,7 +1063,7 @@ function _gdDialog({ title, msg, icon, iconCls, actions, onEscOrBackdrop } = {})
   let html = '<div class="av-dialog" role="document">';
   if (icon) html += `<div class="av-dialog-icon ${iconCls || ''}">${icon}</div>`;
   if (title) html += `<div class="av-dialog-title">${_esc(title)}</div>`;
-  if (msg)   html += `<div class="av-dialog-msg">${_esc(msg)}</div>`;
+  if (msg)   html += `<div class="av-dialog-msg ${msgCls || ''}">${_esc(msg)}</div>`;
   html += `<div class="av-dialog-actions${useRow ? ' av-row' : ''}">`;
   actions.forEach((a, i) => {
     html += `<button class="btn ${a.cls || 'btn-secondary'}" data-av-i="${i}">${_esc(a.label)}</button>`;
@@ -4586,20 +4586,37 @@ function _custoVariavelPorDiaRodado(janelaDias) {
   const dias = new Set();
   for (let i = 1; i <= n; i++) dias.add(_addDaysISO(hoje, -i));   // hoje não fechou
 
-  let gastoC = 0;
+  let gastoC = 0, lancamentos = 0;
+  // A composição POR CATEGORIA existe para que a explicação seja um recibo, não
+  // uma suposição. A primeira versão desta tela dizia "você gastou X de
+  // gasolina, comida e manutenção" — três substantivos que EU escolhi, não que
+  // o dado disse. Um usuário leu e perguntou de onde tinham saído: a resposta
+  // era "da minha cabeça". O total sempre foi dele; o rótulo era meu.
+  const porCategoria = {};
   (D.expenses || []).forEach(e => {
     if (!dias.has(localDateKey(e.date))) return;
     if (_movementNature(e) !== 'consumo') return;          // dívida e patrimônio ficam fora
     const src = e.meta && e.meta.source;
     if (src === 'fixed-payment') return;                   // já contado como fixo
-    gastoC += _c(e.amount);
+    const v = _c(e.amount);
+    gastoC += v;
+    lancamentos++;
+    const cat = (e.category != null && String(e.category).trim()) ? String(e.category) : 'Sem categoria';
+    porCategoria[cat] = (porCategoria[cat] || 0) + v;
   });
 
   let rodados = 0;
   dias.forEach(d => { if (_c(sumDayIncome(d)) > 0) rodados++; });
 
+  // Ordenadas da que mais pesa para a que menos pesa: quem confere um número
+  // quer achar o intruso, e o intruso costuma estar no topo.
+  const categorias = Object.keys(porCategoria)
+    .map(nome => ({ nome, total: _r(porCategoria[nome]),
+                    pct: gastoC > 0 ? Math.round(porCategoria[nome] / gastoC * 100) : 0 }))
+    .sort((a, b) => _c(b.total) - _c(a.total));
+
   return {
-    dias: n, rodados,
+    dias: n, rodados, lancamentos, categorias,
     total: _r(gastoC),
     porDiaRodado: rodados > 0 ? _r(Math.round(gastoC / rodados)) : 0,
   };
@@ -4676,6 +4693,8 @@ function _custoDoDia(off) {
     variavelJanela: varInfo.dias,
     variavelRodados: varInfo.rodados,
     variavelTotal: varInfo.total,
+    variavelLancamentos: varInfo.lancamentos,
+    variavelCategorias: varInfo.categorias,
     temVariavel: variavelC > 0,
     fixoDaLinha: _r(fixoDaLinhaC),
     rodagemPrevista,
@@ -5751,20 +5770,38 @@ function abrirRitmo() {
   linhas.push('');
 
   if (c.temVariavel) {
-    linhas.push(`2) A GASOLINA E A COMIDA DO PRÓPRIO DIA — ${R(c.variavel)}`);
-    linhas.push(`Nos últimos ${c.variavelJanela} dias você gastou ${R(c.variavelTotal)} de gasolina,`
-      + ` comida e manutenção, em ${c.variavelRodados} dia${c.variavelRodados !== 1 ? 's' : ''}`
-      + ` rodado${c.variavelRodados !== 1 ? 's' : ''}. Sai desse histórico e muda sozinho`
-      + ' quando a gasolina muda.');
+    linhas.push(`2) O QUE VOCÊ GASTOU NO DIA A DIA — ${R(c.variavel)}`);
+    linhas.push(`Você lançou ${R(c.variavelTotal)} em ${c.variavelLancamentos}`
+      + ` gasto${c.variavelLancamentos !== 1 ? 's' : ''} nos últimos ${c.variavelJanela} dias,`
+      + ` e rodou em ${c.variavelRodados} deles. Dá ${R(c.variavel)} por dia rodado.`);
+    // O recibo, com as SUAS categorias. Não são as que eu imagino que um
+    // motorista tenha — são as que estão nos seus lançamentos.
+    const topo = (c.variavelCategorias || []).slice(0, 4);
+    if (topo.length) {
+      linhas.push('');
+      linhas.push('O que entrou nessa conta:');
+      topo.forEach(cat => linhas.push(`  · ${cat.nome} — ${R(cat.total)} (${cat.pct}%)`));
+      const resto = (c.variavelCategorias || []).length - topo.length;
+      if (resto > 0) linhas.push(`  · e mais ${resto} categoria${resto !== 1 ? 's' : ''}`);
+      linhas.push('Se tiver algo aí que não devia entrar, corrija o lançamento e o'
+        + ' número se ajusta sozinho.');
+    }
+    linhas.push('');
+    linhas.push('Você não gasta isso todo dia — ninguém abastece diariamente. A janela'
+      + ` é de ${c.variavelJanela} dias justamente para o irregular virar média: o dia`
+      + ' em que você enche o tanque paga pelo dia em que não abastece.');
   } else {
-    linhas.push('2) A GASOLINA E A COMIDA DO PRÓPRIO DIA — ainda sem histórico');
-    linhas.push('Assim que você lançar alguns gastos de gasolina, esta parte aparece'
-      + ' sozinha e a linha sobe para o que ela é de verdade.');
+    linhas.push('2) O QUE VOCÊ GASTOU NO DIA A DIA — ainda sem histórico');
+    linhas.push('Assim que você lançar alguns gastos, esta parte aparece sozinha e a'
+      + ' linha sobe para o que ela é de verdade.');
   }
   linhas.push('');
   linhas.push(`SOMANDO AS DUAS: ${R(c.alvo)}.`);
-  linhas.push(`É isso que um dia rodado precisa render para não ter custado nada a você.`
+  linhas.push('É isso que um dia rodado precisa render para pagar tudo que você gasta.'
     + ' Tudo acima disso é seu.');
+  linhas.push('');
+  linhas.push('Nada aqui foi estimado nem veio de tabela: os dois números saem'
+    + ' dos seus próprios lançamentos, e se corrigem sozinhos quando eles mudam.');
 
   if (!c.temRitmo) {
     linhas.push('');
@@ -5779,19 +5816,35 @@ function abrirRitmo() {
       + linhas.join('\n')
       + '\n\nDia que você escolhe não rodar não fica vermelho — só não conta.';
 
-  gdConfirm({
+  const alternar = () => {
+    if (!D.ritmo) D.ritmo = {};
+    D.ritmo.ligado = !_ritmoLigado();
+    save();
+    renderInicio();
+    if (typeof renderAjustes === 'function') renderAjustes();
+    gdToast(D.ritmo.ligado ? 'O custo do dia aparece na Início.' : 'Desligado.', { type: 'success' });
+  };
+
+  // ── A ÊNFASE DOS BOTÕES SEGUE O QUE A FOLHA FAZ ──
+  //
+  // Ligado, esta folha só EXPLICA. Ela nasceu de "de onde vem esse número?".
+  // Mas ela vinha com "Desligar" em verde, na posição do botão principal —
+  // então o gesto óbvio de quem terminou de ler desligava o recurso. A ação
+  // destacada tem que ser a que a pessoa veio fazer: entender e sair.
+  //
+  // Desligado, a folha é um convite: aí sim "Ligar" é a ação principal.
+  const acoes = _ritmoLigado()
+    ? [{ label: 'Desligar', cls: 'btn-ghost',   fn: alternar },
+       { label: 'Entendi',  cls: 'btn-primary', fn: null }]
+    : [{ label: 'Agora não', cls: 'btn-ghost',   fn: null },
+       { label: 'Ligar',     cls: 'btn-primary', fn: alternar }];
+
+  _gdDialog({
     title: _ritmoLigado() ? `Por que ${R(c.alvo)}?` : 'Mostrar o custo do dia?',
     msg,
-    confirmText: _ritmoLigado() ? 'Desligar' : 'Ligar',
-    cancelText: 'Entendi',
-    onConfirm: () => {
-      if (!D.ritmo) D.ritmo = {};
-      D.ritmo.ligado = !_ritmoLigado();
-      save();
-      renderInicio();
-      if (typeof renderAjustes === 'function') renderAjustes();
-      gdToast(D.ritmo.ligado ? 'O custo do dia aparece na Início.' : 'Desligado.', { type: 'success' });
-    },
+    msgCls: 'av-dialog-msg--texto',
+    actions: acoes,
+    onEscOrBackdrop: () => {},
   });
 }
 

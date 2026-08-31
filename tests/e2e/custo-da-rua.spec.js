@@ -266,11 +266,16 @@ test('a folha mostra a composição INTEIRA, com a janela de onde a rua saiu', a
   await expect(dlg).toBeVisible();
   await expect(dlg).toContainText('UM PEDAÇO DAS SUAS CONTAS DO MÊS');
   await expect(dlg).toContainText('R$ 150,00');
-  await expect(dlg).toContainText('A GASOLINA E A COMIDA DO PRÓPRIO DIA');
+  await expect(dlg).toContainText('O QUE VOCÊ GASTOU NO DIA A DIA');
   await expect(dlg).toContainText('R$ 40,00');
   await expect(dlg, 'não presta contas da janela usada').toContainText('R$ 400,00');
-  await expect(dlg).toContainText('10 dias rodados');
+  await expect(dlg).toContainText('rodou em 10 deles');
   await expect(dlg).toContainText('SOMANDO AS DUAS: R$ 190,00');
+
+  // O RECIBO: as categorias são as do usuário, não substantivos que eu escolhi.
+  await expect(dlg).toContainText('O que entrou nessa conta');
+  await expect(dlg).toContainText('Gasolina — R$ 400,00 (100%)');
+  await expect(dlg, 'a janela não se explica').toContainText('o irregular virar média');
 });
 
 test('o cartão da Início mostra a linha e a sua composição', async ({ page }) => {
@@ -284,6 +289,98 @@ test('o cartão da Início mostra a linha e a sua composição', async ({ page }
     .not.toContainText('de fixo');
   await expect(page.locator('#home-ritmo')
     .getByRole('button', { name: /Por que R\$ 190,00/ })).toBeVisible();
+});
+
+// ── A FOLHA QUE EXPLICA ───────────────────────────────────────────────────
+
+test('O RECIBO: as categorias são as DO USUÁRIO, não substantivos escolhidos por mim', async ({ page }) => {
+  // A primeira versão desta folha dizia "você gastou X de gasolina, comida e
+  // manutenção" — três palavras que EU escolhi imaginando o que um motorista
+  // gasta. O total sempre foi do usuário; o rótulo era meu. Quem leu percebeu
+  // e perguntou de onde tinha saído: a resposta era "da minha cabeça".
+  //
+  // Aqui a conta se abre nas categorias que estão nos lançamentos, ordenadas
+  // pela que mais pesa — porque quem confere um número quer achar o intruso, e
+  // o intruso costuma estar no topo.
+  const { dailyIncome, expenses } = janelaDeRua();
+  expenses.push({ id: 'int1', date: iso(-5), category: 'Roupas', amount: 200,
+                  description: 'Tênis' });
+  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO, dailyIncome, expenses }, 'ajustes');
+
+  const c = await custo(page);
+  expect(c.variavelCategorias.map(x => x.nome)).toEqual(['Gasolina', 'Roupas']);
+  expect(c.variavelCategorias[0].total).toBe(400);
+  expect(c.variavelCategorias[1].total).toBe(200);
+  expect(c.variavelLancamentos).toBe(11);
+
+  await page.locator('.srow', { hasText: 'Custo do dia' }).click();
+  const dlg = page.locator('#_av_dlg');
+  await expect(dlg).toContainText('Gasolina — R$ 400,00 (67%)');
+  await expect(dlg, 'o intruso não aparece — não dá para conferir').toContainText('Roupas — R$ 200,00 (33%)');
+});
+
+test('a folha diz que o gasto NÃO é diário — ninguém abastece todo dia', async ({ page }) => {
+  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO, ...janelaDeRua() }, 'ajustes');
+  await page.locator('.srow', { hasText: 'Custo do dia' }).click();
+  const dlg = page.locator('#_av_dlg');
+  await expect(dlg).toContainText('Você não gasta isso todo dia');
+  await expect(dlg).toContainText('o irregular virar média');
+});
+
+test('a folha CABE na tela e os botões continuam alcançáveis', async ({ page }) => {
+  // Ao ganhar o recibo, a explicação ficou longa e empurrou os próprios botões
+  // para fora do viewport: "Entendi" ficava inalcançável num aparelho baixo.
+  //
+  // O viewport é encolhido DEPOIS de `abrir`, que fixa 844px de altura por
+  // conta própria — na primeira escrita deste teste ele vinha antes e era
+  // sobrescrito em silêncio, então a asserção mediu 667 contra uma tela de 844
+  // e passou por acidente.
+  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO, ...janelaDeRua() }, 'ajustes');
+  const ALTURA = 667;                                   // o menor iPhone em uso
+  await page.setViewportSize({ width: 390, height: ALTURA });
+  await page.locator('.srow', { hasText: 'Custo do dia' }).click();
+  await page.waitForTimeout(300);                       // a entrada do diálogo
+
+  const dlg = page.locator('.av-dialog');
+  const caixa = await dlg.boundingBox();
+  const tela = await page.evaluate(() => window.innerHeight);
+  expect(tela, 'o viewport não é o que o teste pediu').toBe(ALTURA);
+  expect(caixa.height, 'o diálogo passou da altura da tela').toBeLessThanOrEqual(tela);
+
+  const botao = page.locator('#_av_dlg').getByRole('button', { name: 'Entendi' });
+  await expect(botao).toBeInViewport();
+
+  // E o corpo rola, para que o fim do texto continue legível.
+  const rolou = await page.locator('.av-dialog-msg').evaluate(el => {
+    const antes = el.scrollTop; el.scrollTop = el.scrollHeight; return el.scrollTop > antes;
+  });
+  expect(rolou, 'o corpo do diálogo não rola: o fim do texto é inalcançável').toBe(true);
+});
+
+test('A ÊNFASE: numa folha que só explica, o botão destacado é "Entendi"', async ({ page }) => {
+  // Ela vinha com "Desligar" em verde, na posição do botão principal — então o
+  // gesto óbvio de quem terminou de ler desligava o recurso.
+  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO, ...janelaDeRua() }, 'ajustes');
+  await page.locator('.srow', { hasText: 'Custo do dia' }).click();
+
+  const principal = page.locator('#_av_dlg .btn-primary');
+  await expect(principal).toHaveCount(1);
+  await expect(principal, 'o botão em destaque desliga o recurso').toHaveText('Entendi');
+
+  // E "Entendi" fecha sem mexer em nada.
+  await principal.click();
+  await page.waitForTimeout(300);
+  expect(await lerEstado(page, 'D.ritmo.ligado'), 'ler a explicação desligou o recurso').toBe(true);
+});
+
+test('DESLIGADO a folha é um convite, e aí "Ligar" é que fica em destaque', async ({ page }) => {
+  await abrir(page, { fixedExpenses: FIXOS, ...janelaDeRua() }, 'ajustes');
+  await page.locator('.srow', { hasText: 'Custo do dia' }).click();
+  const principal = page.locator('#_av_dlg .btn-primary');
+  await expect(principal).toHaveText('Ligar');
+  await principal.click();
+  await page.waitForTimeout(300);
+  expect(await lerEstado(page, 'D.ritmo.ligado')).toBe(true);
 });
 
 test('calcular a rua é só leitura: não encosta em D nem salva', async ({ page }) => {
