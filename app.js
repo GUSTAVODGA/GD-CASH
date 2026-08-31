@@ -522,8 +522,6 @@ function renderMais() {
     .reduce((soma, i) => soma + ((i.vehId || i.patId) ? _bemCustoMes(i.vehId || i.patId).total : 0), 0);
   const dividasAtivas = (D.debts || []).filter(d => { const s = _debtStatus(d); return s === 'ativa' || s === 'atrasada'; });
   const dividasSaldo = dividasAtivas.reduce((s, d) => s + _debtSaldo(d), 0);
-  const themeLbls = { light:'Claro', dark:'Escuro', auto:'Automático' };
-  const theme = themeLbls[localStorage.getItem('gdcash_theme') || 'auto'] || 'Automático';
 
   const item = (tab, icon, title, info) => `
     <button class="mais-item" onclick="switchTab('${tab}','mais')">
@@ -571,7 +569,10 @@ function renderMais() {
     </div>
     <div class="sec-label mais-sec">Aplicativo</div>
     <div class="mais-group">
-      ${item('ajustes', ICO.adj, 'Ajustes', `${currSym} · ${theme}`)}
+      ${/* "R$ · Escuro" não diz nada a quem não sabe o que espera lá dentro.
+            Um subtítulo de menu serve para prever o conteúdo, não para exibir
+            duas configurações escolhidas ao acaso. */''}
+      ${item('ajustes', ICO.adj, 'Ajustes', 'Conta, aparência, backup e plataformas')}
     </div>
     <div class="mais-bottom-spacer"></div>`;
 }
@@ -3002,47 +3003,71 @@ function updateResHist(id) {
 // ══════════════════════════════════════════
 // WEEKLY GOAL
 // ══════════════════════════════════════════
+// O cartão da semana, na tela Semana. Lê de `_ritmoSemana` — a mesma função
+// que alimenta o cartão da Início. Antes tinha conta própria, e discordava do
+// aviso que ficava três dedos acima dele na mesma tela.
 function renderWeekGoal() {
   const el = document.getElementById('week-goal-card');
   if (!el) return;
-  const goal = D.weeklyGoal || 0;
-  if (!goal) {
+  const s = _ritmoSemana(weekOffset);
+
+  if (s.fase === 'sem-alvo') {
     el.innerHTML = `<button class="wg-set-btn" onclick="openWeekGoalModal()">+ Definir meta semanal de receita</button>`;
     return;
-  }
-  const inc = sumWeekIncome(weekOffset);
-  const pct = Math.min(100, (inc/goal)*100);
-  const done = inc >= goal;
-  const dates = weekDates(weekOffset);
-  const now = new Date(); now.setHours(0,0,0,0);
-  const today = todayStr();
-  // Conta só dias sem receita lançada: dias futuros sempre; hoje só se ainda não tiver nada
-  const daysLeft = dates.filter(d => {
-    const dDate = parseDate(d);
-    if (dDate < now) return false;           // dia passado
-    if (d === today) return sumDayIncome(today) === 0; // hoje: só se sem receita
-    return true;                              // dia futuro
-  }).length;
-  let foot = '';
-  if (done) foot = 'Meta da semana atingida! 🎉';
-  else if (daysLeft === 0) foot = `Faltaram ${R(goal-inc)} pra bater a meta.`;
-  else {
-    const perDay = Math.ceil((goal - inc) / daysLeft);
-    const dayTxt = daysLeft === 1 ? 'hoje' : `por dia nos próx. ${daysLeft} dias`;
-    foot = `Faltam <b>${R(goal-inc)}</b> — faça <b>${R(perDay)}</b> ${dayTxt}`;
   }
 
   el.innerHTML = `
     <div class="wg-top">
-      <span class="wg-lbl">Meta da semana</span>
-      <button class="wg-edit" onclick="openWeekGoalModal()">···</button>
+      <span class="wg-lbl">Esta semana</span>
+      <button class="wg-edit" onclick="openWeekGoalModal()" aria-label="Ajustar meta da semana">···</button>
     </div>
     <div class="wg-vals">
-      <span class="wg-current" style="color:${done?'var(--green)':'var(--text)'}">${R(inc)}</span>
-      <span class="wg-target">de ${R(goal)}</span>
+      <span class="wg-current${s.sePagou ? ' wg-ok' : ''}">${R(s.entrou)}</span>
+      <span class="wg-target">${_semanaEscalaTxt(s)}</span>
     </div>
-    <div class="wg-bar-wrap"><div class="wg-bar-fill${done?' wg-done':''}" style="width:${pct}%"></div></div>
-    <div class="wg-foot">${foot}</div>`;
+    ${_semanaBarra(s)}
+    <div class="wg-foot">${_semanaFrase(s)}</div>`;
+}
+
+/** O rótulo do teto da barra — o maior dos dois alvos, nomeado. */
+function _semanaEscalaTxt(s) {
+  if (s.temMeta && s.metaDesejada >= s.piso) return `de ${R(s.metaDesejada)} da sua meta`;
+  if (s.temPiso) return `de ${R(s.piso)} para se pagar`;
+  return '';
+}
+
+/**
+ * A barra com DUAS marcas. O piso não é o fim da barra: é um traço dentro
+ * dela, para que se veja de relance que se pagar vem antes de ganhar.
+ */
+function _semanaBarra(s) {
+  const marca = (s.temPiso && s.temMeta && s.pctPiso > 2 && s.pctPiso < 98)
+    ? `<span class="wg-marca" style="left:${s.pctPiso}%" title="Aqui a semana se paga"></span>` : '';
+  return `<div class="wg-bar-wrap">
+    <div class="wg-bar-fill${s.sePagou ? ' wg-done' : ''}" style="width:${s.pctEntrou}%"></div>
+    ${marca}
+  </div>`;
+}
+
+/**
+ * UMA frase, um alvo, um número por dia. A fase decide qual — nunca os dois.
+ */
+function _semanaFrase(s) {
+  const porDia = s.faltamDias > 0
+    ? ` — <b>${R(s.porDiaRestante)}</b> ${s.faltamDias === 1 ? 'hoje' : `por dia nos ${s.faltamDias} dias que faltam`}`
+    : '';
+  if (s.fase === 'piso') {
+    return `Faltam <b>${R(s.falta)}</b> para a semana se pagar${porDia}`;
+  }
+  if (s.fase === 'meta') {
+    const abertura = s.temPiso ? 'A semana já se pagou. ' : '';
+    return `${abertura}Faltam <b>${R(s.falta)}</b> para a sua meta${porDia}`;
+  }
+  // Completa: nada mais a perseguir. Diz o tamanho da vitória, não "parabéns".
+  const sobra = _r(_c(s.entrou) - _c(s.alvoAtual));
+  return sobra > 0
+    ? `Semana fechada — <b>${R(sobra)}</b> acima do alvo`
+    : 'Semana fechada no alvo';
 }
 
 function shareApp() {
@@ -3072,7 +3097,6 @@ function renderWeekInsight(off) {
   var inc = sumWeekIncome(off);
   var exp = sumWeekExpenses(off);
   var liq = inc - exp;
-  var goal = D.weeklyGoal || 0;
 
   if (inc === 0 && exp === 0) {
     el.innerHTML =
@@ -3087,7 +3111,8 @@ function renderWeekInsight(off) {
   var isCurrentWeek = off === 0;
   var todayIdx = dates.indexOf(today);
   var daysElapsed = isCurrentWeek ? (todayIdx >= 0 ? todayIdx + 1 : 7) : 7;
-  var daysLeft = isCurrentWeek && todayIdx >= 0 ? 6 - todayIdx : 0;
+  // (`daysLeft` saiu junto com os avisos de meta: era a divisão que discordava
+  //  do cartão da semana. Quem responde "quanto por dia" agora é `_ritmoSemana`.)
 
   // For fair comparison: only count the same number of elapsed days from previous week
   var prevIncEquiv = isCurrentWeek && daysElapsed < 7
@@ -3099,35 +3124,19 @@ function renderWeekInsight(off) {
 
   var insight = null;
 
-  // 1. Goal achieved
-  if (!insight && goal > 0 && inc >= goal) {
-    insight = { text: 'Meta da semana atingida com <b>' + R(inc) + '</b>.', state: 'pos' };
-  }
-
-  // 2. Goal progress + daily pace (current week, ≥40% done, days left)
-  if (!insight && goal > 0 && inc < goal && isCurrentWeek && daysLeft > 0) {
-    var needed = goal - inc;
-    var pct = Math.round((inc / goal) * 100);
-    var perDay = Math.ceil(needed / daysLeft);
-    if (pct >= 40) {
-      insight = {
-        text: 'Faltam <b>' + R(needed) + '</b> para a meta. São <b>' + R(perDay) + '</b> por dia até domingo.',
-        state: 'pos'
-      };
-    }
-  }
-
-  // 3. Behind pace vs goal (current week, ≥2 days elapsed, ≥20% behind expected)
-  if (!insight && goal > 0 && isCurrentWeek && daysElapsed >= 2) {
-    var expected = (goal / 7) * daysElapsed;
-    var behindPct = expected > 0 ? Math.round(((expected - inc) / expected) * 100) : 0;
-    if (behindPct >= 20 && daysLeft > 0) {
-      insight = {
-        text: 'Você está <b>' + behindPct + '% abaixo</b> do ritmo necessário para bater a meta.',
-        state: 'warn'
-      };
-    }
-  }
+  // ── Os três primeiros avisos SAÍRAM daqui, de propósito ──
+  //
+  // Eles falavam da meta da semana: "meta atingida", "faltam X, são Y por dia
+  // até domingo", "você está N% abaixo do ritmo". Isso é exatamente o que o
+  // cartão da semana diz — e ele fica na MESMA tela, três dedos abaixo.
+  //
+  // Pior: as contas eram outras. O aviso dividia por "6 − índice de hoje" e o
+  // cartão por "dias sem receita lançada", então a tela mostrava R$ 228,00 e
+  // R$ 171,00 ao mesmo tempo, para a mesma pergunta. Quem lê escolhe a que
+  // prefere, e nenhuma das duas volta a merecer crédito.
+  //
+  // O que sobrou aqui é o que o cartão NÃO diz: comparação com a semana
+  // passada e tendência de gastos. Informação nova, não eco.
 
   // 4. Income comparison vs equivalent period of previous week (≥15% change)
   if (!insight && prevIncEquiv > 30) {
@@ -4701,16 +4710,47 @@ function _diaSePagou(dataISO) {
   };
 }
 
-/** O placar da semana corrente: o que foi feito e o que falta para o combinado. */
-function _ritmoSemana() {
-  const custo = _custoDoDia(0);
-  const dias  = weekDates(0);
-  const hoje  = todayStr();
+// ══════════════════════════════════════════════════════════════════════════
+// A SEMANA TEM UM DONO SÓ
+// ══════════════════════════════════════════════════════════════════════════
+//
+// O app respondia "quanto por dia até domingo?" em TRÊS lugares, com três
+// números diferentes, dois deles visíveis ao mesmo tempo na mesma tela:
+//
+//   `renderWeekInsight`  dividia por `6 − índice de hoje`      → R$ 228,00
+//   `renderWeekGoal`     dividia por dias sem receita lançada  → R$ 171,00
+//   `renderHomeRitmo`    dividia pelo ritmo declarado          → R$  33,22
+//
+// Três respostas para uma pergunta não é riqueza de informação: é o app
+// admitindo que não sabe. Quem lê escolhe a que prefere, e nenhuma delas
+// volta a merecer crédito.
+//
+// A partir daqui existe UMA função. As três telas leem dela.
+//
+// ── E a semana tem DOIS números, não um ──
+//
+// O PISO é derivado: quanto a semana precisa render para se pagar (a linha do
+// dia × os dias que você pretende rodar). Não se digita, e não é ambição — é
+// o ponto em que o trabalho para de custar.
+//
+// A META é digitada: quanto você QUER ganhar. Já existia no app, sozinha, na
+// tela Semana, sem nenhuma relação com custo.
+//
+// As duas são legítimas e respondem a perguntas diferentes. O erro era tratá-
+// las como rivais em telas separadas. Aqui elas dividem a mesma barra, nesta
+// ordem: primeiro você se paga, depois você ganha. E a frase de baixo persegue
+// SEMPRE um alvo só — o próximo — para nunca haver dois números na tela.
+function _ritmoSemana(off) {
+  const semana = Number.isFinite(off) ? off : 0;
+  const custo  = _custoDoDia(0);
+  const dias   = weekDates(semana);
+  const hoje   = todayStr();
+  const corrente = semana === 0;
 
   let entrouC = 0, rodados = 0, bateram = 0;
   const alvoC = _c(custo.alvo);
   dias.forEach(d => {
-    if (d > hoje) return;                     // dia futuro não é dia perdido
+    if (corrente && d > hoje) return;         // dia futuro não é dia perdido
     const v = _c(sumDayIncome(d));
     entrouC += v;
     if (v > 0) rodados++;
@@ -4718,22 +4758,53 @@ function _ritmoSemana() {
   });
 
   const prometidos = custo.porSemana || 0;
-  const metaC = alvoC * prometidos;
-  const faltaC = Math.max(0, metaC - entrouC);
-  // Dias que ainda dá para rodar: o que falta do combinado, limitado pelos dias
-  // que ainda existem na semana. Prometer sete dias numa quinta não cria dias.
-  const restamNaSemana = dias.filter(d => d >= hoje).length;
+  const pisoC = alvoC * prometidos;                    // 0 sem ritmo declarado
+  const metaC = _c(D.weeklyGoal || 0);                 // 0 sem meta digitada
+
+  // ── A ÚNICA definição de "dias que ainda dá para rodar" ──
+  //
+  // Os dias do calendário que sobraram, limitados pelo que você ainda pretende
+  // rodar. Prometer seis dias numa quinta não cria dias; e ter quatro dias de
+  // calendário não obriga ninguém a rodar os quatro.
+  const restamNaSemana = corrente ? dias.filter(d => d >= hoje).length : 0;
   const faltamDias = prometidos > 0
-    ? Math.max(0, Math.min(prometidos - rodados, restamNaSemana)) : 0;
+    ? Math.max(0, Math.min(prometidos - rodados, restamNaSemana))
+    : restamNaSemana;
+
+  // ── A fase: um alvo de cada vez ──
+  //
+  // Primeiro se pagar, depois ganhar. Mostrar os dois ao mesmo tempo devolveria
+  // o problema que esta função existe para resolver.
+  let fase, alvoAtual = 0;
+  if (pisoC > 0 && entrouC < pisoC)      { fase = 'piso'; alvoAtual = pisoC; }
+  else if (metaC > 0 && entrouC < metaC) { fase = 'meta'; alvoAtual = metaC; }
+  else if (metaC > 0 || pisoC > 0)       { fase = 'completa'; alvoAtual = Math.max(pisoC, metaC); }
+  else                                   { fase = 'sem-alvo'; }
+
+  const faltaC = Math.max(0, alvoAtual - entrouC);
+
+  // A barra vai até o maior dos dois, para que a marca do piso caia no lugar
+  // certo dentro dela.
+  const escalaC = Math.max(pisoC, metaC);
 
   return {
     prometidos, rodados, bateram,
     entrou: _r(entrouC),
-    meta: _r(metaC),
+    piso: _r(pisoC),
+    metaDesejada: _r(metaC),
+    temPiso: pisoC > 0,
+    temMeta: metaC > 0,
+    fase,
+    alvoAtual: _r(alvoAtual),
     falta: _r(faltaC),
     faltamDias,
-    // A conta que decide a tarde: o que cada dia restante precisa render.
+    // A conta que decide a tarde: o que cada dia restante precisa render para
+    // alcançar o alvo DA FASE atual.
     porDiaRestante: faltamDias > 0 ? _r(Math.round(faltaC / faltamDias)) : 0,
+    // Posições na barra, em % da escala — quem desenha não recalcula nada.
+    pctEntrou: escalaC > 0 ? Math.min(100, Math.round(entrouC / escalaC * 100)) : 0,
+    pctPiso:   escalaC > 0 ? Math.min(100, Math.round(pisoC   / escalaC * 100)) : 0,
+    sePagou: pisoC > 0 && entrouC >= pisoC,
     alvo: custo.alvo,
     temRitmo: custo.temRitmo,
     cumpriu: prometidos > 0 && rodados >= prometidos,
@@ -5551,129 +5622,168 @@ function renderHomeRitmo() {
   if (!_ritmoLigado() || c.semBase) { sec.style.display = 'none'; return; }
   sec.style.display = '';
 
-  const sem = _ritmoSemana();
+  const sem = _ritmoSemana(0);
   const mes = _ritmoMes(0);
 
-  // Sem ritmo declarado o cartão ainda vale: mostra o que aconteceu, sem
-  // prometer nada em nome do usuário.
-  const linhaSemana = sem.temRitmo
-    ? `<div class="rit-linha">
-         <span class="rit-forte">${sem.rodados} de ${sem.prometidos} dias</span>
-         <span class="rit-val">${R(sem.entrou)}</span>
-       </div>
-       ${sem.faltamDias > 0
-         ? `<div class="rit-sub">Faltam ${sem.faltamDias} dia${sem.faltamDias !== 1 ? 's' : ''} e ${R(sem.falta)} — dá ${R(sem.porDiaRestante)} por dia</div>`
-         : sem.cumpriu
-           ? `<div class="rit-sub rit-ok">Semana cumprida</div>`
-           : `<div class="rit-sub">${R(sem.entrou)} nesta semana</div>`}`
-    : `<div class="rit-linha">
-         <span class="rit-forte">${sem.rodados} dia${sem.rodados !== 1 ? 's' : ''} rodado${sem.rodados !== 1 ? 's' : ''}</span>
-         <span class="rit-val">${R(sem.entrou)}</span>
-       </div>
-       <div class="rit-sub">Diga quantos dias por semana pretende rodar para ver o quanto falta.</div>`;
+  box.innerHTML = `
+    ${_ritmoBlocoSemana(sem)}
+    ${_ritmoBlocoMes(mes)}
+    ${_ritmoRodape(c)}`;
+}
 
-  const barra = mes.custoMes > 0
-    ? Math.min(100, Math.round(_c(mes.entrou) / _c(mes.custoMes) * 100)) : 0;
+/**
+ * A semana: UM número grande, UMA frase de ação.
+ *
+ * O cartão anterior empilhava seis números no mesmo cinza pequeno — a semana,
+ * o mês, a composição da linha, a média — e nada dizia qual deles importava.
+ * Um usuário olhou e perguntou "de onde vem esse número?". A pergunta era
+ * sobre o desenho, não sobre a conta.
+ */
+function _ritmoBlocoSemana(s) {
+  if (s.fase === 'sem-alvo') {
+    return `<div class="rit-bloco">
+      <div class="rit-tit">Esta semana</div>
+      <div class="rit-grande">${R(s.entrou)}</div>
+      <div class="rit-sub">Diga quantos dias por semana pretende rodar, aqui embaixo,
+        e esta linha passa a dizer quanto falta.</div>
+    </div>`;
+  }
 
-  // O ajuste fica no cartão, não escondido num diálogo: é o número que muda
-  // todos os outros, e mudar de ideia sobre ele tem que custar um toque.
-  const passo = `
+  // O número que se persegue AGORA, grande. O que já entrou vira apoio.
+  const chamada = s.fase === 'completa'
+    ? R(s.entrou)
+    : R(s.falta);
+  const rotulo = s.fase === 'piso'  ? 'Falta para a semana se pagar'
+              : s.fase === 'meta'  ? (s.temPiso ? 'Já se pagou. Falta para a sua meta' : 'Falta para a sua meta')
+              : 'A semana fechou o alvo';
+
+  const acao = s.faltamDias > 0 && s.fase !== 'completa'
+    ? `<div class="rit-acao"><b>${R(s.porDiaRestante)}</b> por dia
+        ${s.faltamDias === 1 ? 'hoje' : `nos ${s.faltamDias} dias que faltam`}</div>`
+    : '';
+
+  return `<div class="rit-bloco">
+    <div class="rit-tit">${rotulo}</div>
+    <div class="rit-grande${s.fase === 'completa' ? ' rit-ok' : ''}">${chamada}</div>
+    ${acao}
+    <div class="rit-barra rit-barra--dupla">
+      <i style="width:${s.pctEntrou}%"></i>
+      ${s.temPiso && s.temMeta && s.pctPiso > 2 && s.pctPiso < 98
+        ? `<span class="rit-marca" style="left:${s.pctPiso}%"></span>` : ''}
+    </div>
+    <div class="rit-escala">
+      <span>${R(s.entrou)} nesta semana</span>
+      <span>${s.rodados} de ${s.prometidos || '?'} dias</span>
+    </div>
+  </div>`;
+}
+
+/** O mês: o mesmo formato, uma escala acima. */
+function _ritmoBlocoMes(m) {
+  const barra = m.custoMes > 0
+    ? Math.min(100, Math.round(_c(m.entrou) / _c(m.custoMes) * 100)) : 0;
+  return `<div class="rit-bloco rit-bloco--sep">
+    <div class="rit-tit">${m.fechou ? 'O mês já se pagou' : 'Falta para o mês se pagar'}</div>
+    <div class="rit-medio${m.fechou ? ' rit-ok' : ''}">${m.fechou ? R(m.entrou) : R(m.falta)}</div>
+    <div class="rit-barra"><i style="width:${barra}%"></i></div>
+    <div class="rit-escala">
+      <span>${R(m.entrou)} de ${R(m.custoMes)}</span>
+      <span>${m.rodados} dia${m.rodados !== 1 ? 's' : ''} rodado${m.rodados !== 1 ? 's' : ''}</span>
+    </div>
+  </div>`;
+}
+
+/**
+ * O rodapé: o passo, e a linha do dia numa frase — não numa fórmula.
+ *
+ * "R$ 90,19 de fixo e R$ 62,42 de rua" era aritmética exposta sem tradução.
+ * Aqui fica só o total, e a explicação inteira mora a um toque de distância,
+ * onde há espaço para explicar em vez de abreviar.
+ */
+function _ritmoRodape(c) {
+  return `<div class="rit-rodape">
     <div class="rit-passo">
       <div class="rit-passo-txt">
         <div class="rit-passo-tit">${c.temRitmo
-          ? `Pretendo rodar ${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana`
+          ? `Rodando ${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana`
           : 'Quantos dias por semana você pretende rodar?'}</div>
-        <div class="rit-passo-sub">${
-          c.temRitmo
-            ? `Cada dia rodado precisa render ${R(c.alvo)}`
-              + (c.temVariavel ? ` — ${R(c.porDiaRodado)} de fixo e ${R(c.variavel)} de rua` : '')
-            // Vazio: diz o que fazer, não o que está faltando. Foi por não dizer
-            // isto que o passo passou despercebido na primeira vez que foi ao ar.
-            : 'Toque no + para dizer. Sem isso a conta divide pelos '
-              + `${c.dias} dias do mês, e a linha do dia de trabalho fica baixa demais.`
-        }</div>
+        <div class="rit-passo-sub">${c.temRitmo
+          ? `Um dia rodado precisa render <b>${R(c.alvo)}</b>`
+          : 'Toque no + para dizer.'}</div>
       </div>
       <div class="rit-step" role="group" aria-label="Dias por semana">
         <button class="rit-step-btn" onclick="ajustarDiasPorSemana(-1)"
-          aria-label="Um dia a menos"${c.porSemana <= 0 ? ' disabled' : ''}>−</button>
+          aria-label="Um dia a menos"${c.porSemana <= 0 ? ' disabled' : ''}>&minus;</button>
         <span class="rit-step-val${c.porSemana ? '' : ' rit-step-vazio'}" aria-live="polite"
           >${c.porSemana || '?'}</span>
         <button class="rit-step-btn" onclick="ajustarDiasPorSemana(1)"
           aria-label="Um dia a mais"${c.porSemana >= 7 ? ' disabled' : ''}>+</button>
       </div>
-    </div>`;
-
-  box.innerHTML = `
-    ${passo}
-    <div class="rit-bloco rit-bloco--sep">
-      <div class="rit-tit">Esta semana</div>
-      ${linhaSemana}
     </div>
-    <div class="rit-bloco rit-bloco--sep">
-      <div class="rit-tit">Este mês</div>
-      <div class="rit-linha">
-        <span class="rit-forte">${mes.rodados} dia${mes.rodados !== 1 ? 's' : ''} rodado${mes.rodados !== 1 ? 's' : ''}</span>
-        <span class="rit-val">${R(mes.entrou)}</span>
-      </div>
-      <div class="rit-barra"><i style="width:${barra}%"></i></div>
-      <div class="rit-sub">${
-        mes.fechou
-          ? `O mês já se pagou · ${R(mes.entrou)} de ${R(mes.custoMes)}`
-          : mes.rodagemRestante > 0
-            ? `Faltam ${R(mes.falta)} em ${mes.rodagemRestante} dia${mes.rodagemRestante !== 1 ? 's' : ''} — dá ${R(mes.porDiaRestante)} por dia`
-            : `Faltam ${R(mes.falta)} para o mês se pagar`
-      }</div>
-      ${mes.rodados > 0 ? `<div class="rit-placar">
-        <span><b>${mes.bateram}</b> ${mes.bateram === 1 ? 'dia bateu' : 'dias bateram'} a meta de ${R(mes.alvo)}</span>
-        <span><b>${R(mes.media)}</b> por dia rodado</span>
-      </div>` : ''}
-    </div>`;
+    ${c.temRitmo ? `<button class="rit-porque" onclick="abrirRitmo()">
+      Por que ${R(c.alvo)}?</button>` : ''}
+  </div>`;
 }
 
 // O interruptor. Explica o que liga ANTES de ligar, e mostra a conta que vai
 // ser usada — ninguém deve descobrir a própria linha de chegada por surpresa.
 function abrirRitmo() {
   const c = _custoDoDia(0);
-  const partes = [];
-  if (c.manual) {
-    partes.push(`Custo mensal ajustado à mão: ${R(c.mensal)}.`);
-  } else {
-    partes.push(`Gastos fixos: ${R(c.fixos)}` + (c.dividas > 0 ? `\nParcelas de dívida do mês: ${R(c.dividas)}` : ''));
-    partes.push(`Total do mês: ${R(c.mensal)}`);
-  }
-  if (c.temRitmo) {
-    partes.push(`Você pretende rodar ${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana`
-      + ` — cerca de ${c.diasRodagem} dias no mês.`);
-    partes.push(`Fixo por dia rodado: ${R(c.porDiaRodado)}`);
-  } else {
-    partes.push(`Fixo por dia: ${R(c.porDia)} (dividido pelos ${c.dias} dias do mês).`);
-  }
 
-  // O custo da rua entra explicitamente, com a janela de onde saiu: sem isso a
-  // linha subiria sem explicação e pareceria arbitrária.
-  if (c.temVariavel) {
-    partes.push(`Gasolina, comida e manutenção: ${R(c.variavel)} por dia rodado`
-      + ` (${R(c.variavelTotal)} em ${c.variavelRodados} dia${c.variavelRodados !== 1 ? 's' : ''} rodado${c.variavelRodados !== 1 ? 's' : ''} nos últimos ${c.variavelJanela}).`);
+  // Escrito para quem NUNCA leu uma explicação sobre isto. Cada parcela é
+  // nomeada pelo que ela É, não pelo lugar de onde o código a tirou: "de rua"
+  // não quer dizer nada para ninguém — "a gasolina e a comida do próprio dia"
+  // quer dizer para todo mundo.
+  const linhas = [];
+
+  linhas.push('Todo dia que você roda paga duas coisas:');
+  linhas.push('');
+
+  if (c.temRitmo) {
+    linhas.push(`1) UM PEDAÇO DAS SUAS CONTAS DO MÊS — ${R(c.porDiaRodado)}`);
+    linhas.push(`Suas contas somam ${R(c.mensal)} por mês. Como você pretende rodar`
+      + ` ${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana (cerca de ${c.diasRodagem} no mês),`
+      + ` cada dia rodado carrega ${R(c.porDiaRodado)} delas.`);
+  } else {
+    linhas.push(`1) UM PEDAÇO DAS SUAS CONTAS DO MÊS — ${R(c.porDia)}`);
+    linhas.push(`Suas contas somam ${R(c.mensal)} por mês, dividido pelos ${c.dias} dias.`);
   }
-  partes.push(`━ Um dia rodado precisa render ${R(c.alvo)}.`);
+  linhas.push('');
+
+  if (c.temVariavel) {
+    linhas.push(`2) A GASOLINA E A COMIDA DO PRÓPRIO DIA — ${R(c.variavel)}`);
+    linhas.push(`Nos últimos ${c.variavelJanela} dias você gastou ${R(c.variavelTotal)} de gasolina,`
+      + ` comida e manutenção, em ${c.variavelRodados} dia${c.variavelRodados !== 1 ? 's' : ''}`
+      + ` rodado${c.variavelRodados !== 1 ? 's' : ''}. Sai desse histórico e muda sozinho`
+      + ' quando a gasolina muda.');
+  } else {
+    linhas.push('2) A GASOLINA E A COMIDA DO PRÓPRIO DIA — ainda sem histórico');
+    linhas.push('Assim que você lançar alguns gastos de gasolina, esta parte aparece'
+      + ' sozinha e a linha sobe para o que ela é de verdade.');
+  }
+  linhas.push('');
+  linhas.push(`SOMANDO AS DUAS: ${R(c.alvo)}.`);
+  linhas.push(`É isso que um dia rodado precisa render para não ter custado nada a você.`
+    + ' Tudo acima disso é seu.');
 
   if (!c.temRitmo) {
-    partes.push('Dizendo quantos dias por semana pretende rodar, a parte fixa passa a dividir'
-      + ' pelos dias rodados — e a linha sobe para o que ela é de verdade.');
+    linhas.push('');
+    linhas.push('Dizendo quantos dias por semana pretende rodar, a primeira parte passa'
+      + ' a dividir pelos dias rodados em vez dos dias do calendário — e a linha sobe'
+      + ' para o que um dia de trabalho realmente precisa render.');
   }
 
   const msg = _ritmoLigado()
-    ? 'A Início mostra quanto falta para o dia de hoje se pagar, e quanto já é seu depois disso.\n\n'
-      + partes.join('\n') + '\n\nO número sai do que você já cadastrou e se corrige sozinho quando um custo muda.'
+    ? linhas.join('\n')
     : 'Liga um número na Início: quanto falta para o dia de hoje se pagar.\n\n'
-      + partes.join('\n')
-      + '\n\nSai do que você já cadastrou. Dia que você escolhe não rodar não fica vermelho — só não conta.';
+      + linhas.join('\n')
+      + '\n\nDia que você escolhe não rodar não fica vermelho — só não conta.';
 
   gdConfirm({
-    title: _ritmoLigado() ? 'O dia de hoje' : 'Mostrar o custo do dia?',
+    title: _ritmoLigado() ? `Por que ${R(c.alvo)}?` : 'Mostrar o custo do dia?',
     msg,
     confirmText: _ritmoLigado() ? 'Desligar' : 'Ligar',
-    cancelText: 'Fechar',
+    cancelText: 'Entendi',
     onConfirm: () => {
       if (!D.ritmo) D.ritmo = {};
       D.ritmo.ligado = !_ritmoLigado();
@@ -8539,13 +8649,14 @@ function drawHomeChart() {
   const canvas  = document.getElementById('home-chart');
   const emptyEl = document.getElementById('home-chart-empty');
   const legendEl = document.getElementById('home-chart-legend');
+  const leituraEl = document.getElementById('home-chart-leitura');
   if (!canvas) return;
 
   const months = [];
   for (let i = -5; i <= 0; i++) {
     const d = new Date(); d.setMonth(d.getMonth() + i, 1);
     const lbl = d.toLocaleDateString('pt-BR', {month: 'short'}).replace('.', '');
-    months.push({ lbl, inc: sumMonthIncome(i), exp: sumMonthExpenses(i) });
+    months.push({ lbl, inc: sumMonthIncome(i), exp: sumMonthExpenses(i), off: i });
   }
 
   const hasData = months.some(m => m.inc > 0 || m.exp > 0);
@@ -8555,6 +8666,7 @@ function drawHomeChart() {
     canvas.style.display  = 'none';
     if (emptyEl)  emptyEl.style.display  = '';
     if (legendEl) legendEl.style.display = 'none';
+    if (leituraEl) leituraEl.style.display = 'none';
     return;
   }
 
@@ -8562,11 +8674,25 @@ function drawHomeChart() {
   if (emptyEl)  emptyEl.style.display  = 'none';
   if (legendEl) legendEl.style.display = '';
 
+  // ── A leitura em palavras ──
+  //
+  // Um gráfico sem legenda de valor obriga a estimar a altura da barra contra
+  // uma grade sem números. Esta linha diz de uma vez o que o desenho leva
+  // quatro barras para insinuar — e é o que a maioria das pessoas quer saber.
+  if (leituraEl) {
+    const atual = months[months.length - 1];
+    const saldo = atual.inc - atual.exp;
+    leituraEl.style.display = '';
+    leituraEl.innerHTML = `<span class="hc-leitura-val ${saldo >= 0 ? 'pos' : 'neg'}">${R(saldo)}</span>`
+      + `<span class="hc-leitura-txt">${saldo >= 0 ? 'sobrou' : 'faltou'} neste mês</span>`;
+  }
+
   if (!canvas.offsetWidth) return;
 
   // Skip redraw when data and theme are unchanged
   const theme = document.documentElement.dataset.theme || '';
-  const hash  = months.map(m => m.inc + '|' + m.exp).join(',') + ':' + theme + ':' + canvas.offsetWidth;
+  const hash  = months.map(m => m.inc + '|' + m.exp).join(',') + ':' + theme
+              + ':' + canvas.offsetWidth + 'x' + canvas.offsetHeight;
   if (hash === _homeChartHash && canvas.width > 0) return;
   _homeChartHash = hash;
   const dpr = window.devicePixelRatio || 1;
@@ -8575,57 +8701,100 @@ function drawHomeChart() {
   const ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  const maxVal = Math.max(...months.flatMap(m => [m.inc, m.exp]), 1);
-  const padT = 6, padB = 22, padL = 0, padR = 0;
+  const bruto = Math.max(...months.flatMap(m => [m.inc, m.exp]), 1);
+  // O topo da escala é um número REDONDO acima do maior valor. Sem isso a
+  // barra mais alta encostava no teto e a grade marcava frações sem sentido
+  // ("R$ 4.324,00 ÷ 4"), impossíveis de ler de relance.
+  const maxVal = _escalaRedonda(bruto);
+
+  // `padL` deixa de ser zero: a grade passa a ter valor escrito nela. Um
+  // gráfico onde não dá para saber se a barra vale 500 ou 5.000 informa
+  // apenas que "um mês foi maior que o outro", que já se sabia.
+  const padT = 10, padB = 24, padL = 40, padR = 4;
   const chartW = cw - padL - padR, chartH = ch - padT - padB;
   const groupW = chartW / months.length;
-  const barW   = Math.min(groupW * 0.27, 15);
-  const barGap = groupW * 0.055;
+  const barW   = Math.min(groupW * 0.30, 18);
+  const barGap = groupW * 0.06;
 
-  // Mesma codificação do resto do app: entrada é verde, saída é coral. Antes
-  // este gráfico usava azul para entrada e azul-claro para saída, enquanto a
-  // tela Mês pintava o MESMO dado de verde e vermelho.
+  // Mesma codificação do resto do app: entrada é verde, saída é coral.
   const incColor  = _cssVar('--gn');
   const expColor  = _cssVar('--rd');
-  // Este canvas ficou de fora da repaginação: pintava rótulo e grade com o
-  // azul-marinho da identidade antiga, em alfa .33/.35 — 2,13:1 no claro e
-  // 2,94:1 no escuro, abaixo do piso de 4,5:1 para texto pequeno. Os meses sob
-  // as barras praticamente sumiam no tema escuro. Lendo os tokens, o rótulo
-  // herda os 4,6:1 já resolvidos em `--tx3` e acompanha qualquer tema futuro.
   const gridColor = _cssVar('--border');
   const lblColor  = _cssVar('--tx3');
+  const fonte     = _cssVar('--font-body') || 'sans-serif';
 
   ctx.clearRect(0, 0, cw, ch);
 
-  // grid lines
-  for (let i = 1; i <= 3; i++) {
+  // Grade COM VALOR. Quatro faixas, incluindo a base.
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i++) {
     const y = padT + (chartH / 4) * i;
     ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(chartW, y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + chartW, y); ctx.stroke();
+    if (i % 2 === 0) {                     // rotula alternado: legível sem poluir
+      ctx.fillStyle = lblColor;
+      ctx.font = `500 9.5px ${fonte}`;
+      ctx.fillText(_kAbrev(maxVal * (1 - i / 4)), padL - 7, y);
+    }
   }
 
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
   months.forEach((m, i) => {
-    const cx   = padL + (i + 0.5) * groupW;
-    const incH = Math.max((m.inc / maxVal) * chartH, 2);
-    const expH = Math.max((m.exp / maxVal) * chartH, 2);
+    const cx    = padL + (i + 0.5) * groupW;
+    const atual = m.off === 0;
+    const vazio = m.inc === 0 && m.exp === 0;
 
-    ctx.fillStyle = incColor; ctx.globalAlpha = 0.82;
-    homeRoundRect(ctx, cx - barW - barGap / 2, padT + chartH - incH, barW, incH, 3);
-    ctx.fill();
+    if (vazio) {
+      // Mês sem lançamento não vira duas barras de 2px que parecem dado. Um
+      // traço na base diz "não houve", que é a verdade.
+      ctx.strokeStyle = gridColor; ctx.lineWidth = 2; ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx - barW, padT + chartH); ctx.lineTo(cx + barW, padT + chartH);
+      ctx.stroke();
+    } else {
+      const incH = Math.max((m.inc / maxVal) * chartH, m.inc > 0 ? 3 : 0);
+      const expH = Math.max((m.exp / maxVal) * chartH, m.exp > 0 ? 3 : 0);
 
-    ctx.fillStyle = expColor; ctx.globalAlpha = 0.66;
-    homeRoundRect(ctx, cx + barGap / 2, padT + chartH - expH, barW, expH, 3);
-    ctx.fill();
+      // O mês corrente vem cheio; os anteriores, mais discretos. Quem olha
+      // quer saber onde está agora.
+      ctx.globalAlpha = atual ? 1 : 0.55;
+      ctx.fillStyle = incColor;
+      homeRoundRect(ctx, cx - barW - barGap / 2, padT + chartH - incH, barW, incH, 3);
+      ctx.fill();
+      ctx.fillStyle = expColor;
+      homeRoundRect(ctx, cx + barGap / 2, padT + chartH - expH, barW, expH, 3);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
-    ctx.globalAlpha = 1;
     ctx.fillStyle = lblColor;
     // `Inter` saiu do app na repaginação; só este canvas continuava pedindo por
     // nome uma fonte que a página não carrega mais.
-    ctx.font = `600 10px ${_cssVar('--font-body') || 'sans-serif'}`;
-    ctx.textAlign = 'center';
+    ctx.font = `${atual ? '700' : '500'} 10px ${fonte}`;
     const lbl = m.lbl.charAt(0).toUpperCase() + m.lbl.slice(1, 3);
     ctx.fillText(lbl, cx, padT + chartH + 16);
   });
+}
+
+/** O próximo número redondo acima de `n`, para o topo da escala. */
+function _escalaRedonda(n) {
+  if (!(n > 0)) return 1;
+  const mag = Math.pow(10, Math.floor(Math.log10(n)));
+  for (const passo of [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10]) {
+    if (n <= passo * mag) return passo * mag;
+  }
+  return 10 * mag;
+}
+
+/** Valor curto para o eixo: 4.500 vira "4,5k". */
+function _kAbrev(v) {
+  if (v >= 1000) {
+    const k = v / 1000;
+    return (k >= 10 ? Math.round(k) : String(Math.round(k * 10) / 10).replace('.', ',')) + 'k';
+  }
+  return String(Math.round(v));
 }
 
 function homeRoundRect(ctx, x, y, w, h, r) {

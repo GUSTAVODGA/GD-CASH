@@ -237,7 +237,7 @@ test('a folha explica a conta ANTES de ligar', async ({ page }) => {
   await page.locator('.srow', { hasText: 'Custo do dia' }).click();
   const dlg = page.locator('#_av_dlg');
   await expect(dlg).toBeVisible();
-  await expect(dlg).toContainText('Gastos fixos');
+  await expect(dlg).toContainText('UM PEDAÇO DAS SUAS CONTAS DO MÊS');
   await expect(dlg).toContainText('R$ 3.100,00');
   await expect(dlg).toContainText('31 dias');
   await expect(dlg).toContainText('R$ 100,00');

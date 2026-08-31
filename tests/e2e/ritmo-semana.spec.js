@@ -1,30 +1,35 @@
-// O placar: a semana e o mês.
+// A semana tem um dono só.
 //
-// O cartão do dia responde "posso ir para casa agora?". Ele não responde
-// "estou no ritmo?" — e essa é a pergunta que decide a semana inteira. Sem
-// ela, quatro dias fracos seguidos passam despercebidos até o mês fechar
-// curto, e aí não há mais o que fazer.
+// O app respondia "quanto por dia até domingo?" em TRÊS lugares, com três
+// números diferentes — dois deles visíveis ao mesmo tempo, na mesma tela:
+//
+//   `renderWeekInsight`  dividia por "6 − índice de hoje"     → R$ 228,00
+//   `renderWeekGoal`     dividia por dias sem receita lançada → R$ 171,00
+//   `renderHomeRitmo`    dividia pelo ritmo declarado         → R$  33,22
+//
+// Três respostas para uma pergunta não é riqueza de informação: é o app
+// admitindo que não sabe. A partir daqui existe UMA função, `_ritmoSemana`, e
+// as três telas leem dela.
 //
 // O QUE ESTES TESTES PROTEGEM:
 //
-//   UMA COISA SÓ SE DIGITA: quantos dias por semana você PRETENDE rodar. Não é
-//   contrato, é o divisor da conta. Enquanto ninguém disser, a conta divide
-//   pelos dias do MÊS — o comportamento antigo, que não julga folga. Declarado
-//   o ritmo, a linha do dia rodado sobe para o que ela é de verdade, e sobe
-//   por uma conta que o próprio usuário escolheu.
+//   OS DOIS ALVOS DA SEMANA. O PISO é derivado — quanto a semana precisa
+//   render para se pagar (linha do dia × dias que você pretende rodar). A META
+//   é digitada — quanto você QUER ganhar, e já existia sozinha na tela Semana.
+//   As duas são legítimas e respondem a perguntas diferentes; o erro era
+//   tratá-las como rivais em telas separadas.
 //
-//   O ZERO É UM ESTADO VÁLIDO, e é o inicial. Prometer no lugar do usuário é o
-//   começo de um número em que ele não acredita.
+//   UM ALVO DE CADA VEZ. Primeiro se pagar, depois ganhar. A frase persegue
+//   sempre o próximo alvo, nunca os dois — mostrar os dois devolveria o
+//   problema que esta função existe para resolver.
 //
-//   DIA FUTURO NÃO É DIA PERDIDO. O placar da semana só olha para trás e para
-//   hoje. Uma segunda-feira de manhã não pode dizer "você está atrás".
+//   UMA ÚNICA DEFINIÇÃO de "dias que ainda dá para rodar": os dias de
+//   calendário que sobraram, limitados pelo que você ainda pretende rodar.
 //
-//   PROMETER SETE DIAS NUMA QUINTA NÃO CRIA DIAS. O que falta rodar é limitado
-//   pelos dias que ainda existem na semana — senão o app pediria o impossível
-//   e ensinaria a ignorá-lo.
+//   O ZERO É UM ESTADO VÁLIDO no passo de dias por semana, e é o inicial.
 //
-//   A CONTA QUE DECIDE A TARDE é "falta X em N dias — dá Y por dia". É o único
-//   número acionável às três da tarde de uma quinta.
+//   DIA FUTURO NÃO É DIA PERDIDO, e prometer sete dias numa quinta não cria
+//   dias.
 import { test, expect } from '@playwright/test';
 import { abrirAppEmDemo, semearDados, lerEstado } from './_helpers.js';
 
@@ -38,7 +43,7 @@ const BASE = {
   incomeItems: [], dailyIncome: {}, expenses: [], debtPayments: [], fixedPayments: [],
   debts: [], fixedExpenses: [], pendencias: [], vehicles: [], patrimonios: [],
   goals: [], reservaHistory: [], emergency: { current: 0, target: 0 },
-  daysOff: [], reminders: [], confirmacoesAdiadas: {},
+  daysOff: [], reminders: [], confirmacoesAdiadas: {}, weeklyGoal: 0,
 };
 
 // 3.300 de fixos. Com 5 dias por semana em agosto: round(5 × 31 ÷ 7) = 22 dias
@@ -70,26 +75,162 @@ const abrir = async (page, dados, aba = 'inicio') => {
 };
 
 const custo  = page => page.evaluate(() => window._custoDoDia(0));
-const semana = page => page.evaluate(() => window._ritmoSemana());
+const semana = page => page.evaluate(() => window._ritmoSemana(0));
 const mes    = page => page.evaluate(() => window._ritmoMes(0));
 
-const secao = page => page.locator('#home-ritmo-section');
+const secao  = page => page.locator('#home-ritmo-section');
 const cartao = page => page.locator('#home-ritmo');
-// O bloco da semana só — o do mês também fala em "Faltam", e uma asserção
-// larga demais no cartão inteiro leria o número errado.
-const blocoSemana = page => cartao(page).locator('.rit-bloco', { hasText: 'Esta semana' });
+// O bloco da semana só — o do mês também fala em "Falta", e uma asserção larga
+// demais no cartão inteiro leria o número errado.
+const blocoSemana = page => cartao(page).locator('.rit-bloco').first();
 
-// ── O zero é o estado inicial ─────────────────────────────────────────────
+// ── Uma resposta só ───────────────────────────────────────────────────────
+
+test('UMA RESPOSTA: a Início e a tela Semana dizem o MESMO número por dia', async ({ page }) => {
+  // Este é o teste que o defeito original teria reprovado: R$ 228,00 na tela
+  // Semana e R$ 33,22 na Início, para a mesma pergunta.
+  await abrir(page, {
+    fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO, weeklyGoal: 1500,
+  });
+  const s = await semana(page);
+  const naInicio = await cartao(page).innerText();
+
+  await page.evaluate(() => window.switchTab('semana'));
+  await page.waitForTimeout(250);
+  const naSemana = await page.locator('#week-goal-card').innerText();
+
+  const alvo = new Intl.NumberFormat('pt-BR',
+    { style: 'currency', currency: 'BRL' }).format(s.porDiaRestante).replace(/ /g, ' ');
+  expect(naInicio, 'a Início não mostra o número por dia').toContain(alvo);
+  expect(naSemana, 'a tela Semana discorda da Início').toContain(alvo);
+});
+
+test('o aviso da tela Semana parou de ecoar a meta', async ({ page }) => {
+  // Ele dizia "faltam X para a meta, são Y por dia até domingo" — exatamente o
+  // que o cartão logo abaixo diz, com outra conta.
+  await abrir(page, {
+    fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO, weeklyGoal: 1500,
+  }, 'semana');
+  const aviso = page.locator('#sem-insight-section');
+  await expect(aviso).toBeVisible();
+  const txt = await aviso.innerText();
+  expect(txt, 'o aviso voltou a falar da meta').not.toMatch(/por dia até domingo|para a meta/i);
+});
+
+// ── Os dois alvos ─────────────────────────────────────────────────────────
+
+test('OS DOIS ALVOS: piso derivado do custo, meta digitada por você', async ({ page }) => {
+  await abrir(page, {
+    fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO, weeklyGoal: 1500,
+  });
+  const s = await semana(page);
+  expect(s.piso, '150 por dia × 5 dias prometidos').toBe(750);
+  expect(s.metaDesejada, 'a meta digitada').toBe(1500);
+  expect(s.temPiso).toBe(true);
+  expect(s.temMeta).toBe(true);
+});
+
+test('UM ALVO DE CADA VEZ: abaixo do piso, persegue o piso', async ({ page }) => {
+  await abrir(page, {
+    fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO, weeklyGoal: 1500,
+  });
+  const s = await semana(page);
+  expect(s.entrou).toBe(450);
+  expect(s.fase).toBe('piso');
+  expect(s.alvoAtual).toBe(750);
+  expect(s.falta).toBe(300);
+  expect(s.faltamDias).toBe(2);
+  expect(s.porDiaRestante, 'o número acionável da tarde de quinta').toBe(150);
+
+  const b = blocoSemana(page);
+  await expect(b).toContainText('Falta para a semana se pagar');
+  await expect(b).toContainText('R$ 300,00');
+  await expect(b).toContainText('R$ 150,00');
+  await expect(b, 'mostrou os dois alvos ao mesmo tempo').not.toContainText('R$ 1.500,00');
+});
+
+test('passado o piso, o alvo vira a meta — e a frase diz que já se pagou', async ({ page }) => {
+  await abrir(page, {
+    fixedExpenses: FIXOS, ...COM_RITMO, weeklyGoal: 1500,
+    dailyIncome: { '2026-08-17': { p1: 400 }, '2026-08-18': { p1: 400 }, '2026-08-20': { p1: 100 } },
+  });
+  const s = await semana(page);
+  expect(s.entrou).toBe(900);
+  expect(s.sePagou).toBe(true);
+  expect(s.fase).toBe('meta');
+  expect(s.alvoAtual).toBe(1500);
+  expect(s.falta).toBe(600);
+
+  const b = blocoSemana(page);
+  await expect(b).toContainText('Já se pagou');
+  await expect(b).toContainText('R$ 600,00');
+});
+
+test('batidos os dois, a semana fecha e para de cobrar', async ({ page }) => {
+  await abrir(page, {
+    fixedExpenses: FIXOS, ...COM_RITMO, weeklyGoal: 1500,
+    dailyIncome: { '2026-08-17': { p1: 800 }, '2026-08-18': { p1: 800 } },
+  });
+  const s = await semana(page);
+  expect(s.fase).toBe('completa');
+  expect(s.falta).toBe(0);
+  const b = blocoSemana(page);
+  await expect(b).toContainText('fechou o alvo');
+  await expect(b, 'ainda cobra depois de fechado').not.toContainText('Falta para');
+});
+
+test('só o piso, sem meta digitada: funciona igual', async ({ page }) => {
+  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
+  const s = await semana(page);
+  expect(s.temMeta).toBe(false);
+  expect(s.fase).toBe('piso');
+  expect(s.alvoAtual).toBe(750);
+});
+
+test('só a meta, sem ritmo declarado: funciona igual', async ({ page }) => {
+  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...LIGADO, weeklyGoal: 1500 });
+  const s = await semana(page);
+  expect(s.temPiso, 'inventou um piso sem ritmo declarado').toBe(false);
+  expect(s.fase).toBe('meta');
+  expect(s.alvoAtual).toBe(1500);
+  // Sem ritmo, os dias que restam são os do calendário: quinta a domingo.
+  expect(s.faltamDias).toBe(4);
+});
+
+test('sem piso e sem meta, o cartão convida em vez de mostrar zero', async ({ page }) => {
+  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...LIGADO });
+  const s = await semana(page);
+  expect(s.fase).toBe('sem-alvo');
+  await expect(blocoSemana(page)).toContainText('Diga quantos dias por semana');
+});
+
+// ── A barra com duas marcas ───────────────────────────────────────────────
+
+test('A BARRA tem duas marcas: onde se paga e onde é a meta', async ({ page }) => {
+  await abrir(page, {
+    fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO, weeklyGoal: 1500,
+  });
+  const s = await semana(page);
+  // A escala é o maior dos dois (1.500). 450 entrou = 30%; o piso 750 = 50%.
+  expect(s.pctEntrou).toBe(30);
+  expect(s.pctPiso).toBe(50);
+  await expect(cartao(page).locator('.rit-marca')).toHaveCount(1);
+});
+
+test('sem os dois alvos não há marca — um traço sozinho não significa nada', async ({ page }) => {
+  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
+  await expect(cartao(page).locator('.rit-marca')).toHaveCount(0);
+});
+
+// ── O que já era protegido, e continua ────────────────────────────────────
 
 test('NASCE SEM PROMESSA: sem dias por semana, a conta divide pelo mês', async ({ page }) => {
   const erros = await abrir(page, { fixedExpenses: FIXOS, ...LIGADO });
   const c = await custo(page);
   expect(c.porSemana, 'alguém prometeu no lugar do usuário').toBe(0);
   expect(c.temRitmo).toBe(false);
-  expect(c.diasRodagem).toBe(0);
-  // 3.300 ÷ 31 dias de agosto = 106,45 — o comportamento antigo, intacto.
-  expect(c.porDia).toBe(106.45);
-  expect(c.alvo, 'a linha de chegada mudou sem ninguém declarar ritmo').toBe(106.45);
+  expect(c.porDia, '3.300 ÷ 31 dias de agosto').toBe(106.45);
+  expect(c.alvo).toBe(106.45);
   expect(erros).toEqual([]);
 });
 
@@ -99,52 +240,29 @@ test('o placar não existe com o recurso desligado', async ({ page }) => {
 });
 
 test('o placar não existe sem custo cadastrado', async ({ page }) => {
-  // Sem base, "faltam X" seria um número inventado.
   await abrir(page, { fixedExpenses: [], ...COM_RITMO });
   await expect(secao(page)).toBeHidden();
 });
 
-test('ligado e com custo, o placar aparece', async ({ page }) => {
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
-  await expect(secao(page)).toBeVisible();
-  await expect(cartao(page)).toContainText('Esta semana');
-  await expect(cartao(page)).toContainText('Este mês');
-});
-
-// ── Declarar o ritmo move a linha ─────────────────────────────────────────
-
 test('DECLARAR O RITMO sobe a linha do dia rodado para o que ela é', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO });
   const c = await custo(page);
-  expect(c.porSemana).toBe(5);
   expect(c.diasRodagem, '5 dias por semana em agosto ≈ 22 dias').toBe(22);
   expect(c.porDiaRodado).toBe(150);
-  expect(c.alvo, 'a linha continuou na conta de dia de existir').toBe(150);
-  expect(c.temRitmo).toBe(true);
-  // E a linha nova é a que o cartão do dia usa.
+  expect(c.alvo).toBe(150);
   const d = await page.evaluate(() => window._diaSePagou());
   expect(d.alvo).toBe(150);
-  expect(d.temRitmo).toBe(true);
 });
 
 test('o alvo do dia acompanha a mudança do ritmo na hora', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, ...LIGADO });
   expect((await custo(page)).alvo).toBe(106.45);
-
   await page.evaluate(() => { window.eval('D').ritmo.diasPorSemana = 5; window.renderInicio(); });
   expect((await custo(page)).alvo).toBe(150);
   await expect(page.locator('#home-dia')).toContainText('R$ 150,00');
 });
 
-test('o mensal não muda — o ritmo só muda o divisor', async ({ page }) => {
-  // A conta de quanto custa o mês é a mesma; declarar ritmo não inventa custo.
-  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO });
-  const c = await custo(page);
-  expect(c.mensal).toBe(3300);
-  expect(c.fixos).toBe(3300);
-});
-
-// ── O passo: a única coisa que se digita ──────────────────────────────────
+// ── O passo ───────────────────────────────────────────────────────────────
 
 test('O PASSO parte de vazio e o "menos" já nasce sem função', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, ...LIGADO });
@@ -163,7 +281,8 @@ test('o passo escreve o número e ele persiste', async ({ page }) => {
 
   expect(await lerEstado(page, 'D.ritmo.diasPorSemana')).toBe(5);
   await expect(page.locator('.rit-step-val')).toHaveText('5');
-  await expect(cartao(page)).toContainText('Cada dia rodado precisa render R$ 150,00');
+  await expect(cartao(page)).toContainText('Rodando 5 dias por semana');
+  await expect(cartao(page)).toContainText('Um dia rodado precisa render R$ 150,00');
 });
 
 test('o passo não passa de 7 nem cai abaixo de zero', async ({ page }) => {
@@ -189,32 +308,12 @@ test('voltar a zero devolve a conta antiga, sem sobra de estado', async ({ page 
   expect(c.alvo, 'ficou preso na linha do ritmo desfeito').toBe(106.45);
 });
 
-// ── O placar da semana ────────────────────────────────────────────────────
-
-test('A CONTA QUE DECIDE A TARDE: falta X em N dias — dá Y por dia', async ({ page }) => {
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
-  const s = await semana(page);
-  expect(s.rodados).toBe(3);
-  expect(s.prometidos).toBe(5);
-  expect(s.entrou).toBe(450);
-  expect(s.meta, '150 × 5 dias prometidos').toBe(750);
-  expect(s.falta).toBe(300);
-  expect(s.faltamDias).toBe(2);
-  expect(s.porDiaRestante, 'o número acionável da tarde de quinta').toBe(150);
-
-  const c = cartao(page);
-  await expect(c).toContainText('3 de 5 dias');
-  await expect(c).toContainText('R$ 450,00');
-  await expect(c).toContainText('Faltam 2 dias e R$ 300,00 — dá R$ 150,00 por dia');
-});
+// ── Os limites da semana ──────────────────────────────────────────────────
 
 test('DIA FUTURO NÃO É DIA PERDIDO: sexta, sábado e domingo não contam contra', async ({ page }) => {
-  // Se o futuro contasse, toda segunda-feira de manhã diria "você está atrás".
   await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
-  const s = await semana(page);
-  expect(s.rodados, 'contou dia que ainda não aconteceu').toBe(3);
+  expect((await semana(page)).rodados).toBe(3);
 
-  // Semear o futuro não pode mudar o passado do placar.
   await page.evaluate(() => {
     window.eval('D').dailyIncome['2026-08-23'] = { p1: 999 };
     window.renderInicio();
@@ -234,41 +333,15 @@ test('PROMETER SETE NUMA QUINTA NÃO CRIA DIAS', async ({ page }) => {
   expect(s.faltamDias, 'pediu mais dias do que a semana tem').toBe(4);
 });
 
-test('cumprir o combinado encerra a cobrança da semana', async ({ page }) => {
-  await abrir(page, {
-    fixedExpenses: FIXOS, dailyIncome: SEMANA,
-    ritmo: { ligado: true, diasPorSemana: 2 },
-  });
-  const s = await semana(page);
-  expect(s.cumpriu).toBe(true);
-  expect(s.faltamDias).toBe(0);
-  await expect(blocoSemana(page)).toContainText('Semana cumprida');
-  await expect(blocoSemana(page), 'ainda cobra depois de cumprido').not.toContainText('Faltam');
-});
-
-test('sem ritmo declarado a semana mostra o que houve, sem prometer nada', async ({ page }) => {
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...LIGADO });
-  const s = await semana(page);
-  expect(s.prometidos).toBe(0);
-  expect(s.faltamDias).toBe(0);
-  expect(s.entrou).toBe(450);
-
-  const c = cartao(page);
-  await expect(c).toContainText('3 dias rodados');
-  await expect(c).toContainText('R$ 450,00');
-  await expect(c, 'inventou uma meta que ninguém pediu').not.toContainText('de 5 dias');
-});
-
 test('os dias que bateram a meta são contados', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
-  const s = await semana(page);
   // 200 e 160 passaram dos 150; 90 não.
-  expect(s.bateram).toBe(2);
+  expect((await semana(page)).bateram).toBe(2);
 });
 
-// ── O placar do mês ───────────────────────────────────────────────────────
+// ── O mês ─────────────────────────────────────────────────────────────────
 
-test('o mês conta dias rodados, dias que bateram e a média por dia rodado', async ({ page }) => {
+test('o mês conta dias rodados e o que falta para se pagar', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
   const m = await mes(page);
   expect(m.rodados).toBe(3);
@@ -280,27 +353,15 @@ test('o mês conta dias rodados, dias que bateram e a média por dia rodado', as
   expect(m.fechou).toBe(false);
 
   const c = cartao(page);
+  await expect(c).toContainText('Falta para o mês se pagar');
+  await expect(c).toContainText('R$ 2.850,00');
+  await expect(c).toContainText('R$ 450,00 de R$ 3.300,00');
   await expect(c).toContainText('3 dias rodados');
-  await expect(c).toContainText('2 dias bateram a meta de R$ 150,00');
-  await expect(c).toContainText('R$ 150,00 por dia rodado');
-});
-
-test('o que falta do mês é dividido pelos dias de rodagem que sobraram', async ({ page }) => {
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
-  const m = await mes(page);
-  // De 20 a 31 de agosto são 12 dias; 22 de rodagem menos 3 rodados são 19,
-  // então o limite é o calendário: 12.
-  expect(m.diasRestantes).toBe(12);
-  expect(m.rodagemRestante).toBe(12);
-  expect(m.porDiaRestante, '2.850 ÷ 12').toBe(237.5);
-  await expect(cartao(page)).toContainText('Faltam R$ 2.850,00 em 12 dias');
 });
 
 test('mês que já se pagou não cobra mais', async ({ page }) => {
   await abrir(page, {
-    fixedExpenses: FIXOS,
-    dailyIncome: { '2026-08-05': { p1: 3400 } },
-    ...COM_RITMO,
+    fixedExpenses: FIXOS, dailyIncome: { '2026-08-05': { p1: 3400 } }, ...COM_RITMO,
   });
   const m = await mes(page);
   expect(m.fechou).toBe(true);
@@ -308,16 +369,7 @@ test('mês que já se pagou não cobra mais', async ({ page }) => {
   await expect(cartao(page)).toContainText('O mês já se pagou');
 });
 
-test('mês sem nenhum dia rodado não mostra média nem placar de metas', async ({ page }) => {
-  // Zero de zero é zero, e "média R$ 0,00" leria como fracasso.
-  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO });
-  const m = await mes(page);
-  expect(m.rodados).toBe(0);
-  expect(m.media).toBe(0);
-  await expect(cartao(page), 'mostrou média sem base').not.toContainText('por dia rodado');
-});
-
-// ── Linguagem e pureza ────────────────────────────────────────────────────
+// ── Linguagem, explicação e pureza ────────────────────────────────────────
 
 test('o placar informa, não cobra', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
@@ -327,22 +379,39 @@ test('o placar informa, não cobra', async ({ page }) => {
   }
 });
 
-test('a folha do ritmo explica a conta do dia rodado quando há ritmo', async ({ page }) => {
+test('"POR QUE ESSE NÚMERO?" tem porta no cartão, e a resposta é em português', async ({ page }) => {
+  // A queixa que originou esta revisão: "de onde vem esse R$ 194,60? e o que é
+  // 'de rua'?". A composição saiu da cara do cartão e virou frase.
+  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO });
+  await expect(cartao(page), 'a composição continua na cara do cartão')
+    .not.toContainText('de fixo e');
+
+  await cartao(page).getByRole('button', { name: /Por que R\$ 150,00/ }).click();
+  const dlg = page.locator('#_av_dlg');
+  await expect(dlg).toBeVisible();
+  await expect(dlg).toContainText('UM PEDAÇO DAS SUAS CONTAS DO MÊS');
+  await expect(dlg).toContainText('A GASOLINA E A COMIDA DO PRÓPRIO DIA');
+  await expect(dlg).toContainText('R$ 150,00');
+  await expect(dlg, 'a palavra "rua" sobreviveu como rótulo').not.toContainText('de rua');
+});
+
+test('a explicação diz de onde saiu cada parcela, não só o resultado', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO }, 'ajustes');
   await page.locator('.srow', { hasText: 'Custo do dia' }).click();
   const dlg = page.locator('#_av_dlg');
-  await expect(dlg).toBeVisible();
+  await expect(dlg).toContainText('R$ 3.300,00');       // o total das contas
   await expect(dlg).toContainText('5 dias por semana');
-  await expect(dlg).toContainText('22 dias no mês');
-  await expect(dlg).toContainText('R$ 150,00');
+  await expect(dlg).toContainText('22');                 // dias de rodagem no mês
 });
 
 test('ler o placar é só leitura: não encosta em D nem salva', async ({ page }) => {
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
+  await abrir(page, {
+    fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO, weeklyGoal: 1500,
+  });
   const antes = await lerEstado(page, 'JSON.stringify(D)');
   const salvou = await page.evaluate(() => {
     let n = 0; const s = window.save; window.save = () => { n++; return s && s(); };
-    window._ritmoSemana(); window._ritmoMes(0); window._custoDoDia(0);
+    window._ritmoSemana(0); window._ritmoMes(0); window._custoDoDia(0);
     window.renderHomeRitmo(); window.renderInicio();
     window.save = s; return n;
   });

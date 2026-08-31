@@ -230,9 +230,9 @@ test('O DEFEITO ORIGINAL: a semana deixa de dar permissão para parar cedo', asy
   expect(c.variavel).toBe(40);
   expect(c.alvo).toBe(162.22);
 
-  const s = await page.evaluate(() => window._ritmoSemana());
-  // A meta da semana é 6 × 162,22, não 6 × 122,22.
-  expect(s.meta).toBe(973.32);
+  const s = await page.evaluate(() => window._ritmoSemana(0));
+  // O piso da semana é 6 × 162,22, não 6 × 122,22.
+  expect(s.piso).toBe(973.32);
 });
 
 test('o mês se paga contra o custo INTEIRO, não só contra o fixo', async ({ page }) => {
@@ -264,19 +264,26 @@ test('a folha mostra a composição INTEIRA, com a janela de onde a rua saiu', a
   await page.locator('.srow', { hasText: 'Custo do dia' }).click();
   const dlg = page.locator('#_av_dlg');
   await expect(dlg).toBeVisible();
-  await expect(dlg).toContainText('Gastos fixos');
-  await expect(dlg).toContainText('Fixo por dia rodado: R$ 150,00');
-  await expect(dlg).toContainText('Gasolina, comida e manutenção: R$ 40,00 por dia rodado');
-  await expect(dlg, 'não presta contas da janela usada').toContainText('R$ 400,00 em 10 dias rodados');
-  await expect(dlg).toContainText('Um dia rodado precisa render R$ 190,00');
+  await expect(dlg).toContainText('UM PEDAÇO DAS SUAS CONTAS DO MÊS');
+  await expect(dlg).toContainText('R$ 150,00');
+  await expect(dlg).toContainText('A GASOLINA E A COMIDA DO PRÓPRIO DIA');
+  await expect(dlg).toContainText('R$ 40,00');
+  await expect(dlg, 'não presta contas da janela usada').toContainText('R$ 400,00');
+  await expect(dlg).toContainText('10 dias rodados');
+  await expect(dlg).toContainText('SOMANDO AS DUAS: R$ 190,00');
 });
 
 test('o cartão da Início mostra a linha e a sua composição', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO, ...janelaDeRua() });
   const passo = page.locator('.rit-passo');
-  await expect(passo).toContainText('Pretendo rodar 5 dias por semana');
-  await expect(passo).toContainText('Cada dia rodado precisa render R$ 190,00');
-  await expect(passo).toContainText('R$ 150,00 de fixo e R$ 40,00 de rua');
+  await expect(passo).toContainText('Rodando 5 dias por semana');
+  await expect(passo).toContainText('Um dia rodado precisa render R$ 190,00');
+  // A composição NÃO fica na cara do cartão: ela mora a um toque de distância,
+  // onde há espaço para explicar em vez de abreviar.
+  await expect(passo, 'a aritmética voltou para a cara do cartão')
+    .not.toContainText('de fixo');
+  await expect(page.locator('#home-ritmo')
+    .getByRole('button', { name: /Por que R\$ 190,00/ })).toBeVisible();
 });
 
 test('calcular a rua é só leitura: não encosta em D nem salva', async ({ page }) => {
@@ -285,7 +292,7 @@ test('calcular a rua é só leitura: não encosta em D nem salva', async ({ page
   const salvou = await page.evaluate(() => {
     let n = 0; const s = window.save; window.save = () => { n++; return s && s(); };
     window._custoVariavelPorDiaRodado(); window._custoDoDia(0);
-    window._ritmoSemana(); window._ritmoMes(0); window.renderInicio();
+    window._ritmoSemana(0); window._ritmoMes(0); window.renderInicio();
     window.save = s; return n;
   });
   expect(salvou).toBe(0);

@@ -613,31 +613,63 @@ main{background:var(--bg);min-height:100dvh}
 .srow-alerta { border-left: 3px solid var(--rd); }
 .srow-extra { font-size: 11.5px; color: var(--tx3); margin-left: auto; padding-left: 10px; white-space: nowrap; }
 
-/* ── O placar de ritmo, dentro do baralho ── */
-.rit-bloco { display: flex; flex-direction: column; gap: 4px; }
-.rit-bloco--sep { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-.rit-tit { font-size: 11.5px; color: var(--tx3); }
-.rit-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
-.rit-forte { font-size: 15px; font-weight: 700; }
-.rit-val {
-  font-family: var(--font-disp); font-size: 15px; font-weight: 700;
-  font-variant-numeric: tabular-nums; flex-shrink: 0;
+/* ── O placar de ritmo, dentro do baralho ──
+   O cartão anterior empilhava seis números no mesmo cinza pequeno e nada dizia
+   qual importava. Aqui cada bloco tem UM número grande — o que se persegue — e
+   o resto desce para apoio. */
+.rit-bloco { display: flex; flex-direction: column; gap: 3px; }
+.rit-bloco--sep { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.rit-tit {
+  font-size: 11px; color: var(--tx3); font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
 }
+.rit-grande {
+  font-family: var(--font-disp); font-size: 30px; font-weight: 800;
+  line-height: 1.05; letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+.rit-medio {
+  font-family: var(--font-disp); font-size: 21px; font-weight: 700;
+  line-height: 1.1; font-variant-numeric: tabular-nums; margin-top: 1px;
+}
+/* A frase que decide a tarde. É a única linha do cartão com cor de destaque —
+   se tudo for destaque, nada é. */
+.rit-acao { font-size: 12.5px; color: var(--tx2); margin-top: 3px; }
+.rit-acao b { color: var(--gn); font-weight: 700; }
 .rit-sub { font-size: 12px; color: var(--tx3); line-height: 1.45; }
-.rit-ok { color: var(--gn); font-weight: 600; }
+.rit-ok { color: var(--gn); }
 .rit-barra {
-  height: 6px; border-radius: 999px; background: var(--border);
-  overflow: hidden; margin: 6px 0 2px;
+  position: relative; height: 6px; border-radius: 999px;
+  background: var(--border); margin: 9px 0 5px;
 }
 .rit-barra > i {
   display: block; height: 100%; border-radius: 999px; background: var(--gn);
   transition: width var(--dur-slow, .34s) cubic-bezier(.2,.85,.25,1);
 }
-.rit-placar {
-  display: flex; flex-direction: column; gap: 2px;
-  margin-top: 8px; font-size: 12px; color: var(--tx3);
+/* A barra com duas marcas precisa deixar o traço do piso aparecer por cima do
+   preenchimento; sem isto ele sumiria assim que a semana se pagasse. */
+.rit-barra--dupla { overflow: visible; }
+.rit-barra--dupla > i { overflow: hidden; }
+.rit-marca {
+  position: absolute; top: -3px; bottom: -3px; width: 2px;
+  background: var(--tx); border-radius: 2px; opacity: .55;
+  transform: translateX(-1px);
 }
-.rit-placar b { color: var(--tx); font-weight: 700; }
+.rit-escala {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-size: 11.5px; color: var(--tx3);
+}
+/* O rodapé: o ajuste e a porta para a explicação. Separado por uma linha
+   porque não é placar — é controle. */
+.rit-rodape { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.rit-porque {
+  margin-top: 10px; width: 100%; padding: 9px 12px;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: transparent; color: var(--tx2);
+  font-size: 12.5px; font-weight: 600; text-align: center; cursor: pointer;
+  transition: background var(--dur-fast, .14s) var(--ease-out);
+}
+.rit-porque:active { background: var(--ol2); }
 
 /* ── O passo: dias por semana ──
    O único campo do recurso. Fica no topo do cartão porque é o número que
@@ -647,10 +679,13 @@ main{background:var(--bg);min-height:100dvh}
   gap: 12px; padding-bottom: 12px;
 }
 .rit-passo-txt { min-width: 0; }
-.rit-passo-tit { font-size: 13px; font-weight: 600; }
-.rit-passo-sub { font-size: 11.5px; color: var(--tx3); line-height: 1.4; margin-top: 2px; }
+.rit-passo-tit { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.rit-passo-sub { font-size: 11.5px; color: var(--tx3); line-height: 1.4; margin-top: 3px; }
+/* Um valor em dinheiro nunca quebra entre o "R$" e o número: "R$" sozinho no
+   fim de uma linha lê como erro de renderização, não como preço. */
+.rit-passo-sub b { color: var(--tx); font-weight: 700; white-space: nowrap; }
 .rit-step {
-  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 0; flex-shrink: 0;
   border: 1px solid var(--border); border-radius: 999px; padding: 2px;
 }
 .rit-step-btn {
@@ -1234,8 +1269,13 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .wg-vals{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
 .wg-current{font-size:18px;font-weight:800}
 .wg-target{font-size:13px;color:var(--text3)}
-.wg-bar-wrap{background:var(--surface3);border-radius:8px;height:7px;overflow:hidden;margin-bottom:6px}
+/* `overflow:visible` porque a barra ganhou a marca do piso: um traço DENTRO
+   dela, mostrando onde a semana deixa de custar e passa a render. Com o
+   recorte antigo ele sumiria assim que o preenchimento o alcançasse. */
+.wg-bar-wrap{position:relative;background:var(--surface3);border-radius:8px;height:7px;margin-bottom:6px}
 .wg-bar-fill{height:100%;border-radius:8px;background:linear-gradient(90deg,var(--gold),var(--orange));transition:width .5s cubic-bezier(.22,.68,0,1.2)}
+.wg-marca{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);border-radius:2px;opacity:.55;transform:translateX(-1px)}
+.wg-current.wg-ok{color:var(--green)}
 .wg-bar-fill.wg-done{background:linear-gradient(90deg,var(--green-d),var(--green))}
 .wg-foot{font-size:12px;color:var(--text2)}
 .wg-set-btn{width:100%;padding:10px;border-radius:10px;border:1px dashed var(--border-strong);background:none;color:var(--text3);font-size:13px;cursor:pointer}
@@ -2395,6 +2435,28 @@ textarea.form-input{resize:none}
   height: 108px;
   display: block;
 }
+
+/* ── O gráfico dentro do baralho ──
+   Os cartões do baralho têm a altura do mais alto. O gráfico tinha canvas de
+   108px fixos dentro de um cartão de ~400px: setenta por cento do cartão eram
+   vazio, e o dado ficava espremido numa faixa no rodapé. Aqui ele CRESCE para
+   ocupar o que sobra. */
+.hc-deck .hc-section { display: flex; flex-direction: column; }
+.hc-deck .hc-chart-box { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.hc-deck .home-chart { flex: 1; height: auto; min-height: 140px; }
+
+/* A leitura em palavras, acima do desenho: o que o gráfico leva quatro barras
+   para insinuar. */
+.hc-chart-leitura {
+  display: flex; align-items: baseline; gap: 7px; margin-bottom: 10px;
+}
+.hc-leitura-val {
+  font-family: var(--font-disp); font-size: 22px; font-weight: 800;
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+}
+.hc-leitura-val.pos { color: var(--gn); }
+.hc-leitura-val.neg { color: var(--rd); }
+.hc-leitura-txt { font-size: 12.5px; color: var(--tx3); }
 
 .home-chart-empty {
   height: 80px;
