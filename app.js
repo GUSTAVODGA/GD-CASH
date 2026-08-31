@@ -1919,6 +1919,9 @@ function renderIncomeItems(date) {
         <span class="iitem-plat" style="color:${_corTema(platMap[it.platformId]?.color||'#888')}">${platMap[it.platformId]?.name||''}</span>
       </div>
       <span class="iitem-amt">${R(it.amount)}</span>
+      ${it.status === 'pending'
+        ? `<button class="iitem-receber" onclick="marcarReceitaRecebida('${it.id}');renderIncomeItems('${date}')" title="Marcar como recebida" aria-label="Marcar como recebida">Recebi</button>`
+        : ''}
       <button class="exp-del" onclick="deleteIncomeItem('${it.id}')">✕</button>
     </div>`;
 
@@ -1954,6 +1957,26 @@ function addIncomeItem() {
 function deleteIncomeItem(id) {
   D.incomeItems=(D.incomeItems||[]).filter(it=>it.id!==id);
   save(); refreshAfterDayEdit();
+}
+
+// ── O caminho que faltava: "a receber" → "recebida" ───────────────────────
+//
+// Dava para lançar uma receita como A RECEBER e dava para apagá-la. Não dava
+// para dizer que ela CHEGOU. Um item pendente não entra em nenhum total — nem
+// na receita do dia, nem na do mês, nem no resultado —, então o dinheiro que
+// caiu na conta continuava invisível no app até o usuário apagar o item e
+// relançá-lo como pago, perdendo a nota e a data originais no caminho.
+//
+// A data de recebimento é a de HOJE, não a do lançamento: a receita entra no
+// caixa quando entra de verdade. É a mesma regra da baixa de gasto fixo, que
+// já datava pelo dia da confirmação e não pelo vencimento.
+function marcarReceitaRecebida(id, quando) {
+  const it = (D.incomeItems || []).find(x => x.id === id);
+  if (!it || it.status === 'paid') return false;
+  it.status = 'paid';
+  it.date = quando || todayStr();
+  haptic(10); save(); refreshAfterDayEdit();
+  return true;
 }
 
 function toggleIncomeForm() {
@@ -3798,6 +3821,24 @@ function darBaixaFixed(id) {
   if (btn) btn.disabled = false;
   openOverlay('modal-baixa');
 }
+// O miolo da baixa, sem interface: cria o lançamento e o vínculo do ciclo.
+// Extraída de `confirmBaixa` para que a fila de confirmações dê baixa pelo
+// MESMO caminho — duplicar a criação da despesa seria criar duas verdades
+// sobre o que uma baixa é.
+function _darBaixaFixo(id, date) {
+  const f = (D.fixedExpenses || []).find(x => x.id === id);
+  if (!f) return false;
+  const cycle = fxCurrentCycle();
+  if (fxPayment(id, cycle)) return false;      // já teve baixa neste ciclo
+  const expId = uid();
+  // Metadado imutável de origem: a despesa carrega permanentemente que veio de uma baixa
+  // de gasto fixo (além do vínculo em fixedPayments). Apenas informativo; nada depende dele.
+  D.expenses.push({ id: expId, date, category: f.category, amount: f.amount, description: f.name, meta: { source: 'fixed-payment', fixedId: id, cycle } });
+  D.fixedPayments.push({ fixedId: id, cycle, expenseId: expId, paidDate: date });
+  save();
+  return true;
+}
+
 function confirmBaixa() {
   const id = _baixaTarget;
   if (!id) return;
@@ -3811,13 +3852,9 @@ function confirmBaixa() {
   // Revalida no momento da confirmação (evita duplicidade em duplo toque).
   if (fxPayment(id, cycle)) { closeOverlay('modal-baixa'); gdToast('Este gasto já teve baixa neste mês.', { type: 'info' }); renderFixos(); return; }
   if (btn) btn.disabled = true;
-  const expId = uid();
-  // Metadado imutável de origem: a despesa carrega permanentemente que veio de uma baixa
-  // de gasto fixo (além do vínculo em fixedPayments). Apenas informativo; nada depende dele.
-  D.expenses.push({ id: expId, date, category: f.category, amount: f.amount, description: f.name, meta: { source: 'fixed-payment', fixedId: id, cycle } });
-  D.fixedPayments.push({ fixedId: id, cycle, expenseId: expId, paidDate: date });
+  _darBaixaFixo(id, date);
   _baixaTarget = null;
-  haptic(10); save();
+  haptic(10);
   closeOverlay('modal-baixa');
   renderFixos();
   refreshHomeFixosAlert();
@@ -4521,6 +4558,177 @@ function renderHomeManchete() {
 //     pendência vencida ou alta). Unificar exige um só, e adotar o MAIS LARGO
 //     dos três garante superconjunto: nada que aparecia some, e passa a
 //     aparecer o fixo prestes a vencer, que antes só surgia depois de atrasar.
+// ══════════════════════════════════════════════════════════════════════════
+// A FILA DE CONFIRMAÇÕES — o "ritmo" do app
+// ══════════════════════════════════════════════════════════════════════════
+//
+// O app inteiro é consulta sob demanda: ele responde quando perguntado e nunca
+// pergunta nada. Isso deixa um buraco que não aparece em tela nenhuma — o dado
+// que só o usuário sabe e que ninguém pede. Você paga a internet e esquece de
+// dar baixa; a lista de compromissos envelhece, e a sobra livre fica pessimista
+// para sempre porque continua descontando algo que já saiu.
+//
+// A tentação aqui é um RITUAL SEMANAL: um resumo que aparece todo domingo e
+// pede revisão. É a forma errada. Cerimônia obrigatória é o que faz app ser
+// abandonado, e um resumo que aparece sozinho vira notificação ignorada — a
+// mesma tela órfã que este projeto passou duas versões removendo.
+//
+// A forma certa é uma FILA: perguntas de sim ou não que o app já precisava
+// fazer, guardadas até valer a pena perguntar. Ela aparece só quando tem o que
+// perguntar e some quando esvazia. O ritmo vem daí — de encher sozinha durante
+// a semana e esvaziar em trinta segundos —, não de uma agenda.
+//
+// Três coisas entram, e as três já existiam sem forma de resolver:
+//   · gasto fixo VENCIDO sem baixa;
+//   · receita lançada como A RECEBER cuja data já passou (até a v78 não havia
+//     nem como dizer que ela chegou — ver `marcarReceitaRecebida`);
+//   · pendência com prazo VENCIDO.
+//
+// "Ainda não" adia por uma semana em vez de insistir. Sem isso a faixa vira
+// cobrança permanente, o usuário aprende a ignorá-la, e a fila passa a ser
+// exatamente o que ela existe para não ser.
+const CONFIRMACAO_ADIAR_DIAS = 7;
+
+function _confirmacaoAdiada(chave) {
+  const ate = (D.confirmacoesAdiadas || {})[chave];
+  return !!(ate && ate > todayStr());
+}
+
+function _confirmacoesPendentes() {
+  const hoje = todayStr();
+  const out = [];
+
+  // 1. Gasto fixo vencido e sem baixa no ciclo.
+  const ciclo = fxCurrentCycle();
+  (D.fixedExpenses || []).forEach(f => {
+    const st = fxState(f, ciclo);
+    if (st.status !== 'overdue') return;
+    const chave = 'fixo:' + f.id + ':' + ciclo;
+    if (_confirmacaoAdiada(chave)) return;
+    out.push({
+      tipo: 'fixo', id: f.id, chave,
+      titulo: f.name || 'Gasto fixo',
+      subtitulo: st.dueDate ? `Venceu ${fmtShort(st.dueDate)}` : 'Vencido',
+      valor: f.amount || 0,
+      pergunta: 'Já pagou?',
+      data: st.dueDate || hoje,
+    });
+  });
+
+  // 2. Receita a receber com data já passada.
+  (D.incomeItems || []).forEach(it => {
+    if (it.status !== 'pending' || !it.date || it.date > hoje) return;
+    const chave = 'receita:' + it.id;
+    if (_confirmacaoAdiada(chave)) return;
+    const plat = (D.platforms || []).find(p => p.id === it.platformId);
+    out.push({
+      tipo: 'receita', id: it.id, chave,
+      titulo: it.note || (plat && plat.name) || 'Receita a receber',
+      subtitulo: `Lançada ${fmtShort(it.date)}` + (plat ? ` · ${plat.name}` : ''),
+      valor: it.amount || 0,
+      pergunta: 'Já caiu?',
+      data: it.date,
+    });
+  });
+
+  // 3. Pendência com prazo vencido.
+  (D.pendencias || []).forEach(p => {
+    if (p.status !== 'aberta' || !p.deadline || p.deadline >= hoje) return;
+    const chave = 'pendencia:' + p.id;
+    if (_confirmacaoAdiada(chave)) return;
+    out.push({
+      tipo: 'pendencia', id: p.id, chave,
+      titulo: p.title || 'Pendência',
+      subtitulo: `Venceu ${fmtShort(p.deadline)}`,
+      valor: Number(p.estimatedValue) || 0,
+      pergunta: 'Resolveu?',
+      data: p.deadline,
+    });
+  });
+
+  // Mais antigo primeiro: o que espera há mais tempo pergunta primeiro.
+  return out.sort((a, b) => (a.data < b.data ? -1 : a.data > b.data ? 1 : 0));
+}
+
+/** "Ainda não": some por uma semana, sem insistir e sem alterar o dado. */
+function adiarConfirmacao(chave) {
+  if (!chave) return;
+  if (!D.confirmacoesAdiadas) D.confirmacoesAdiadas = {};
+  D.confirmacoesAdiadas[chave] = _addDaysISO(todayStr(), CONFIRMACAO_ADIAR_DIAS);
+  save();
+  renderConfirmacoes();
+  renderHomeVencimentos();
+}
+
+/** "Sim": resolve pelo MESMO caminho que a tela do assunto usaria. */
+function confirmarItem(tipo, id) {
+  let ok = false;
+  if (tipo === 'fixo') {
+    // A data é a de HOJE, como o padrão da folha de baixa — ela sempre datou
+    // pelo dia da confirmação, nunca pelo vencimento.
+    ok = _darBaixaFixo(id, todayStr());
+    if (ok) gdToast('Baixa registrada. Lançamento criado em Despesas.', { type: 'success' });
+  } else if (tipo === 'receita') {
+    ok = marcarReceitaRecebida(id);
+    if (ok) gdToast('Receita marcada como recebida.', { type: 'success' });
+  } else if (tipo === 'pendencia') {
+    const p = (D.pendencias || []).find(x => x.id === id);
+    if (p && p.status === 'aberta') {
+      p.status = 'concluida';
+      p.completedAt = todayStr();
+      save();
+      ok = true;
+      gdToast('Pendência concluída.', { type: 'success' });
+    }
+  }
+  if (!ok) return;
+  haptic(10);
+  renderConfirmacoes();
+  renderHomeVencimentos();
+  renderHomeManchete();
+  if (typeof renderFixos === 'function') renderFixos();
+  if (typeof renderPendList === 'function') renderPendList();
+}
+
+function abrirConfirmacoes() {
+  renderConfirmacoes();
+  openOverlay('modal-confirmar');
+}
+
+function renderConfirmacoes() {
+  const el = document.getElementById('confirmar-lista');
+  if (!el) return;
+  const itens = _confirmacoesPendentes();
+  const titulo = document.getElementById('confirmar-titulo');
+  if (titulo) {
+    titulo.textContent = itens.length
+      ? (itens.length === 1 ? '1 coisa para confirmar' : `${itens.length} coisas para confirmar`)
+      : 'Tudo confirmado';
+  }
+  if (!itens.length) {
+    el.innerHTML = `<div class="conf-vazio">
+      <div class="conf-vazio-tit">Nada pendente de confirmação.</div>
+      <div class="conf-vazio-sub">Quando um gasto fixo vencer, uma receita a receber passar da data ou uma pendência estourar o prazo, a pergunta aparece aqui.</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = itens.map(i => `
+    <div class="conf-item">
+      <div class="conf-topo">
+        <div class="conf-info">
+          <div class="conf-titulo">${escHtml(i.titulo)}</div>
+          <div class="conf-sub">${escHtml(i.subtitulo)}</div>
+        </div>
+        ${i.valor > 0 ? `<div class="conf-val">${R(i.valor)}</div>` : ''}
+      </div>
+      <div class="conf-pergunta">${escHtml(i.pergunta)}</div>
+      <div class="conf-acoes">
+        <button class="conf-sim" onclick="confirmarItem('${i.tipo}','${i.id}')">Sim</button>
+        <button class="conf-nao" onclick="adiarConfirmacao('${i.chave}')">Ainda não</button>
+      </div>
+    </div>`).join('');
+}
+
 const ATENCAO_HORIZONTE_DIAS = 15;
 
 function _atencaoInicio() {
@@ -4821,7 +5029,37 @@ function _afterDebtChange() {
 //
 // Cada linha continua levando exatamente aonde levava antes (ver
 // `_atencaoDestino`); o que mudou é a apresentação e a ordem.
+// A faixa da fila, no topo da área de atenção. Vem ANTES de "o que precisa de
+// você" de propósito: confirmar o que já aconteceu muda o que ainda falta, e
+// perguntar depois seria pedir para o usuário agir sobre números velhos.
+function renderHomeConfirmar() {
+  const el = document.getElementById('home-confirmar'); if (!el) return;
+  const itens = _confirmacoesPendentes();
+  if (!itens.length) { el.innerHTML = ''; return; }
+  const n = itens.length;
+  // O subtítulo diz de QUE TIPO são, não o nome do primeiro. Nomear o primeiro
+  // o fazia aparecer duas vezes na mesma tela — aqui e na lista logo abaixo —
+  // e a leitura gaguejava. O tipo é informação nova: ajuda a decidir se vale
+  // tocar agora sem repetir nada.
+  const NOMES = { fixo: ['gasto fixo', 'gastos fixos'], receita: ['receita', 'receitas'],
+                  pendencia: ['pendência', 'pendências'] };
+  const contagem = {};
+  itens.forEach(i => { contagem[i.tipo] = (contagem[i.tipo] || 0) + 1; });
+  const sub = ['fixo', 'receita', 'pendencia']
+    .filter(t => contagem[t])
+    .map(t => `${contagem[t]} ${NOMES[t][contagem[t] === 1 ? 0 : 1]}`)
+    .join(' · ');
+  el.innerHTML = `<button class="home-conf-faixa" onclick="abrirConfirmacoes()">
+    <span class="home-conf-txt">
+      <span class="home-conf-tit">${n === 1 ? '1 coisa para confirmar' : n + ' coisas para confirmar'}</span>
+      <span class="home-conf-sub">${sub}</span>
+    </span>
+    <span class="home-conf-seta" aria-hidden="true">›</span>
+  </button>`;
+}
+
 function renderHomeVencimentos() {
+  renderHomeConfirmar();
   const el = document.getElementById('home-dividas-venc'); if (!el) return;
   const itens = _atencaoInicio();
   if (!itens.length) { el.innerHTML = ''; return; }

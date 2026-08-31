@@ -238,6 +238,9 @@
     <!-- Aviso compacto: gastos fixos vencidos e sem baixa no mês atual -->
     <div id="home-fixos-alert"></div>
 
+    <!-- A fila de confirmações. Só existe quando há o que perguntar. -->
+    <div id="home-confirmar"></div>
+
     <!-- Próximos compromissos de dívidas (projeção derivada de D.debts) -->
     <div id="home-dividas-venc"></div>
 
@@ -1209,6 +1212,19 @@
     </div>
     <button class="btn btn-primary" onclick="savePendencia()">Salvar</button>
     <button class="btn btn-secondary" onclick="closeOverlay('modal-pendencia')">Cancelar</button>
+  </div>
+</div>
+
+<!-- A fila de confirmações: perguntas de sim ou não que o app já precisava
+     fazer. Não é um resumo semanal nem uma cerimônia — aparece só quando tem
+     o que perguntar e some quando esvazia. -->
+<div class="overlay" id="modal-confirmar">
+  <div class="sheet sheet-tall">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title" id="confirmar-titulo">Coisas para confirmar</div>
+    <p class="conf-intro">O app não sabe o que já aconteceu fora dele. Confirme e os números da Início se corrigem na hora.</p>
+    <div id="confirmar-lista"></div>
+    <button class="btn btn-secondary" style="margin-top:14px" onclick="closeOverlay('modal-confirmar')">Fechar</button>
   </div>
 </div>
 

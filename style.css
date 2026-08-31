@@ -596,7 +596,58 @@ main{background:var(--bg);min-height:100dvh}
   animation-delay:var(--sd,0s);
 }
 /* ── List item stagger ── */
-.tx-item,.fixed-item,.res-hist-item,.iitem,/* ── Ações e histórico dentro do cartão de meta ──
+.tx-item,.fixed-item,.res-hist-item,.iitem,/* ── A fila de confirmações ──
+   A faixa da Início e a folha que ela abre. A faixa é discreta de propósito:
+   ela pede trinta segundos, não atenção total, e some sozinha quando a fila
+   esvazia. */
+.home-conf-faixa {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 44px; padding: 12px 14px; margin-bottom: 12px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: 14px;
+  color: var(--tx); text-align: left; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.home-conf-faixa:active { background: var(--ol1, var(--surface3, var(--surface2))); }
+.home-conf-faixa:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+.home-conf-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.home-conf-tit { font-size: 14px; font-weight: 700; }
+.home-conf-sub {
+  font-size: 12px; color: var(--tx3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.home-conf-seta { font-size: 20px; color: var(--tx3); flex-shrink: 0; line-height: 1; }
+
+.conf-intro { font-size: 12.5px; color: var(--tx3); line-height: 1.5; margin: 0 0 16px; }
+.conf-item {
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+}
+.conf-item:last-child { border-bottom: none; }
+.conf-topo { display: flex; align-items: flex-start; gap: 10px; }
+.conf-info { flex: 1; min-width: 0; }
+.conf-titulo { font-size: 14.5px; font-weight: 700; }
+.conf-sub { font-size: 12px; color: var(--tx3); margin-top: 2px; }
+.conf-val {
+  font-family: var(--font-disp); font-size: 14.5px; font-weight: 700;
+  flex-shrink: 0; font-variant-numeric: tabular-nums;
+}
+.conf-pergunta { font-size: 13px; color: var(--tx2); margin: 8px 0 10px; }
+.conf-acoes { display: flex; gap: 8px; }
+.conf-sim, .conf-nao {
+  flex: 1; min-height: 44px; border-radius: 11px;
+  font-size: 13.5px; font-weight: 700; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.conf-sim { background: var(--ac); color: #fff; border: none; }
+.conf-nao { background: none; color: var(--tx2); border: 1px solid var(--border); }
+.conf-sim:active { opacity: .85; }
+.conf-nao:active { background: var(--ol1, var(--surface2)); }
+.conf-sim:focus-visible, .conf-nao:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+
+.conf-vazio { text-align: center; padding: 20px 12px; }
+.conf-vazio-tit { font-size: 14.5px; font-weight: 700; margin-bottom: 6px; }
+.conf-vazio-sub { font-size: 12.5px; color: var(--tx3); line-height: 1.5; }
+
+/* ── Ações e histórico dentro do cartão de meta ──
    A Reserva tinha uma tela inteira só para ela: anel, saldo em cartaz, dois
    botões e o histórico embaixo. Tudo isso cabe no cartão que as metas já
    usavam — e cabe MELHOR, porque agora a reserva e as metas se comparam lado a
