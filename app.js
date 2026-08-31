@@ -79,6 +79,7 @@ function initFirebase() {
       }
       initSettingsExtras();
       checkNotifPrompt();
+      checkAvisoIcone();
       // FAB "+" visível nas abas de conteúdo; boot inicia no Início, então exibe.
       const fab = document.getElementById('global-fab');
       if (fab) fab.style.display = '';
@@ -5032,6 +5033,81 @@ function _afterDebtChange() {
 // A faixa da fila, no topo da área de atenção. Vem ANTES de "o que precisa de
 // você" de propósito: confirmar o que já aconteceu muda o que ainda falta, e
 // perguntar depois seria pedir para o usuário agir sobre números velhos.
+// Os pontos do baralho. A lasca do próximo cartão avisa que há MAIS UM; ela
+// não diz quantos são nem onde você está. Os pontos dizem, e se atualizam pela
+// rolagem — sem estado guardado, porque a posição já está no DOM.
+// ── Aviso do ícone novo ───────────────────────────────────────────────────
+//
+// O ícone do app era azul — a identidade anterior. Quem instalou o Avenco na
+// tela de início tem esse azul preso lá: iOS e Android COPIAM o ícone no
+// momento da instalação e não o buscam de novo quando o manifest muda. Trocar
+// o arquivo no servidor não troca o que está na tela do celular; só reinstalar
+// troca.
+//
+// QUEM VÊ ESTE AVISO: apenas quem está rodando o app INSTALADO. Para quem abre
+// pelo navegador ele não faz sentido nenhum — não há o que reinstalar, e o
+// ícone novo já vai junto quando essa pessoa instalar. Avisar todo mundo seria
+// pedir uma ação impossível à maioria.
+//
+// Aparece UMA vez, e a chave carrega a versão: se um dia o ícone mudar de novo,
+// basta uma chave nova, e quem já dispensou este não é incomodado de novo.
+const AVISO_ICONE_CHAVE = 'gdcash_aviso_icone_v79';
+
+function _estaInstalado() {
+  try {
+    return window.matchMedia('(display-mode: standalone)').matches ||
+           window.navigator.standalone === true;
+  } catch (e) { return false; }
+}
+
+function checkAvisoIcone() {
+  if (!_estaInstalado()) return;
+  try { if (localStorage.getItem(AVISO_ICONE_CHAVE)) return; } catch (e) { return; }
+  const iOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const como = iOS
+    ? '1. Segure o ícone na tela de início e toque em Remover.\n2. Abra o Avenco no Safari.\n3. Toque em Compartilhar › Adicionar à Tela de Início.'
+    : '1. Segure o ícone na tela de início e toque em Desinstalar.\n2. Abra o Avenco no navegador.\n3. No menu, escolha Instalar app.';
+  setTimeout(() => {
+    gdAlert({
+      title: 'O ícone do Avenco mudou',
+      type: 'info',
+      msg: 'O app ficou verde, mas o ícone na sua tela de início continua azul: o celular copiou o ícone quando você instalou e não o atualiza sozinho.\n\n'
+         + como
+         + '\n\nSeus dados não são afetados — eles ficam na sua conta, não no atalho.',
+      btnText: 'Entendi',
+      onClose: () => { try { localStorage.setItem(AVISO_ICONE_CHAVE, '1'); } catch (e) {} },
+    });
+  }, 1200);
+}
+
+function renderDeckDots() {
+  const deck = document.querySelector('.hc-deck');
+  const dots = document.getElementById('hc-deck-dots');
+  if (!deck || !dots) return;
+  const cartoes = [...deck.children].filter(c =>
+    c.classList.contains('hc-section') && getComputedStyle(c).display !== 'none');
+  // Um cartão só não é um baralho: os pontos seriam enfeite.
+  if (cartoes.length < 2) { dots.innerHTML = ''; return; }
+  if (dots.childElementCount !== cartoes.length) {
+    dots.innerHTML = cartoes.map(() => '<i></i>').join('');
+  }
+  const marcar = () => {
+    const meio = deck.scrollLeft + deck.clientWidth / 2;
+    let atual = 0, melhor = Infinity;
+    cartoes.forEach((c, i) => {
+      const centro = c.offsetLeft + c.offsetWidth / 2;
+      const d = Math.abs(centro - meio);
+      if (d < melhor) { melhor = d; atual = i; }
+    });
+    [...dots.children].forEach((p, i) => p.classList.toggle('on', i === atual));
+  };
+  marcar();
+  if (!deck.dataset.pontos) {
+    deck.dataset.pontos = '1';
+    deck.addEventListener('scroll', marcar, { passive: true });
+  }
+}
+
 function renderHomeConfirmar() {
   const el = document.getElementById('home-confirmar'); if (!el) return;
   const itens = _confirmacoesPendentes();
@@ -7660,6 +7736,7 @@ function renderHomeNew() {
   const sum = _monthMovementSummary(monthOffset);
 
   renderHomeManchete();
+  setTimeout(renderDeckDots, 60);
 
   const incEl = document.getElementById('home-inc');
   const expEl = document.getElementById('home-exp');
@@ -7708,7 +7785,15 @@ function renderHomeNew() {
   const hoje = todayStr();
 
   // 5. Meta atual
-  const activeGoals = (D.goals || []).filter(g => !g.completed);
+  //
+  // A RESERVA FICA DE FORA daqui. Desde que ela virou a primeira meta (v77),
+  // `D.goals[0]` passou a ser a reserva — e o cartão "Meta em curso" começou a
+  // mostrar exatamente o que o cartão "Reserva de emergência" ao lado já
+  // mostrava. Dois cartões vizinhos do mesmo baralho dizendo a mesma coisa.
+  // Regressão da fusão, não do desenho: a reserva tem cartão próprio, este é
+  // para a PRÓXIMA meta.
+  const activeGoals = (D.goals || [])
+    .filter(g => g.id !== META_RESERVA_ID && !g.completed && _metaSaldo(g) < (g.target || 0));
   const goalSection = document.getElementById('home-goal-section');
   const goalEl      = document.getElementById('home-goal');
   if (goalSection && goalEl) {

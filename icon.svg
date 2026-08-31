@@ -1,20 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Ícone do Avenco.
+       Era azul — a identidade anterior. O app é verde há várias versões, mas o
+       ícone na tela do celular continuava azul: quem tinha o app instalado via
+       uma cor que não existe mais dentro dele.
+
+       As cores são os tokens reais do produto, não aproximações:
+         --flood-3 #0A4034 · --flood #0C4F3F · --flood-2 #14705B  (o campo)
+         --on-flood #FDF6EC                                       (a tinta) -->
   <defs>
-    <!-- Deep navy → cobalt → bright blue: full vertical depth -->
+    <!-- O campo verde, do mais escuro embaixo ao mais claro em cima. -->
     <linearGradient id="bg" x1="0" y1="512" x2="0" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0%"   stop-color="#0C2494"/>
-      <stop offset="55%"  stop-color="#1D4ED8"/>
-      <stop offset="100%" stop-color="#4A7AF5"/>
+      <stop offset="0%"   stop-color="#083026"/>
+      <stop offset="52%"  stop-color="#0C4F3F"/>
+      <stop offset="100%" stop-color="#16785F"/>
     </linearGradient>
-    <!-- Specular highlight: polished-glass feel, top-center glow -->
+    <!-- Brilho especular no topo: dá o acabamento de vidro polido que o ícone
+         anterior tinha e que era a única coisa boa nele. -->
     <radialGradient id="shine" cx="50%" cy="-5%" r="65%">
-      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.18"/>
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.16"/>
       <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
     </radialGradient>
-    <!-- Edge vignette: subtle darkening gives depth and pop -->
+    <!-- Vinheta na borda: separa o ícone do fundo claro da tela inicial. -->
     <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
       <stop offset="0%"   stop-color="#000000" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#000000" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#000000" stop-opacity="0.24"/>
     </radialGradient>
   </defs>
 
@@ -22,18 +31,12 @@
   <rect width="512" height="512" fill="url(#shine)"/>
   <rect width="512" height="512" fill="url(#vignette)"/>
 
-  <!-- Triangle ~38% of icon width — smaller, refined, with crossbar -->
-  <path d="M256,135 L159,311 L353,311 Z"
-    fill="none"
-    stroke="#FFFFFF"
-    stroke-opacity="0.96"
-    stroke-width="22"
-    stroke-linejoin="round"
-    stroke-linecap="round"/>
-  <!-- Crossbar at 75% height inside triangle -->
-  <line x1="199" y1="267" x2="313" y2="267"
-    stroke="#FFFFFF"
-    stroke-opacity="0.96"
-    stroke-width="22"
-    stroke-linecap="round"/>
+  <!-- A marca: o mesmo triângulo com travessa da topbar do app.
+       Recentrado — no ícone antigo ele ficava alto na moldura, com mais espaço
+       embaixo do que em cima. -->
+  <g stroke="#FDF6EC" stroke-opacity="0.97" stroke-width="24"
+     stroke-linejoin="round" stroke-linecap="round" fill="none">
+    <path d="M256,163 L151,349 L361,349 Z"/>
+    <line x1="201" y1="302" x2="311" y2="302"/>
+  </g>
 </svg>

@@ -2299,9 +2299,11 @@ textarea.form-input{resize:none}
 }
 
 /* Cobalt colors for Proposal C chart */
-.home-legend-dot--inc { background: var(--ac); }
-.home-legend-dot--exp { background: #93C5FD; }
-:root[data-theme="dark"] .home-legend-dot--exp { background: rgba(91,138,245,.4); }
+.home-legend-dot--inc { background: var(--gn); }
+/* Era azul — sobra da identidade anterior. As barras do gráfico sempre usaram
+   `--gn` e `--rd`; a legenda apontava para um azul que não existia em lugar
+   nenhum do desenho, então ela explicava o gráfico com a cor errada. */
+.home-legend-dot--exp { background: var(--rd); }
 
 /* ── Insight (blue-tinted box) ── */
 .hc-insight {
@@ -3438,6 +3440,9 @@ button.srow-muted:active { background: none; }
   font-size: 14px; color: var(--tx2);
   text-align: center; line-height: 1.58;
   margin-bottom: 24px;
+  /* As quebras de linha da mensagem colapsavam: qualquer diálogo com mais de
+     um parágrafo virava um bloco só de texto. */
+  white-space: pre-line;
 }
 
 /* ── Dialog actions ── */
@@ -5004,7 +5009,10 @@ body { padding-bottom: 0; }
 }
 .hc-deck::-webkit-scrollbar { display: none; }
 .hc-deck > .hc-section {
-  flex: 0 0 86%;
+  /* 89% em vez de 86%: a lasca do próximo cartão continua avisando que há
+     mais, mas fina o bastante para ler como borda, não como cartão cortado no
+     meio de uma palavra. */
+  flex: 0 0 89%;
   scroll-snap-align: start;
   margin: 0;
   background: var(--surface);
@@ -5012,12 +5020,29 @@ body { padding-bottom: 0; }
   border-radius: var(--radius);
   padding: 16px;
   min-width: 0;
+  /* O baralho estica todo cartão à altura do mais alto (o gráfico). O conteúdo
+     ficava grudado no topo e sobrava um buraco embaixo — 109px de nada num
+     cartão de 207 na Reserva, mais da metade dele. O corpo agora cresce e se
+     distribui: a altura comum vira respiro, não vazio. */
+  display: flex;
+  flex-direction: column;
 }
+.hc-deck > .hc-section > *:last-child { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
 /* Dentro do baralho o cartão JÁ é o contêiner; um segundo por dentro seria
-   caixa dentro de caixa. */
+   caixa dentro de caixa.
+   
+   As regras de tema escuro destes três (`:root[data-theme="dark"] .hc-…`) têm
+   especificidade MAIOR que `.hc-deck .hc-…` e venciam esta aqui: no escuro a
+   caixa interna voltava, com fundo e borda próprios, e o baralho ficava com
+   cartão dentro de cartão — precisamente o que este bloco existe para impedir.
+   Por isso a variante escura está escrita explicitamente. */
 .hc-deck .hc-chart-box,
 .hc-deck .hc-resv-card,
-.hc-deck .hc-goal-card {
+.hc-deck .hc-goal-card,
+:root[data-theme="dark"] .hc-deck .hc-chart-box,
+:root[data-theme="dark"] .hc-deck .hc-resv-card,
+:root[data-theme="dark"] .hc-deck .hc-goal-card {
   background: transparent;
   border: none;
   box-shadow: none;
@@ -5026,6 +5051,17 @@ body { padding-bottom: 0; }
 .hc-deck .hc-sec-hd { margin-bottom: 12px; }
 .hc-deck .hc-sec-title { font-size: 16px; }
 .hc-deck .hc-section--sep { border-top: none; padding-top: 0; }
+
+.hc-deck-dots {
+  display: flex; justify-content: center; gap: 6px;
+  margin: -18px 0 24px;
+}
+.hc-deck-dots > i {
+  width: 6px; height: 6px; border-radius: 999px;
+  background: var(--border);
+  transition: background var(--dur-fast, .15s), width var(--dur-fast, .15s);
+}
+.hc-deck-dots > i.on { width: 18px; background: var(--ac); }
 
 /* ── Semana: a faixa de dias ──────────────────────────────────────────────
    O acordeão empilhava os sete dias com cabeçalho completo cada um: 635px de

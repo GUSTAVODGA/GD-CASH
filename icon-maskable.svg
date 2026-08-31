@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Variante MASCARÁVEL. O Android recorta o ícone na forma que o launcher
+       usar — círculo, quadrado arredondado, gota —, e só a área central
+       (círculo de 80% do lado) é garantida. Reaproveitar o ícone comum aqui
+       faria a marca encostar no corte em alguns launchers.
+
+       A marca é a mesma, a ~72% do tamanho: fica dentro da zona segura em
+       qualquer máscara, e o campo verde sangra até a borda para não aparecer
+       canto vazio. -->
+  <defs>
+    <linearGradient id="bgm" x1="0" y1="512" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#083026"/>
+      <stop offset="52%"  stop-color="#0C4F3F"/>
+      <stop offset="100%" stop-color="#16785F"/>
+    </linearGradient>
+    <radialGradient id="shinem" cx="50%" cy="-5%" r="65%">
+      <stop offset="0%"   stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#bgm)"/>
+  <rect width="512" height="512" fill="url(#shinem)"/>
+
+  <g transform="translate(256,256) scale(0.72) translate(-256,-256)">
+    <g stroke="#FDF6EC" stroke-opacity="0.97" stroke-width="24"
+       stroke-linejoin="round" stroke-linecap="round" fill="none">
+      <path d="M256,163 L151,349 L361,349 Z"/>
+      <line x1="201" y1="302" x2="311" y2="302"/>
+    </g>
+  </g>
+</svg>
