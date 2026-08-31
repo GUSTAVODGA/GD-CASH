@@ -18,7 +18,10 @@ test('o relógio do app obedece à data fixada pelo teste', async ({ page }) => 
 
 test('todas as abas principais abrem sem erro de console', async ({ page }) => {
   const erros = await abrirAppEmDemo(page);
-  for (const aba of ['semana', 'mes', 'reserva', 'metas', 'dividas', 'patrimonio', 'inicio']) {
+  // 'reserva' saiu daqui porque deixou de ser uma página: a reserva de
+  // emergência é a primeira meta, e `switchTab('reserva')` leva a 'metas'.
+  // O redirecionamento tem teste próprio em `metas-guardado.spec.js`.
+  for (const aba of ['semana', 'mes', 'metas', 'dividas', 'patrimonio', 'inicio']) {
     await irParaAba(page, aba);
     await expect(page.locator(`#page-${aba}`)).toHaveClass(/active/);
   }

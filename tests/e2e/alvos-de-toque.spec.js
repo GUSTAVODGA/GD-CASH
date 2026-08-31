@@ -11,7 +11,10 @@
 import { test, expect } from '@playwright/test';
 import { abrirAppEmDemo } from './_helpers.js';
 
-const TELAS = ['inicio', 'semana', 'mes', 'mais', 'reserva', 'dividas', 'patrimonio',
+// 'reserva' saiu: virou a primeira meta dentro de 'metas', que continua na
+// lista — e agora carrega os botões que eram da tela da reserva (Guardar,
+// Retirar, o kebab de cada movimento), medidos aqui pela primeira vez.
+const TELAS = ['inicio', 'semana', 'mes', 'mais', 'dividas', 'patrimonio',
                'pendencias', 'fixos', 'ajustes', 'metas', 'pesquisa', 'conversor', 'lembretes'];
 
 const MINIMO = 44;

@@ -596,7 +596,32 @@ main{background:var(--bg);min-height:100dvh}
   animation-delay:var(--sd,0s);
 }
 /* ── List item stagger ── */
-.tx-item,.fixed-item,.res-hist-item,.iitem,.goal-card{
+.tx-item,.fixed-item,.res-hist-item,.iitem,/* ── Ações e histórico dentro do cartão de meta ──
+   A Reserva tinha uma tela inteira só para ela: anel, saldo em cartaz, dois
+   botões e o histórico embaixo. Tudo isso cabe no cartão que as metas já
+   usavam — e cabe MELHOR, porque agora a reserva e as metas se comparam lado a
+   lado em vez de morarem em telas diferentes com desenhos diferentes. */
+.meta-acoes{display:flex;gap:10px;margin-top:12px}
+.meta-acao{flex:1}
+.meta-acao:disabled{opacity:.45;pointer-events:none}
+.meta-hist{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.meta-hist-mais{
+  display:flex;align-items:center;justify-content:center;
+  width:100%;margin-top:4px;
+  /* 44px de altura real: é um link em aparência, mas um alvo de toque em
+     tamanho — a régua de `alvos-de-toque` vale para ele como para o resto. */
+  min-height:44px;padding:0;
+  background:none;border:none;color:var(--ac);
+  font-size:12.5px;font-weight:700;cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+}
+.meta-hist-mais:active{opacity:.7}
+.meta-hist-mais:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+/* A reserva é a meta que todo mundo tem; um fio a distingue sem transformá-la
+   noutra coisa. */
+.goal-card-sistema{border-color:var(--ac-t,rgba(12,122,82,.28))}
+
+.goal-card{
   animation:fade-in var(--dur-normal) var(--ease-out) both;
   animation-delay:var(--sd,0s);
 }
@@ -810,31 +835,8 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 
 /* ── Reserva ── */
 /* Hero compacto: mini-anel (percentual) + saldo principal à direita */
-.res-hero{padding:16px;margin-bottom:12px}
-.res-hero-row{display:flex;align-items:center;gap:14px;margin-bottom:8px}
-.res-hero-head{flex:1;min-width:0}
-.res-ring-wrap{position:relative;width:210px;height:210px;margin:0 auto}
-.res-ring-mini{width:92px;height:92px;margin:0;flex-shrink:0}
-.res-ring-wrap svg{width:100%;height:100%;transform:rotate(-90deg)}
-.ring-bg{fill:none;stroke:var(--surface3);stroke-width:14}
-.ring-fill{fill:none;stroke:url(#ringGrad);stroke-width:14;stroke-linecap:round;transition:stroke-dashoffset .4s;filter:drop-shadow(0 0 6px rgba(255,184,0,.4))}
-.res-ring-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
-.res-ring-pct{font-size:18px;color:var(--ac);font-weight:800;letter-spacing:-.5px}
-.res-lbl{font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
 /* Saldo em largura total → valores grandes nunca são cortados */
-.res-saldo{font-size:clamp(26px,8vw,34px);font-weight:900;letter-spacing:-.5px;line-height:1.1;white-space:nowrap}
-.res-sub{font-size:12.5px;color:var(--text2);font-weight:600;margin-top:3px}
-.res-meta-row{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--text3);margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
-.res-meta-info{min-width:0}
-.res-meta-info strong{color:var(--text)}
-.res-meta-link{background:none;border:none;color:var(--ac);font-size:12.5px;font-weight:700;cursor:pointer;padding:2px 0;white-space:nowrap;-webkit-tap-highlight-color:transparent}
-.res-meta-link:active{opacity:.7}
-.res-meta-link:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 /* Ações: Adicionar (principal) + Retirar (secundária), sem competir */
-.res-actions{display:flex;gap:10px;margin:0 0 18px}
-.res-add{flex:1}
-.res-withdraw{flex:1;color:var(--rd);border-color:var(--rd-t)}
-.res-withdraw:active{background:var(--rd-t)}
 /* Histórico compacto + kebab */
 .res-hist-item{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .res-hist-item:last-child{border-bottom:none}
@@ -846,9 +848,6 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .res-hist-kebab:active{background:var(--ol1)}
 .res-hist-kebab:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
 /* Estado vazio compacto */
-.res-empty{text-align:center;padding:18px 12px 6px}
-.res-empty-msg{font-size:12.5px;color:var(--text3);line-height:1.5;margin-bottom:14px;max-width:280px;margin-left:auto;margin-right:auto}
-.res-empty-btn{display:inline-block;width:auto;padding:9px 18px}
 /* Reserve withdrawal → expense question */
 .res-q-text{font-size:15px;font-weight:700;color:var(--tx);margin:4px 0 6px}
 .res-q-sub{font-size:13px;color:var(--tx2);margin:0 0 18px;line-height:1.5}
@@ -1668,7 +1667,6 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .inc-inp:focus{box-shadow:0 0 0 3px var(--gold-t20)}
 
 /* ── Reserva ring glow ── */
-.ring-fill{filter:drop-shadow(0 0 6px var(--gold-t40))}
 
 /* ── Reserva pill ── */
 .pill-meta{background:var(--gold-t12);border-color:var(--gold-t20)}
@@ -3610,7 +3608,6 @@ button.srow-muted:active { background: none; }
 /* ── Progress bars: all use token ── */
 .av-progress-fill { transition:width var(--dur-slow) var(--ease-default); }
 .wg-bar-fill      { transition:width var(--dur-slow) var(--ease-default); }
-.ring-fill        { transition:stroke-dashoffset var(--dur-slow) var(--ease-default); }
 .cat-row-bar      { transition:width var(--dur-slow) var(--ease-default); }
 .goal-bar-fill    { transition:width var(--dur-slow) var(--ease-default); }
 

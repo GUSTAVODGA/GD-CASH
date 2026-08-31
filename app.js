@@ -18,6 +18,12 @@ let auth, db, currentUser = null;
 const CURRENCIES = ['R$', 'US$', 'CA$', 'AU$', 'MX$', '€', '£', '¥'];
 let currSym = localStorage.getItem('gdcash_currency') || 'R$';
 
+// Id da meta do sistema — a reserva de emergência. Declarado AQUI, no topo,
+// porque `defaultData()` e a migração do boot rodam antes da metade do arquivo
+// ser avaliada: uma `const` declarada lá embaixo ainda estaria na zona morta
+// temporal e o app quebraria no arranque.
+const META_RESERVA_ID = 'meta-reserva';
+
 function setCurrency(sym) {
   currSym = sym;
   localStorage.setItem('gdcash_currency', currSym);
@@ -30,7 +36,6 @@ function setCurrency(sym) {
   if (active === 'inicio')       { renderInicio(); } /* renderInicioCards already called inside renderInicio */
   else if (active === 'semana')  { renderSemana(); renderDayAccordion(); }
   else if (active === 'mes')     renderMes();
-  else if (active === 'reserva') renderReserva();
   else if (active === 'metas')   renderGoals();
   else if (active === 'fixos')   renderFixos();
 }
@@ -65,7 +70,8 @@ function initFirebase() {
       const _tsBeforeSync = D.updatedAt || 0;
       await loadFromCloud();
       const _migResult = _migrateVehiclesToPatrimonios();
-      if (_migResult.ran) save();
+      const _migMetas = _migrateReservaParaMeta();
+      if (_migResult.ran || _migMetas.ran) save();
       if ((D.updatedAt || 0) !== _tsBeforeSync) {
         document.getElementById('curr-chip').textContent = currSym;
         renderInicio();
@@ -161,18 +167,13 @@ const TAB_HELP = {
   },
   metas: {
     icon: '🎯',
-    title: 'Minhas Metas',
-    text: 'Defina metas com prazo e valor — iPhone, viagem, o que for. Acompanhe o progresso e adicione valor conforme vai guardando.',
+    title: 'Metas e reserva',
+    text: 'Todo dinheiro que você guarda mora aqui. A reserva de emergência é a primeira meta; abaixo dela ficam as suas — viagem, celular, o que for. Guardar e retirar tem data e histórico, e o que está guardado sai do dinheiro disponível do mês: a Início para de dizer que ele ainda dá para gastar.',
   },
   semana: {
     icon: '📅',
     title: 'Aba Semana',
     text: 'Lance seus ganhos e gastos diários aqui. Toque em um dia para registrar valores por plataforma. Use as setas ‹ › para navegar entre semanas.',
-  },
-  reserva: {
-    icon: '🛡️',
-    title: 'Reserva & Metas',
-    text: 'Aqui fica sua reserva de emergência — deposite aos poucos e acompanhe a meta. Abaixo você cria metas com prazo e valor, como viagens ou compras.',
   },
   mes: {
     icon: '📊',
@@ -361,11 +362,13 @@ function renderInicio() {
     }
   }
 
-  const rpct = D.emergency.target > 0 ? Math.min(100, Math.round(D.emergency.current / D.emergency.target * 100)) : 0;
+  const _resv = _metaReserva();
+  const _resvSaldo = _metaSaldo(_resv), _resvAlvo = _resv ? (_resv.target || 0) : 0;
+  const rpct = _resvAlvo > 0 ? Math.min(100, Math.round(_resvSaldo / _resvAlvo * 100)) : 0;
   const rbar = document.getElementById('inicio-reserve-bar');
   if (rbar) { rbar.style.width = rpct + '%'; rbar.className = 'wg-bar-fill' + (rpct >= 100 ? ' wg-done' : ''); }
   const rval = document.getElementById('inicio-reserve-val');
-  if (rval) rval.textContent = R(D.emergency.current);
+  if (rval) rval.textContent = R(_resvSaldo);
   const rpctEl = document.getElementById('inicio-reserve-pct-txt');
   if (rpctEl) rpctEl.textContent = rpct + '%';
 
@@ -499,8 +502,9 @@ function renderMais() {
   if (!root) return;
   const pendAbertas = (D.pendencias || []).filter(p => p.status === 'aberta').length;
   const fixTotal = (D.fixedExpenses || []).filter(f => !f.paused).reduce((s, f) => s + f.amount, 0);
-  const resCur = (D.emergency && D.emergency.current) || 0;
-  const resTgt = (D.emergency && D.emergency.target) || 0;
+  const _resvMeta = _metaReserva();
+  const resCur = _metaSaldo(_resvMeta);
+  const resTgt = _resvMeta ? (_resvMeta.target || 0) : 0;
   const resPct = resTgt > 0 ? Math.min(100, Math.round(resCur / resTgt * 100)) : 0;
   const _itensPat = _patUnifiedItems();
   const net = _patNetTotals(_itensPat).net;
@@ -548,10 +552,15 @@ function renderMais() {
     return `Próximo: ${fmtShort(futuros[0].date)}`;
   })();
 
-  const metasAtivas = (D.goals || []).filter(g => (g.saved || 0) < (g.target || 0));
-  const metaInfo = !(D.goals || []).length ? 'Nenhuma meta ainda'
-    : metasAtivas.length ? `${metasAtivas.length} em andamento`
-    : `${D.goals.length} concluída(s)`;
+  // Reserva e Metas eram DUAS entradas vizinhas neste menu, literalmente duas
+  // portas para a mesma ideia. Agora é uma, e o subtítulo diz o que importa:
+  // quanto você tem guardado ao todo.
+  const _metas = _metasTodas();
+  const guardadoTotal = _metas.reduce((s, g) => s + _c(_metaSaldo(g)), 0);
+  const metasAtivas = _metas.filter(g => _metaSaldo(g) < (g.target || 0));
+  const metaResumo = !_metas.length ? 'Nenhuma meta ainda'
+    : `${R(_r(guardadoTotal))} guardados` +
+      (metasAtivas.length ? ` · ${metasAtivas.length} em andamento` : ' · tudo atingido');
 
   root.innerHTML = `
     <div class="sec-label mais-sec">Resumos</div>
@@ -559,8 +568,7 @@ function renderMais() {
       ${item('pendencias', ICO.pend, 'Pendências', pendAbertas > 0 ? `${pendAbertas} em aberto` : 'Nenhuma em aberto')}
       ${item('lembretes', ICO.lem, 'Lembretes', lemProx)}
       ${item('fixos', ICO.fix, 'Gastos Fixos', `${R(fixTotal)} / mês`)}
-      ${item('reserva', ICO.res, 'Reserva de Emergência', resTgt > 0 ? `${R(resCur)} · ${resPct}% da meta` : R(resCur))}
-      ${item('metas', ICO.meta, 'Metas', metaInfo)}
+      ${item('metas', ICO.meta, 'Metas e reserva', metaResumo)}
       ${item('patrimonio', ICO.pat, 'Patrimônio', custoPat > 0 ? `${R(custoPat)} este mês · líquido ${R(net)}` : `Líquido ${R(net)}`)}
       ${item('dividas', ICO.debt, 'Dívidas', dividasAtivas.length > 0 ? `${dividasAtivas.length} ativa(s) · ${R(dividasSaldo)} devedor` : 'Nenhuma ativa')}
     </div>
@@ -925,9 +933,13 @@ function defaultData() {
     fixedExpenses: [],
     fixedPayments: [],
     fixedStart: null,
+    // Resquício legível pelo app antigo; a verdade da reserva mora em `goals`.
     emergency: { target: 10000, current: 0 },
     reservaHistory: [],
-    goals: [],
+    goals: [
+      { id: META_RESERVA_ID, sistema: true, name: 'Reserva de emergência', emoji: '🛡️',
+        target: 10000, deadline: '', note: '', lastNotif: '', saldoInicial: 0, historico: [] },
+    ],
     weeklyGoal: 0,
     incomeItems: [],
     catBudgets: {},
@@ -975,6 +987,10 @@ let D = (() => {
 // Idempotente: flag global + identidade por origem. loadFromCloud roda de novo sem duplicar.
 try { if (migrateDebtsV1()) localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch (e) {}
 try { if (migratePatrimonioLifecycleV1()) localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch (e) {}
+// Reserva vira meta AQUI, antes do primeiro pintar. Rodar só depois do
+// loadFromCloud faria a Início nascer sem reserva nenhuma e corrigir-se um
+// instante depois — e nenhuma tela precisaria saber ler os dois formatos.
+try { if (_migrateReservaParaMeta().ran) localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch (e) {}
 
 // ══════════════════════════════════════════
 // MODAL SYSTEM
@@ -1495,9 +1511,17 @@ function _consumptionRatio(sum) { return sum.operationalIncome > 0 ? (sum.consum
 function sumMonthPlat(pid,off=0) {
   return monthDates(off).reduce((s,d)=>s+getDayPlatIncome(d,pid),0);
 }
+// Quanto você GUARDOU (líquido) no mês — em todas as metas, a reserva inclusa.
+//
+// O nome é do tempo em que só existia a reserva; o conceito sempre foi "saiu do
+// caixa para ficar seu". Dinheiro separado para uma viagem some do caixa
+// exatamente como dinheiro separado para a emergência: antes ele não saía de
+// lugar nenhum, e a Início dizia que ainda dava para gastá-lo.
 function sumMonthReserva(off=0) {
   const dates=new Set(monthDates(off));
-  return D.reservaHistory.filter(h=>dates.has(h.date)).reduce((s,h)=>s+(h.type==='dep'?h.amount:-h.amount),0);
+  return _r(_guardadoMovimentos()
+    .filter(h=>dates.has(h.date))
+    .reduce((s,h)=>s+(h.type==='dep'?_c(h.amount):-_c(h.amount)),0));
 }
 function getMonthWeeks(off=0) {
   const d=new Date(); d.setMonth(d.getMonth()+off,1);
@@ -1553,7 +1577,8 @@ function getMonthData(off, opts) {
   });
   var topExpense = mExps.slice().sort(function(a, b) { return b.amount - a.amount; })[0] || null;
 
-  var resvMoves = D.reservaHistory.filter(function(h) { return datesSet.has(h.date); });
+  // Dinheiro guardado no mês: reserva e metas, no mesmo balde (ver sumMonthReserva).
+  var resvMoves = _guardadoMovimentos().filter(function(h) { return datesSet.has(h.date); });
   var resvDeps = resvMoves.filter(function(h) { return h.type === 'dep'; });
   var resvRets = resvMoves.filter(function(h) { return h.type === 'ret'; });
   var resvDeposited = resvDeps.reduce(function(s, h) { return s + h.amount; }, 0);
@@ -2478,10 +2503,83 @@ function pickMonth(year, month) {
   renderMes();
 }
 
-// ══════════════════════════════════════════
-// RENDER: RESERVA
-// ══════════════════════════════════════════
-// ── FONTE ÚNICA DA VERDADE da Reserva ──
+// ══════════════════════════════════════════════════════════════════════════
+// DINHEIRO GUARDADO — um só motor para reserva e metas
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Reserva e Metas eram duas telas com a MESMA FORMA (saldo + alvo + progresso)
+// e mecânicas incompatíveis:
+//
+//   · a Reserva tinha um LIVRO-RAZÃO — aporte e retirada com data, nota e
+//     edição —, o invariante de nunca ficar negativa em ponto nenhum da linha
+//     do tempo, e presença no caixa: o que você guardava aparecia no Mês, no
+//     relatório e (desde a v76) descontava da sobra livre.
+//
+//   · a Meta tinha um NÚMERO SOLTO, `saved`. "Adicionar valor" só somava,
+//     nunca tirava, e — o erro grave — o dinheiro NÃO SAÍA DO CAIXA em lugar
+//     nenhum. Você separava R$ 5.000 para uma viagem e a Início continuava
+//     dizendo que esse dinheiro estava livre para gastar. É exatamente o erro
+//     para mais que a sobra livre foi feita para matar, morando dentro de
+//     Metas.
+//
+// A reserva de emergência É uma meta: tem alvo, tem saldo, você aporta e
+// retira. A diferença é que ela não tem prazo e todo mundo tem uma. Então ela
+// vira a PRIMEIRA meta, marcada como do sistema, e o razão da reserva passa a
+// ser o razão de qualquer meta.
+//
+// SALDO INICIAL, e por que ele existe: uma meta antiga trazia `saved` sem
+// nenhum movimento por trás. Converter esse valor num aporte datado de hoje
+// faria a Início afirmar que você guardou aquele dinheiro NESTE mês e
+// derrubaria a sobra livre por um evento que nunca aconteceu. `saldoInicial`
+// é o que já estava guardado antes de o razão começar — mesma solução que
+// `amortizadoInicial` dá para as dívidas.
+
+// LEITORES TOLERANTES, MIGRAÇÃO NORMALIZADORA. Todo leitor abaixo entende os
+// dois formatos; a migração só arruma o armazenamento. Sem isso, a ordem em que
+// os dados chegam viraria uma dependência: um backup antigo importado, o app
+// velho aberto em outra aba, ou o documento da nuvem chegando depois do
+// primeiro pintar mostrariam saldo zero até que algo rodasse a migração.
+
+/** O saldo de uma meta: o que já estava lá mais o que o razão movimentou. */
+function _metaSaldo(g) {
+  if (!g) return 0;
+  // `saved` é o formato antigo: sem razão, ele É o saldo.
+  const inicial = g.saldoInicial != null ? g.saldoInicial : (g.saved || 0);
+  const mov = (g.historico || []).reduce(
+    (s, h) => s + (h.type === 'dep' ? _c(h.amount) : -_c(h.amount)), 0);
+  return _r(_c(inicial) + mov);
+}
+
+/** Toda meta, com a reserva sempre na frente — inclusive antes de migrar. */
+function _metasTodas() {
+  const gs = (D.goals || []).slice();
+  if (!gs.some(g => g.id === META_RESERVA_ID)) {
+    const hist = Array.isArray(D.reservaHistory) ? D.reservaHistory : [];
+    const alvo = (D.emergency && D.emergency.target) || 0;
+    const saldo = (D.emergency && D.emergency.current) || 0;
+    if (alvo || saldo || hist.length) {
+      gs.unshift({
+        id: META_RESERVA_ID, sistema: true, name: 'Reserva de emergência', emoji: '🛡️',
+        target: alvo, deadline: '', note: '',
+        saldoInicial: _r(_c(saldo) - _c(_reservaSaldo(hist))),
+        historico: hist, _legado: true,
+      });
+    }
+  }
+  return gs.sort((a, b) => (b.id === META_RESERVA_ID) - (a.id === META_RESERVA_ID));
+}
+
+/** A meta do sistema — a reserva de emergência. */
+function _metaReserva() { return _metasTodas().find(g => g.id === META_RESERVA_ID) || null; }
+
+/** Todo movimento de dinheiro guardado, de todas as metas, achatado. */
+function _guardadoMovimentos() {
+  const out = [];
+  _metasTodas().forEach(g => (g.historico || []).forEach(h => out.push({ ...h, metaId: g.id })));
+  return out;
+}
+
+// ── FONTE ÚNICA DA VERDADE do razão ──
 // A validação usa ORDEM CRONOLÓGICA (data real), NUNCA a ordem física do array
 // (que pode estar do mais recente para o mais antigo). Desempate estável por
 // ÍNDICE ORIGINAL do array (determinístico). A ordem persistida não é alterada.
@@ -2490,84 +2588,116 @@ function _reservaChrono(hist) {
     .sort((a, b) => (a.h.date < b.h.date ? -1 : a.h.date > b.h.date ? 1 : 0) || (a.i - b.i))
     .map(x => x.h);
 }
-// Saldo total = soma de todos os movimentos (independe da ordem).
+// Soma dos movimentos do razão (independe da ordem). NÃO inclui saldo inicial.
 function _reservaSaldo(hist) {
-  return (hist || D.reservaHistory || []).reduce((s, h) => h.type === 'dep' ? s + h.amount : s - h.amount, 0);
+  return _r((hist || []).reduce((s, h) => s + (h.type === 'dep' ? _c(h.amount) : -_c(h.amount)), 0));
 }
 // Avalia o saldo corrente em ordem CRONOLÓGICA: total, mínimo global e o saldo
 // imediatamente ANTES de cada movimento (por id) — para mensagens de "disponível".
-function _reservaEval(hist) {
+//
+// `inicial` é o saldo de partida: sem ele, uma meta que já vinha com dinheiro
+// guardado recusaria a primeira retirada, porque o razão começaria do zero.
+function _reservaEval(hist, inicial) {
   const sorted = _reservaChrono(hist);
-  let s = 0, min = 0; const before = {};
-  for (const h of sorted) { before[h.id] = s; s += h.type === 'dep' ? h.amount : -h.amount; if (s < min) min = s; }
-  return { total: s, min, before };
+  let s = _c(inicial || 0), min = s; const before = {};
+  for (const h of sorted) {
+    before[h.id] = _r(s);
+    s += h.type === 'dep' ? _c(h.amount) : -_c(h.amount);
+    if (s < min) min = s;
+  }
+  return { total: _r(s), min: _r(min), before };
 }
-// Histórico válido se o saldo cronológico nunca fica negativo em nenhum ponto.
-function _reservaHistoryValid(hist) { return _reservaEval(hist).min >= -1e-9; }
-// Detecta inconsistência de dados LEGADOS sem alterar nada (recomendação manual).
-function _reservaLegacyCheck() {
-  const computed = _reservaSaldo(D.reservaHistory);
-  const stored = (D.emergency && D.emergency.current) || 0;
-  const hasNegativePoint = !_reservaHistoryValid(D.reservaHistory);
-  return { consistent: Math.abs(computed - stored) < 0.005 && !hasNegativePoint, stored, computed, hasNegativePoint };
-}
+// Razão válido se o saldo cronológico nunca fica negativo em nenhum ponto.
+function _reservaHistoryValid(hist, inicial) { return _reservaEval(hist, inicial).min >= -1e-9; }
 
-function renderReserva() {
-  // Regra preservada: saldo = D.emergency.current; pct = min(100, current/target*100)
-  // quando target>0, senão 0. Nada de percentual quando não há meta.
-  const emg = D.emergency;
-  const cur = emg.current || 0;
-  const tgt = emg.target || 0;
-  const hasMeta = tgt > 0;
-  const pct = hasMeta ? Math.min(100, (cur / tgt) * 100) : 0;
-  const atMeta = hasMeta && cur >= tgt;
+// ── A migração ────────────────────────────────────────────────────────────
+//
+// Idempotente e conservadora, como a de veículos → patrimônios: roda a cada
+// login, e o que já foi migrado ela não toca.
+//
+// A reserva antiga guardava a mesma informação em DOIS lugares que podiam
+// divergir — `D.emergency.current` e a soma de `D.reservaHistory`. Existia até
+// um `_reservaLegacyCheck` só para denunciar a divergência, sem resolvê-la. Ela
+// agora é absorvida: a diferença entre o saldo declarado e o que o razão
+// explica vira `saldoInicial`. A migração não escolhe um lado nem descarta
+// nada — o saldo que o usuário via continua exatamente o mesmo, e todo
+// movimento registrado continua no lugar.
+function _migrateReservaParaMeta() {
+  if (!Array.isArray(D.goals)) D.goals = [];
+  let metasComRazao = 0;
 
-  document.getElementById('res-total').textContent = R(cur);
-  document.getElementById('res-pct').textContent = hasMeta ? `${Math.round(pct)}%` : '—';
-  const ring = document.getElementById('res-ring-fill');
-  ring.style.strokeDasharray = `${RING_CIRC}`;
-  ring.style.strokeDashoffset = `${RING_CIRC * (1 - pct / 100)}`; // >100% nunca deforma (pct capado)
+  // Toda meta antiga ganha um razão, e seu `saved` vira SALDO INICIAL.
+  D.goals.forEach(g => {
+    if (Array.isArray(g.historico)) return;
+    g.historico = [];
+    g.saldoInicial = _r(_c(g.saldoInicial != null ? g.saldoInicial : (g.saved || 0)));
+    metasComRazao++;
+  });
 
-  const pctLine = document.getElementById('res-pct-line');
-  if (pctLine) pctLine.textContent = !hasMeta ? 'Sem meta definida' : (atMeta ? 'Meta atingida' : `${Math.round(pct)}% da meta`);
-
-  const metaEl = document.getElementById('res-meta');
-  if (metaEl) {
-    if (!hasMeta) {
-      metaEl.innerHTML = `<button class="res-meta-link" onclick="openResModal('meta')">Definir meta da reserva</button>`;
-    } else {
-      const faltaTxt = atMeta ? 'Meta atingida' : `Faltam <strong>${R(Math.max(0, tgt - cur))}</strong>`;
-      metaEl.innerHTML = `<span class="res-meta-info">Meta: <strong>${R(tgt)}</strong> · ${faltaTxt}</span>` +
-        `<button class="res-meta-link" onclick="openResModal('meta')">Editar meta</button>`;
-    }
+  // A reserva de emergência entra como a primeira meta, marcada como do sistema.
+  //
+  // A checagem é pelo array CRU, nunca por `_metaReserva()`: aquele leitor
+  // devolve a vista de compatibilidade quando ainda não há meta gravada, então
+  // perguntar a ele "já existe?" faria a migração se dar por satisfeita sem
+  // nunca ter gravado nada — e os dados ficariam no formato antigo para sempre.
+  let criouReserva = false;
+  if (!(D.goals || []).some(g => g.id === META_RESERVA_ID)) {
+    const hist = Array.isArray(D.reservaHistory) ? D.reservaHistory : [];
+    const declarado = _c((D.emergency && D.emergency.current) || 0);
+    const explicado = _c(_reservaSaldo(hist));
+    D.goals.unshift({
+      id: META_RESERVA_ID,
+      sistema: true,                       // não se exclui, não se renomeia
+      name: 'Reserva de emergência',
+      emoji: '🛡️',
+      target: (D.emergency && D.emergency.target) || 0,
+      deadline: '',                        // reserva não tem prazo
+      note: '',
+      saldoInicial: _r(declarado - explicado),
+      // Cópia, não a mesma referência: `D.reservaHistory` vira imediatamente
+      // um resquício congelado, e nenhum aporte novo o alcança por acidente.
+      historico: hist.slice(),
+      lastNotif: '',
+    });
+    criouReserva = true;
   }
 
-  const hist = document.getElementById('res-history');
-  hist.innerHTML = D.reservaHistory.length
-    ? [...D.reservaHistory].reverse().map(h => {
-        const dep = h.type === 'dep';
-        const sub = fmtShort(h.date) + (h.note ? ` · ${escHtml(h.note)}` : '');
-        return `<div class="res-hist-item av-item">
-          <div class="res-hist-info">
-            <div class="res-hist-lbl">${dep ? 'Aporte' : 'Retirada'}</div>
-            <div class="res-hist-date">${sub}</div>
-          </div>
-          <span class="res-hist-amt" style="color:${dep ? 'var(--gn)' : 'var(--rd)'}">${dep ? '+' : '−'}${R(h.amount)}</span>
-          <button class="res-hist-kebab" onclick="openResMenu('${h.id}')" aria-label="Mais ações">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
-          </button>
-        </div>`;
-      }).join('')
-    : `<div class="res-empty">
-         <div class="res-empty-msg">Nenhuma movimentação ainda. Seus aportes e retiradas aparecerão aqui.</div>
-         <button class="btn btn-primary res-empty-btn" onclick="openResModal('dep')">Adicionar primeiro aporte</button>
-       </div>`;
+  // `D.emergency` e `D.reservaHistory` deixam de ser armazenamento. Não são
+  // apagados do documento salvo: um usuário com o app antigo aberto em outra
+  // aba ainda os lê, e mantê-los é mais barato que uma migração de mão única.
+  // A partir daqui NADA no app escreve neles — a verdade é a meta.
+  return { ran: criouReserva || metasComRazao > 0, criouReserva, metasComRazao };
 }
+
+// A tela da Reserva deixou de existir por conta própria: a reserva é a
+// primeira meta, e quem desenha as duas agora é `renderGoals`. O nome fica
+// porque `switchTab` e o roteador de abas o chamam.
+function renderReserva() { renderGoals(); }
+
+// ── Escrita no razão de uma meta ──────────────────────────────────────────
+//
+// As mesmas funções de antes, agora com um ALVO: qual meta está sendo
+// movimentada. Antes havia só uma resposta possível (a reserva), então o alvo
+// era implícito. `_metaAlvo` guarda a resposta entre abrir a folha e confirmar.
+var _metaAlvo = META_RESERVA_ID;
+
+/** A meta GRAVÁVEL de um id — a vista de compatibilidade não serve para escrever. */
+function _metaGravavel(id) {
+  let g = (D.goals || []).find(x => x.id === id);
+  if (!g && id === META_RESERVA_ID) { _migrateReservaParaMeta(); g = (D.goals || []).find(x => x.id === id); }
+  return g || null;
+}
+/** A meta dona de um movimento do razão. */
+function _metaDoMovimento(movId) {
+  return (D.goals || []).find(g => (g.historico || []).some(h => h.id === movId)) || null;
+}
+
 // ── Kebab de ações de uma movimentação (Editar / Excluir) ──
 var _resMenuTarget = null;
 function openResMenu(id) {
   _resMenuTarget = id;
-  const h = (D.reservaHistory || []).find(x => x.id === id);
+  const g = _metaDoMovimento(id);
+  const h = g ? (g.historico || []).find(x => x.id === id) : null;
   const t = document.getElementById('rmenu-title');
   if (t) t.textContent = h ? (h.type === 'dep' ? 'Aporte' : 'Retirada') : 'Movimentação';
   openOverlay('res-menu-sheet');
@@ -2581,13 +2711,21 @@ function resMenuDelete() {
   if (_resMenuTarget) deleteResHist(_resMenuTarget); // deleteResHist já pede confirmação (gdConfirm)
 }
 
-function openResModal(type) {
-  const titles = { dep: 'Adicionar à reserva', ret: 'Retirar da reserva', meta: 'Editar Meta' };
+function openResModal(type, metaId) {
+  _metaAlvo = metaId || META_RESERVA_ID;
+  const g = _metaGravavel(_metaAlvo) || _metaReserva();
+  const nome = g ? (g.name || 'meta') : 'meta';
+  const daReserva = _metaAlvo === META_RESERVA_ID;
+  const titles = {
+    dep: daReserva ? 'Guardar na reserva' : `Guardar em ${nome}`,
+    ret: daReserva ? 'Retirar da reserva' : `Retirar de ${nome}`,
+    meta: 'Editar valor-alvo',
+  };
   document.getElementById('res-modal-title').textContent = titles[type];
   document.getElementById('res-modal-body').innerHTML = type === 'meta'
-    ? `<div class="fg"><label class="fl">Meta da Reserva</label>
-        <input class="fi" type="number" id="rm-meta" value="${D.emergency.target}" min="0" step="100"></div>
-       <button class="btn btn-primary" onclick="saveResMeta()">Salvar Meta</button>`
+    ? `<div class="fg"><label class="fl">Valor-alvo</label>
+        <input class="fi" type="number" id="rm-meta" value="${g ? (g.target || 0) : 0}" min="0" step="100"></div>
+       <button class="btn btn-primary" onclick="saveResMeta()">Salvar</button>`
     : `<div class="fg"><label class="fl">Valor</label>
         <input class="fi" type="number" id="rm-val" min="0" step="0.01" placeholder="0,00"></div>
        <div class="fg"><label class="fl">Data</label>
@@ -2598,33 +2736,40 @@ function openResModal(type) {
   openOverlay('modal-res');
 }
 function saveResMeta() {
-  D.emergency.target = parseFloat(document.getElementById('rm-meta').value) || 0;
-  save(); closeOverlay('modal-res'); renderReserva();
+  const g = _metaGravavel(_metaAlvo);
+  if (!g) return;
+  g.target = parseFloat(document.getElementById('rm-meta').value) || 0;
+  save(); closeOverlay('modal-res'); renderGoals(); renderInicio();
 }
 function saveResMove(type) {
+  const g = _metaGravavel(_metaAlvo);
+  if (!g) return;
   const val = parseFloat(document.getElementById('rm-val').value) || 0;
   const note = document.getElementById('rm-note').value.trim();
   const dateEl = document.getElementById('rm-date');
   const date = (dateEl && dateEl.value) ? dateEl.value : todayStr();
   if (!val || val <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
-  // Bloqueio de histórico legado inconsistente: nenhuma ADIÇÃO nova até corrigir
-  // manualmente o movimento problemático (evita normalizar/esconder a inconsistência).
-  if (!_reservaLegacyCheck().consistent) {
-    gdToast('Há uma movimentação antiga inconsistente na reserva. Edite ou exclua o movimento problemático para corrigir antes de adicionar novos.', { type: 'error' });
-    return;
-  }
+
+  // O bloqueio de "histórico legado inconsistente" saiu daqui. Ele existia
+  // porque o saldo morava em dois lugares que podiam divergir
+  // (`D.emergency.current` e a soma do razão) e o app se recusava a andar até
+  // alguém consertar à mão. Com o saldo DERIVADO do razão mais o saldo
+  // inicial, não há dois lugares para divergir: a migração absorveu a
+  // diferença de uma vez e o estado inconsistente deixou de ser possível.
+
+  if (!Array.isArray(g.historico)) g.historico = [];
   const move = { id: uid(), type, amount: val, note, date };
-  // Retirada não pode exceder o saldo disponível em ordem cronológica (sem movimento parcial).
+  // Retirada não pode exceder o saldo disponível em ordem cronológica.
   if (type === 'ret') {
-    const ev = _reservaEval([...D.reservaHistory, move]);
+    const inicial = g.saldoInicial != null ? g.saldoInicial : (g.saved || 0);
+    const ev = _reservaEval([...g.historico, move], inicial);
     if (ev.min < -1e-9) {
-      gdToast(`O valor da retirada é maior que o saldo disponível da reserva. Disponível: ${R(Math.max(0, ev.before[move.id]))}.`, { type: 'error' });
+      gdToast(`O valor da retirada é maior que o saldo disponível. Disponível: ${R(Math.max(0, ev.before[move.id]))}.`, { type: 'error' });
       return; // formulário permanece aberto; nenhum dado é alterado
     }
   }
-  D.reservaHistory.push(move);
-  D.emergency.current = _reservaSaldo(D.reservaHistory); // fonte única
-  save(); renderReserva(); renderInicio();
+  g.historico.push(move);
+  save(); renderGoals(); renderInicio();
   if (type === 'ret') {
     window._resRetData = { amount: val, note, date };
     document.getElementById('res-modal-title').textContent = 'Registrar como gasto?';
@@ -2675,8 +2820,10 @@ function openExpenseFromReserva() {
   }
 }
 function editResHist(id) {
-  const h = D.reservaHistory.find(e => e.id === id);
+  const g = _metaDoMovimento(id);
+  const h = g ? (g.historico || []).find(e => e.id === id) : null;
   if (!h) return;
+  _metaAlvo = g.id;
   const titles = { dep: 'Editar Aporte', ret: 'Editar Retirada' };
   document.getElementById('res-modal-title').textContent = titles[h.type];
   document.getElementById('res-modal-body').innerHTML = `
@@ -2685,27 +2832,29 @@ function editResHist(id) {
     <div class="fg"><label class="fl">Data</label>
       <input class="fi" type="date" id="rm-date" value="${h.date}" max="${todayStr()}"></div>
     <div class="fg"><label class="fl">Observação (opcional)</label>
-      <input class="fi" type="text" id="rm-note" value="${h.note || ''}"></div>
+      <input class="fi" type="text" id="rm-note" value="${escHtml(h.note || '')}"></div>
     <button class="btn btn-primary" onclick="updateResHist('${h.id}')">Salvar</button>`;
   openOverlay('modal-res');
 }
 function updateResHist(id) {
+  const g = _metaDoMovimento(id);
+  if (!g) return;
   const val = parseFloat(document.getElementById('rm-val').value) || 0;
   const note = document.getElementById('rm-note').value.trim();
   const dateEl = document.getElementById('rm-date');
   const date = (dateEl && dateEl.value) ? dateEl.value : todayStr();
   if (!val || val <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
-  const idx = D.reservaHistory.findIndex(h => h.id === id);
+  const idx = (g.historico || []).findIndex(h => h.id === id);
   if (idx === -1) return;
-  // Simula o histórico com a alteração e bloqueia se ficar negativo em algum ponto.
-  const proposed = D.reservaHistory.map((h, i) => i === idx ? { ...h, amount: val, note, date } : h);
-  if (!_reservaHistoryValid(proposed)) {
-    gdToast('Esta alteração deixaria o saldo da reserva negativo em algum ponto do histórico.', { type: 'error' });
+  // Simula o razão com a alteração e bloqueia se ficar negativo em algum ponto.
+  const inicial = g.saldoInicial != null ? g.saldoInicial : (g.saved || 0);
+  const proposed = g.historico.map((h, i) => i === idx ? { ...h, amount: val, note, date } : h);
+  if (!_reservaHistoryValid(proposed, inicial)) {
+    gdToast('Esta alteração deixaria o saldo negativo em algum ponto do histórico.', { type: 'error' });
     return; // formulário permanece aberto; nenhum dado é alterado
   }
-  D.reservaHistory = proposed;
-  D.emergency.current = _reservaSaldo(D.reservaHistory); // fonte única
-  save(); closeOverlay('modal-res'); renderReserva(); renderInicio();
+  g.historico = proposed;
+  save(); closeOverlay('modal-res'); renderGoals(); renderInicio();
 }
 // ══════════════════════════════════════════
 // WEEKLY GOAL
@@ -2949,12 +3098,12 @@ function buildMonthSummary(off) {
     if (incChange!==null && incChange<-20 && pctPassed>40)
       parts.push(`Receita <b>${Math.abs(incChange)}%</b> abaixo do mesmo ponto do mês passado.`);
     const urgentGoal=(D.goals||[]).find(g=>{
-      if(g.saved>=g.target) return false;
+      if(_metaSaldo(g)>=g.target) return false;
       const days=Math.round((parseDate(g.deadline)-now)/(1000*60*60*24));
       return days>=0&&days<=60;
     });
     if(urgentGoal){
-      const left=Math.max(0,urgentGoal.target-urgentGoal.saved);
+      const left=Math.max(0,urgentGoal.target-_metaSaldo(urgentGoal));
       const days=Math.round((parseDate(urgentGoal.deadline)-now)/(1000*60*60*24));
       if(left>0) parts.push(`Meta <b>${urgentGoal.name}</b> em ${days} dias — faltam <b>${R(left)}</b>.`);
     }
@@ -3217,116 +3366,221 @@ function renderInsights(off) {
 // ══════════════════════════════════════════
 // GOALS (METAS)
 // ══════════════════════════════════════════
+// A tela única de dinheiro guardado.
+//
+// A reserva de emergência é a primeira meta e usa EXATAMENTE o mesmo cartão que
+// as outras. Isso é o ponto: enquanto ela tivesse um enfeite só dela — o anel
+// que existia na tela antiga —, continuaria sendo outra coisa na cabeça de quem
+// olha, e a fusão seria só de arquivo.
+//
+// O que a reserva tem de diferente é o que ela É: não tem prazo, não se exclui
+// e não se renomeia. Nada disso pede desenho próprio.
+var _metasAbertas = new Set();
+
+function _metaHistHtml(g, saldo) {
+  const hist = (g.historico || []);
+  if (!hist.length) return '';
+  const aberto = _metasAbertas.has(g.id);
+  const cron = _reservaChrono(hist).reverse();          // mais recente primeiro
+  const mostra = aberto ? cron : cron.slice(0, 3);
+  const linhas = mostra.map(h => {
+    const dep = h.type === 'dep';
+    const sub = fmtShort(h.date) + (h.note ? ` · ${escHtml(h.note)}` : '');
+    return `<div class="res-hist-item av-item">
+      <div class="res-hist-info">
+        <div class="res-hist-lbl">${dep ? 'Aporte' : 'Retirada'}</div>
+        <div class="res-hist-date">${sub}</div>
+      </div>
+      <span class="res-hist-amt" style="color:${dep ? 'var(--gn)' : 'var(--rd)'}">${dep ? '+' : '−'}${R(h.amount)}</span>
+      <button class="res-hist-kebab" onclick="openResMenu('${h.id}')" aria-label="Mais ações">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+      </button>
+    </div>`;
+  }).join('');
+  const sobra = cron.length - mostra.length;
+  const maisBtn = (sobra > 0 || aberto)
+    ? `<button class="meta-hist-mais" onclick="toggleMetaHist('${g.id}')">${
+        aberto ? 'Mostrar menos' : `Ver todas as ${cron.length} movimentações`}</button>`
+    : '';
+  return `<div class="meta-hist">${linhas}${maisBtn}</div>`;
+}
+
+function toggleMetaHist(id) {
+  if (_metasAbertas.has(id)) _metasAbertas.delete(id); else _metasAbertas.add(id);
+  renderGoals();
+}
+
 function renderGoals() {
   const el = document.getElementById('goals-list');
   if (!el) return;
-  if (!D.goals || !D.goals.length) {
+  const metas = _metasTodas();
+  if (!metas.length) {
     el.innerHTML = '<div class="card"><div class="empty-state">Nenhuma meta ainda</div></div>';
     return;
   }
   const today = new Date(); today.setHours(0,0,0,0);
-  el.innerHTML = D.goals.map(g => {
-    const pct = g.target > 0 ? Math.min(100, (g.saved / g.target) * 100) : 0;
-    const left = Math.max(0, g.target - g.saved);
-    const dl = parseDate(g.deadline);
-    const daysLeft = Math.round((dl - today) / (1000*60*60*24));
-    const done = g.saved >= g.target;
-    const statusTxt = done ? 'Meta atingida!'
-      : daysLeft < 0 ? 'Prazo encerrado'
-      : daysLeft === 0 ? 'Hoje é o prazo!'
-      : `${daysLeft} dia${daysLeft !== 1 ? 's' : ''} restantes`;
-    const statusClass = done ? 'goal-done-txt' : daysLeft >= 0 && daysLeft <= 7 ? 'goal-urgent-txt' : '';
-    const cardClass = done ? ' goal-done' : (!done && daysLeft >= 0 && daysLeft <= 7) ? ' goal-urgent' : '';
+
+  el.innerHTML = metas.map(g => {
+    const reserva = g.id === META_RESERVA_ID;
+    const saldo  = _metaSaldo(g);
+    const alvo   = g.target || 0;
+    const temAlvo = alvo > 0;
+    const pct    = temAlvo ? Math.min(100, (saldo / alvo) * 100) : 0;
+    const falta  = Math.max(0, alvo - saldo);
+    const done   = temAlvo && saldo >= alvo;
+
+    // Prazo: a reserva não tem, e não deve fingir que tem.
+    let statusTxt = '', statusClass = '', cardClass = '';
+    if (reserva) {
+      statusTxt = temAlvo ? (done ? 'Meta atingida' : `${Math.round(pct)}% da meta`) : 'Sem meta definida';
+      statusClass = done ? 'goal-done-txt' : '';
+      cardClass = done ? ' goal-done' : '';
+    } else {
+      const dl = parseDate(g.deadline);
+      const daysLeft = Math.round((dl - today) / (1000*60*60*24));
+      statusTxt = done ? 'Meta atingida!'
+        : !g.deadline ? (temAlvo ? `${Math.round(pct)}% da meta` : 'Sem valor-alvo')
+        : daysLeft < 0 ? 'Prazo encerrado'
+        : daysLeft === 0 ? 'Hoje é o prazo!'
+        : `${daysLeft} dia${daysLeft !== 1 ? 's' : ''} restantes`;
+      statusClass = done ? 'goal-done-txt' : (g.deadline && daysLeft >= 0 && daysLeft <= 7) ? 'goal-urgent-txt' : '';
+      cardClass = done ? ' goal-done' : (!done && g.deadline && daysLeft >= 0 && daysLeft <= 7) ? ' goal-urgent' : '';
+    }
+
     const initial = (g.name || '?').charAt(0).toUpperCase();
     const iconHtml = g.emoji
       ? `<span class="goal-emoji">${g.emoji}</span>`
       : `<span class="goal-initial">${initial}</span>`;
+    const subLinha = reserva
+      ? statusTxt
+      : `${g.deadline ? fmtShort(g.deadline) + ' · ' : ''}<span class="${statusClass}">${statusTxt}</span>`;
+
     return `
-      <div class="goal-card${cardClass}">
+      <div class="goal-card${cardClass}${reserva ? ' goal-card-sistema' : ''}" data-meta="${g.id}">
         <div class="goal-header">
           ${iconHtml}
           <div class="goal-info">
-            <div class="goal-name">${g.name}</div>
-            <div class="goal-meta">${fmtShort(g.deadline)} · <span class="${statusClass}">${statusTxt}</span></div>
+            <div class="goal-name">${escHtml(g.name || '')}</div>
+            <div class="goal-meta">${subLinha}</div>
           </div>
           <div class="goal-btns">
             <button class="icon-btn" onclick="openGoalModal('${g.id}')" title="Editar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-            <button class="icon-btn icon-btn-del" onclick="deleteGoal('${g.id}')" title="Excluir"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>
+            ${reserva ? '' : `<button class="icon-btn icon-btn-del" onclick="deleteGoal('${g.id}')" title="Excluir"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></button>`}
           </div>
         </div>
         <div class="goal-bar-wrap av-progress av-progress--md">
           <div class="goal-bar-fill${done?' goal-bar-done':''} av-progress-fill${done?' av-progress-fill--success':' av-progress-fill--brand'}" style="width:${pct}%"></div>
         </div>
         <div class="goal-footer">
-          <span class="goal-pct-txt">${Math.round(pct)}%</span>
-          <span class="goal-saved-txt">${R(g.saved)} <span class="goal-footer-of">de</span> ${R(g.target)}</span>
-          <span class="goal-left-txt">${done ? '' : 'Faltam '+R(left)}</span>
+          <span class="goal-pct-txt">${temAlvo ? Math.round(pct) + '%' : '—'}</span>
+          <span class="goal-saved-txt">${R(saldo)}${temAlvo ? ` <span class="goal-footer-of">de</span> ${R(alvo)}` : ' guardados'}</span>
+          <span class="goal-left-txt">${done || !temAlvo ? '' : 'Faltam '+R(falta)}</span>
         </div>
-        ${!done ? `<button class="btn btn-secondary goal-add-btn" onclick="openAddToGoal('${g.id}')">+ Adicionar valor</button>` : ''}
+        <div class="meta-acoes">
+          <button class="btn btn-primary meta-acao" onclick="openResModal('dep','${g.id}')">Guardar</button>
+          <button class="btn btn-secondary meta-acao" onclick="openResModal('ret','${g.id}')"${saldo > 0 ? '' : ' disabled'}>Retirar</button>
+        </div>
+        ${_metaHistHtml(g, saldo)}
       </div>`;
   }).join('');
 }
 
 function openGoalModal(id) {
-  const g = id ? D.goals.find(g => g.id === id) : null;
-  document.getElementById('goal-modal-title').textContent = g ? 'Editar Meta' : 'Nova Meta';
+  const g = id ? _metasTodas().find(x => x.id === id) : null;
+  const reserva = !!g && g.id === META_RESERVA_ID;
+  document.getElementById('goal-modal-title').textContent =
+    reserva ? 'Reserva de emergência' : (g ? 'Editar Meta' : 'Nova Meta');
   document.getElementById('goal-edit-id').value = id || '';
   document.getElementById('goal-emoji').value = g?.emoji || '';
   document.getElementById('goal-name').value = g?.name || '';
   document.getElementById('goal-target').value = g?.target || '';
-  document.getElementById('goal-saved-inp').value = g?.saved || '';
-  document.getElementById('goal-deadline').value = g?.deadline || '';
+  // "Já guardei" é o SALDO INICIAL — o que existia antes de o razão começar.
+  // Depois que há movimentos, mexer nele é reescrever o passado sem registro,
+  // então o campo se fecha e o caminho passa a ser Guardar/Retirar.
+  const temRazao = !!(g && (g.historico || []).length);
+  const savedInp = document.getElementById('goal-saved-inp');
+  savedInp.value = g ? (g.saldoInicial != null ? g.saldoInicial : (g.saved || 0)) : '';
+  savedInp.disabled = temRazao;
+  const savedWrap = savedInp.closest('.fg');
+  if (savedWrap) {
+    savedWrap.style.display = temRazao ? 'none' : '';
+    // O rótulo era "Já guardei ($)" numa tela em que esse número ERA o saldo.
+    // Agora ele é só o ponto de partida.
+    const lbl = savedWrap.querySelector('.fl');
+    if (lbl) lbl.textContent = 'Já tinha guardado antes (opcional)';
+  }
+  // A reserva não tem prazo, e não deve pedir um.
+  const dlInp = document.getElementById('goal-deadline');
+  dlInp.value = g?.deadline || '';
+  const dlWrap = dlInp.closest('.fg');
+  if (dlWrap) dlWrap.style.display = reserva ? 'none' : '';
+  // Nome e emoji da reserva são do sistema.
+  const nomeInp = document.getElementById('goal-name');
+  const emojiInp = document.getElementById('goal-emoji');
+  nomeInp.disabled = reserva;
+  emojiInp.disabled = reserva;
   document.getElementById('goal-note').value = g?.note || '';
   openOverlay('modal-goal');
 }
 
 function saveGoal() {
   const id = document.getElementById('goal-edit-id').value;
+  const reserva = id === META_RESERVA_ID;
   const name = document.getElementById('goal-name').value.trim();
   const emoji = document.getElementById('goal-emoji').value.trim() || '🎯';
   const target = parseFloat(document.getElementById('goal-target').value) || 0;
-  const saved = parseFloat(document.getElementById('goal-saved-inp').value) || 0;
+  const inicial = parseFloat(document.getElementById('goal-saved-inp').value) || 0;
   const deadline = document.getElementById('goal-deadline').value;
   const note = document.getElementById('goal-note').value.trim();
-  if (!name || !target || !deadline) { gdToast('Preencha nome, valor e prazo.', { type: 'error' }); return; }
+
+  // A reserva não pede nome nem prazo: os dois são do sistema.
+  if (reserva) {
+    if (!target) { gdToast('Informe o valor-alvo da reserva.', { type: 'error' }); return; }
+  } else if (!name || !target || !deadline) {
+    gdToast('Preencha nome, valor e prazo.', { type: 'error' }); return;
+  }
+
   if (id) {
-    const idx = D.goals.findIndex(g => g.id === id);
-    if (idx !== -1) D.goals[idx] = { ...D.goals[idx], name, emoji, target, saved, deadline, note };
+    const g = _metaGravavel(id);
+    if (g) {
+      g.target = target;
+      g.note = note;
+      if (!reserva) { g.name = name; g.emoji = emoji; g.deadline = deadline; }
+      // Saldo inicial só é editável enquanto não há razão (ver openGoalModal).
+      if (!(g.historico || []).length) g.saldoInicial = inicial;
+    }
   } else {
-    D.goals.push({ id: uid(), name, emoji, target, saved, deadline, note, lastNotif: '' });
+    D.goals.push({ id: uid(), name, emoji, target, deadline, note,
+                   saldoInicial: inicial, historico: [], lastNotif: '' });
     maybePromptNotif();
   }
-  save(); closeOverlay('modal-goal'); renderGoals();
+  save(); closeOverlay('modal-goal'); renderGoals(); renderInicio();
 }
 
 function deleteGoal(id) {
+  // A reserva de emergência é do sistema: some da tela como cartão, não como
+  // conceito. Sem esta guarda, excluí-la levaria junto o razão de aportes.
+  if (id === META_RESERVA_ID) {
+    gdToast('A reserva de emergência não pode ser excluída.', { type: 'error' });
+    return;
+  }
+  const g = _metasTodas().find(x => x.id === id);
+  const saldo = g ? _metaSaldo(g) : 0;
   gdConfirm({
     title: 'Excluir meta',
-    msg: 'Deseja excluir esta meta permanentemente?',
+    msg: saldo > 0
+      ? `Esta meta tem ${R(saldo)} guardados. Excluí-la apaga o histórico de aportes — o dinheiro volta a contar como disponível. Deseja continuar?`
+      : 'Deseja excluir esta meta permanentemente?',
     confirmText: 'Excluir',
     variant: 'danger',
-    onConfirm: () => { D.goals = D.goals.filter(g => g.id !== id); save(); renderGoals(); },
+    onConfirm: () => { D.goals = D.goals.filter(g => g.id !== id); save(); renderGoals(); renderInicio(); },
   });
 }
 
-function openAddToGoal(id) {
-  const g = D.goals.find(g => g.id === id);
-  if (!g) return;
-  document.getElementById('goal-dep-title').textContent = g.emoji ? `${g.emoji} ${g.name}` : g.name;
-  document.getElementById('goal-dep-id').value = id;
-  document.getElementById('goal-dep-val').value = '';
-  openOverlay('modal-goal-dep');
-}
-
-function saveGoalDep() {
-  const id = document.getElementById('goal-dep-id').value;
-  const val = parseFloat(document.getElementById('goal-dep-val').value) || 0;
-  if (!val || val <= 0) { gdToast('Informe um valor válido.', { type: 'error' }); return; }
-  const g = D.goals.find(g => g.id === id);
-  if (!g) return;
-  g.saved = (g.saved || 0) + val;
-  save(); closeOverlay('modal-goal-dep'); renderGoals();
-}
+// "Adicionar valor" virou "Guardar", e passou a mover dinheiro de verdade:
+// o mesmo caminho da reserva, com data, nota, histórico e saída do caixa.
+// O nome antigo continua respondendo porque o tour e telas antigas o chamam.
+function openAddToGoal(id) { openResModal('dep', id); }
 
 // ── Notificações ──
 function maybePromptNotif() {
@@ -3342,13 +3596,13 @@ function checkGoalNotifications() {
   const today = new Date(); today.setHours(0,0,0,0);
   let changed = false;
   D.goals.forEach(g => {
-    if (g.saved >= g.target || g.lastNotif === todayStr()) return;
+    if (_metaSaldo(g) >= g.target || g.lastNotif === todayStr()) return;
     const dl = parseDate(g.deadline);
     const daysLeft = Math.round((dl - today) / (1000*60*60*24));
     if (daysLeft < 0 || daysLeft > 30) return;
     const body = daysLeft === 0
-      ? `Hoje é o prazo! Faltam ${R(Math.max(0, g.target - g.saved))}`
-      : `Faltam ${daysLeft} dia${daysLeft !== 1 ? 's' : ''} — ainda precisa de ${R(Math.max(0, g.target - g.saved))}`;
+      ? `Hoje é o prazo! Faltam ${R(Math.max(0, g.target - _metaSaldo(g)))}`
+      : `Faltam ${daysLeft} dia${daysLeft !== 1 ? 's' : ''} — ainda precisa de ${R(Math.max(0, g.target - _metaSaldo(g)))}`;
     new Notification(`${g.emoji||'🎯'} ${g.name}`, { body, icon: '/GD-CASH/icon-192.png' });
     g.lastNotif = todayStr();
     changed = true;
@@ -3357,23 +3611,24 @@ function checkGoalNotifications() {
 }
 
 function deleteResHist(id) {
-  if (!D.reservaHistory.find(h => h.id === id)) return;
-  // Simula o histórico sem o movimento. Excluir retirada é sempre seguro;
-  // excluir aporte que sustenta retiradas posteriores é bloqueado.
-  const proposed = D.reservaHistory.filter(h => h.id !== id);
-  if (!_reservaHistoryValid(proposed)) {
+  const g = _metaDoMovimento(id);
+  if (!g) return;
+  // Simula o razão sem o movimento. Excluir retirada é sempre seguro; excluir
+  // aporte que sustenta retiradas posteriores é bloqueado.
+  const inicial = g.saldoInicial != null ? g.saldoInicial : (g.saved || 0);
+  const proposed = (g.historico || []).filter(h => h.id !== id);
+  if (!_reservaHistoryValid(proposed, inicial)) {
     gdToast('Não é possível excluir este aporte: há retiradas posteriores que dependem dele.', { type: 'error' });
     return; // nenhum dado é alterado
   }
   gdConfirm({
     title: 'Excluir movimentação',
-    msg: 'Deseja excluir esta movimentação da reserva?',
+    msg: 'Deseja excluir esta movimentação?',
     confirmText: 'Excluir',
     variant: 'danger',
     onConfirm: () => {
-      D.reservaHistory = proposed;
-      D.emergency.current = _reservaSaldo(D.reservaHistory); // fonte única
-      save(); renderReserva(); renderInicio();
+      g.historico = proposed;
+      save(); renderGoals(); renderInicio();
     },
   });
 }
@@ -5658,13 +5913,16 @@ new MutationObserver((mutations) => {
 // ══════════════════════════════════════════
 // Abas reais da navegação inferior e telas internas acessadas por "Mais".
 const MAIN_TABS = ['inicio','semana','mes','mais'];
-const INTERNAL_TABS = ['pendencias','fixos','reserva','patrimonio','dividas','conversor','pesquisa','ajustes','metas','lembretes'];
+const INTERNAL_TABS = ['pendencias','fixos','patrimonio','dividas','conversor','pesquisa','ajustes','metas','lembretes'];
 var _currentMainTab = 'inicio';        // última aba principal ativa (p/ engrenagem)
 var _navOrigin      = 'mais';           // origem do Voltar de telas internas
 
 function switchTab(tab, origin) {
   // Compat: a antiga aba "Parcelamentos" agora é a central de Dívidas.
   if (tab === 'parcelamentos') tab = 'dividas';
+  // Compat: a Reserva de Emergência virou a primeira meta. Links antigos,
+  // o tour e atalhos guardados continuam funcionando — chegam em Metas.
+  if (tab === 'reserva') tab = 'metas';
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   const page = document.getElementById('page-'+tab);
@@ -5689,7 +5947,6 @@ function switchTab(tab, origin) {
   if(tab==='semana')    { renderSemana(); renderDayAccordion(); }
   if(tab==='mes')       renderMes();
   if(tab==='mais')      renderMais();
-  if(tab==='reserva')   renderReserva();
   if(tab==='metas')     renderGoals();
   if(tab==='fixos')      renderFixos();
   if(tab==='conversor')  loadConversorRates();
@@ -5939,16 +6196,25 @@ function buildDemoData() {
       { id:'fx2', name:'Internet',    amount:89.90, category:'Serviços',  dueDay:10 },
       { id:'fx3', name:'Seguro moto', amount:120,   category:'Serviços',  dueDay:15 },
     ],
+    // Formato novo: a reserva é a primeira meta, e toda meta tem razão.
+    // `emergency`/`reservaHistory` continuam aqui só como resquício legível por
+    // versões antigas do app; nada os lê mais.
     emergency: { target:10000, current:3200 },
-    reservaHistory: [
-      { id:'rh1', type:'dep', amount:1500, note:'Reserva mensal', date: prev[0] },
-      { id:'rh2', type:'dep', amount:1200, note:'Salário extra',  date: prev[2] },
-      { id:'rh3', type:'dep', amount:800,  note:'Freela',          date: w[0]   },
-      { id:'rh4', type:'ret', amount:300,  note:'Compras urgentes', date: w[1]  },
-    ],
+    reservaHistory: [],
     goals: [
-      { id:'gd1', name:'iPhone 16 Pro', emoji:'📱', target:8000, saved:2400, deadline:'2026-12-31', note:'', lastNotif:'' },
-      { id:'gd2', name:'Viagem praia',   emoji:'🏖️', target:3000, saved:1200, deadline:'2026-10-15', note:'', lastNotif:'' },
+      { id: META_RESERVA_ID, sistema:true, name:'Reserva de emergência', emoji:'🛡️',
+        target:10000, deadline:'', note:'', lastNotif:'', saldoInicial:0,
+        historico: [
+          { id:'rh1', type:'dep', amount:1500, note:'Reserva mensal',   date: prev[0] },
+          { id:'rh2', type:'dep', amount:1200, note:'Salário extra',    date: prev[2] },
+          { id:'rh3', type:'dep', amount:800,  note:'Freela',           date: w[0]   },
+          { id:'rh4', type:'ret', amount:300,  note:'Compras urgentes', date: w[1]   },
+        ] },
+      { id:'gd1', name:'iPhone 16 Pro', emoji:'📱', target:8000, deadline:'2026-12-31',
+        note:'', lastNotif:'', saldoInicial:2200,
+        historico: [ { id:'gh1', type:'dep', amount:200, note:'Sobra do mês', date: w[1] } ] },
+      { id:'gd2', name:'Viagem praia',  emoji:'🏖️', target:3000, deadline:'2026-10-15',
+        note:'', lastNotif:'', saldoInicial:1200, historico: [] },
     ],
     weeklyGoal: 1500,
     catBudgets: { 'Gasolina': 400, 'Alimentação': 300 },
@@ -6023,8 +6289,7 @@ const TOUR_STEPS = [
   { tab:'semana',  anchor:'days-accordion',  title:'Dias da semana',          text:'Veja e edite os lançamentos de cada dia. Toque em um dia para expandir. Use o + para adicionar receita ou gasto.' },
   { tab:'mes',     anchor:'big-donut-card', title:'Gastos por categoria',    text:'No mês você vê exatamente onde o dinheiro foi — o gráfico de rosca mostra cada categoria.' },
   { tab:'mes',     anchor:'trends-chart',   title:'Histórico 6 meses',       text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês.' },
-  { tab:'reserva', anchor:'res-ring-wrap',  title:'Reserva de emergência',   text:'Deposite aos poucos e acompanhe quanto falta para a sua meta de reserva.' },
-  { tab:'metas',   anchor:'goals-list',      title:'Suas metas',              text:'Defina metas com prazo e valor — iPhone, viagem, o que for. O app acompanha o progresso.', last:true },
+  { tab:'metas',   anchor:'goals-list',      title:'Metas e reserva',         text:'A reserva de emergência é a primeira meta. Guarde e retire com data e histórico — e o que você guarda sai do dinheiro disponível do mês.', last:true },
 ];
 let tourStep = 0;
 
@@ -7017,7 +7282,7 @@ function emailMonthReport() {
 // SWIPE ENTRE ABAS
 // ══════════════════════════════════════════
 function initSwipe() {
-  const TABS = ['inicio','semana','mes','reserva'];
+  const TABS = ['inicio','semana','mes'];
   let sx = 0, sy = 0, blocked = false;
   const main = document.querySelector('main');
   if (!main) return;
@@ -7250,7 +7515,8 @@ function renderInicioCards() {
   if (bcME) bcME.textContent = R(monthExp);
 
   // Carousel subtitles
-  const reservePct = D.emergency.target > 0 ? Math.round(D.emergency.current / D.emergency.target * 100) : 0;
+  const _carResv = _metaReserva(), _carAlvo = _carResv ? (_carResv.target || 0) : 0;
+  const reservePct = _carAlvo > 0 ? Math.round(_metaSaldo(_carResv) / _carAlvo * 100) : 0;
   const rSub = document.getElementById('car-reserve-sub');
   if (rSub) rSub.textContent = reservePct + '% da meta · Ver tudo →';
 
@@ -7347,7 +7613,7 @@ function renderHomeNew() {
   if (goalSection && goalEl) {
     if (activeGoals.length > 0) {
       const g = activeGoals[0];
-      const saved   = g.saved   || 0;
+      const saved   = _metaSaldo(g);
       const target  = g.target  || 0;
       const pct     = target > 0 ? Math.min(100, Math.round(saved / target * 100)) : 0;
       const remains = Math.max(0, target - saved);
@@ -7384,8 +7650,9 @@ function renderHomeNew() {
   const resvSection = document.getElementById('home-resv-section');
   const resvCard = document.getElementById('home-resv-card');
   if (resvSection && resvCard) {
-    const saldo = (D.emergency && D.emergency.current) || 0;
-    const meta  = (D.emergency && D.emergency.target)  || 0;
+    const _rMeta = _metaReserva();
+    const saldo = _metaSaldo(_rMeta);
+    const meta  = _rMeta ? (_rMeta.target || 0) : 0;
     if (saldo > 0 || meta > 0) {
       resvSection.style.display = '';
       const pct = meta > 0 ? Math.min(100, Math.round(saldo / meta * 100)) : 0;

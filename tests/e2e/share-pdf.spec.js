@@ -14,6 +14,11 @@ const AGORA = new Date(2026, 7, 20, 12, 0, 0);   // 20/08/2026 — agosto é o m
 const LIMPO = {
   incomeItems: [], dailyIncome: {}, expenses: [], debtPayments: [], fixedPayments: [],
   debts: [], fixedExpenses: [], pendencias: [], vehicles: [], patrimonios: [], reservaHistory: [],
+  // `goals` faltava aqui, e a fixture mentia: os dados de demo continuavam
+  // valendo. Passava por acaso, porque dinheiro de meta era um número inerte
+  // que não chegava a lugar nenhum. Agora meta guarda dinheiro de verdade e
+  // aparece no relatório — uma fixture "limpa" tem de limpar isto também.
+  goals: [], emergency: { current: 0, target: 0 },
   platforms: [{ id: 'plat-1', name: 'Plataforma Teste', color: '#888' }],
 };
 

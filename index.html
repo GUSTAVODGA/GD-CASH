@@ -292,9 +292,9 @@
       <div class="hc-sec-hd">
         <span class="hc-tri-sm"></span>
         <span class="hc-sec-title">Reserva de emergência</span>
-        <button class="hc-sec-link" onclick="switchTab('reserva','inicio')">Ver reserva</button>
+        <button class="hc-sec-link" onclick="switchTab('metas','inicio')">Ver reserva</button>
       </div>
-      <div class="hc-resv-card" id="home-resv-card" onclick="switchTab('reserva','inicio')" role="button" tabindex="0"></div>
+      <div class="hc-resv-card" id="home-resv-card" onclick="switchTab('metas','inicio')" role="button" tabindex="0"></div>
     </div>
 
     <!-- ── 7. META EM CURSO (mantida, prioridade menor) ── -->
@@ -373,54 +373,12 @@
 </section>
 
 <!-- ════ RESERVA ════ -->
-<section class="page" id="page-reserva">
-  <div class="page-header-row">
-    <div class="phr-left">
-      <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
-      <span class="page-header-title">Reserva de Emergência</span>
-    </div>
-    <button class="tab-help-btn" onclick="showTabHelp('reserva')">?</button>
-  </div>
-  <div class="card av-card res-hero">
-    <div class="res-hero-row">
-      <div class="res-ring-wrap res-ring-mini">
-        <svg viewBox="0 0 160 160">
-          <defs>
-            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#2563EB"/>
-              <stop offset="100%" stop-color="#5B8AF5"/>
-            </linearGradient>
-          </defs>
-          <circle class="ring-bg" cx="80" cy="80" r="68"/>
-          <circle class="ring-fill" id="res-ring-fill" cx="80" cy="80" r="68"/>
-        </svg>
-        <div class="res-ring-center"><div class="res-ring-pct" id="res-pct">0%</div></div>
-      </div>
-      <div class="res-hero-head">
-        <div class="res-lbl">Saldo da reserva</div>
-        <div class="res-sub" id="res-pct-line">0% da meta</div>
-      </div>
-    </div>
-    <div class="res-saldo" id="res-total">$ 0,00</div>
-    <div class="res-meta-row" id="res-meta">Meta: $ 0,00</div>
-  </div>
-
-  <div class="res-actions">
-    <button class="btn btn-primary res-add" onclick="openResModal('dep')">+ Adicionar</button>
-    <button class="btn btn-secondary res-withdraw" onclick="openResModal('ret')">Retirar</button>
-  </div>
-
-  <div class="sec-title av-sec-title">Histórico</div>
-  <div class="card av-card"><div id="res-history"></div></div>
-  <div class="fixed-bottom-spacer"></div>
-</section>
-
 <!-- ════ METAS ════ -->
 <section class="page" id="page-metas">
   <div class="page-header-row">
     <div class="phr-left">
       <button class="page-back-btn" onclick="navBack()" aria-label="Voltar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg></button>
-      <span class="page-header-title">Minhas Metas</span>
+      <span class="page-header-title">Metas e reserva</span>
     </div>
     <button class="tab-help-btn" onclick="showTabHelp('metas')">?</button>
   </div>
@@ -1390,16 +1348,6 @@
     <div class="fg"><label class="fl">Prazo</label><input class="fi" type="date" id="goal-deadline"></div>
     <div class="fg"><label class="fl">Observação (opcional)</label><input class="fi" type="text" id="goal-note" placeholder="..."></div>
     <button class="btn btn-primary" onclick="saveGoal()">Salvar</button>
-  </div>
-</div>
-
-<div class="overlay" id="modal-goal-dep">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title" id="goal-dep-title">Adicionar à meta</div>
-    <input type="hidden" id="goal-dep-id">
-    <div class="fg"><label class="fl">Valor ($)</label><input class="fi" type="number" id="goal-dep-val" min="0" step="0.01" placeholder="0,00"></div>
-    <button class="btn btn-primary" onclick="saveGoalDep()">Confirmar</button>
   </div>
 </div>
 

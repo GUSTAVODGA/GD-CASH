@@ -26,7 +26,11 @@ const VAZIO = {
   emergency: { current: 0, target: 0 },
 };
 
-const TELAS_INTERNAS = ['pendencias', 'lembretes', 'fixos', 'reserva', 'metas',
+// 'reserva' saiu da lista porque deixou de ser uma tela: a reserva de
+// emergência virou a primeira meta e mora dentro de 'metas'. Não é uma porta
+// perdida — é uma porta a menos para a mesma sala. O teste logo abaixo garante
+// que a reserva continua alcançável.
+const TELAS_INTERNAS = ['pendencias', 'lembretes', 'fixos', 'metas',
                         'patrimonio', 'dividas', 'pesquisa', 'ajustes'];
 
 const abrir = async (page, dados) => {
@@ -74,6 +78,22 @@ test('a porta de Metas não depende de já existir uma meta', async ({ page }) =
   await page.evaluate(() => { D.goals = [{ id: 'g1', name: 'Viagem', target: 8000, saved: 1000 }]; });
   const comMeta = await caminhosAte(page, ['metas']);
   expect(comMeta.metas.length).toBeGreaterThanOrEqual(semMeta.metas.length);
+});
+
+test('a RESERVA continua alcançável depois de deixar de ser tela', async ({ page }) => {
+  // Ela saiu de `TELAS_INTERNAS` porque virou a primeira meta. Sair da lista
+  // não pode virar desculpa: o caminho até ela tem de existir, e o endereço
+  // antigo tem de continuar levando a algum lugar.
+  await abrir(page);
+  await irParaAba(page, 'mais');
+  const porta = page.locator('.mais-item').filter({ hasText: 'Metas e reserva' });
+  await expect(porta, 'sumiu a porta para metas e reserva').toHaveCount(1);
+  await porta.click();
+  await expect(page.locator('#page-metas')).toHaveClass(/active/);
+
+  // E o endereço antigo não vira beco sem saída.
+  await page.evaluate(() => window.switchTab('reserva'));
+  await expect(page.locator('#page-metas')).toHaveClass(/active/);
 });
 
 test('LEMBRETES: a tela abre pelo menu e faz o ciclo completo', async ({ page }) => {
