@@ -1,4 +1,4 @@
-const CACHE = 'avenco-v82';
+const CACHE = 'avenco-v83';
 const ASSETS = [
   './',
   './index.html',
