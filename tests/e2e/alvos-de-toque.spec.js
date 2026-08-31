@@ -11,11 +11,12 @@
 import { test, expect } from '@playwright/test';
 import { abrirAppEmDemo } from './_helpers.js';
 
-// 'reserva' saiu: virou a primeira meta dentro de 'metas', que continua na
-// lista — e agora carrega os botões que eram da tela da reserva (Guardar,
-// Retirar, o kebab de cada movimento), medidos aqui pela primeira vez.
+// Três telas saíram da lista. 'reserva' virou a primeira meta dentro de
+// 'metas', e 'lembretes' virou pendência dentro de 'pendencias' — as duas que
+// os absorveram continuam aqui, então os botões que eram delas passaram a ser
+// medidos junto com o resto. 'conversor' foi removido do app.
 const TELAS = ['inicio', 'semana', 'mes', 'mais', 'dividas', 'patrimonio',
-               'pendencias', 'fixos', 'ajustes', 'metas', 'pesquisa', 'conversor', 'lembretes'];
+               'pendencias', 'fixos', 'ajustes', 'metas', 'pesquisa'];
 
 const MINIMO = 44;
 
@@ -36,11 +37,17 @@ for (const largura of [320, 390]) {
           const cs = getComputedStyle(el);
           if (cs.display === 'none' || cs.visibility === 'hidden' || !el.offsetHeight) return;
           const caixa = el.getBoundingClientRect();
-          // O ::before ampliador: conta como área de toque quando existe.
-          const antes = getComputedStyle(el, '::before');
-          const temAntes = antes.content && antes.content !== 'none';
-          const w = Math.max(caixa.width, temAntes ? parseFloat(antes.width) || 0 : 0);
-          const h = Math.max(caixa.height, temAntes ? parseFloat(antes.height) || 0 : 0);
+          // O pseudo-elemento ampliador conta como área de toque. Media-se
+          // ::before E ::after: a régua olhava só para ::before e reprovava
+          // botões corretos que usam ::after — o erro que o cabeçalho deste
+          // arquivo diz não querer cometer, cometido em metade dos casos.
+          const pseudo = ['::before', '::after'].map(q => {
+            const cs2 = getComputedStyle(el, q);
+            if (!cs2.content || cs2.content === 'none') return { w: 0, h: 0 };
+            return { w: parseFloat(cs2.width) || 0, h: parseFloat(cs2.height) || 0 };
+          });
+          const w = Math.max(caixa.width, ...pseudo.map(x => x.w));
+          const h = Math.max(caixa.height, ...pseudo.map(x => x.h));
           if (w < MINIMO || h < MINIMO) {
             const nome = (el.className || '').toString().trim().split(/\s+/)[0]
               || ('sem-classe:' + (el.textContent || '').trim().slice(0, 16));

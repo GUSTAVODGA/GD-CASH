@@ -71,7 +71,8 @@ function initFirebase() {
       await loadFromCloud();
       const _migResult = _migrateVehiclesToPatrimonios();
       const _migMetas = _migrateReservaParaMeta();
-      if (_migResult.ran || _migMetas.ran) save();
+      const _migLem = _migrateLembretesParaPendencias();
+      if (_migResult.ran || _migMetas.ran || _migLem.ran) save();
       if ((D.updatedAt || 0) !== _tsBeforeSync) {
         document.getElementById('curr-chip').textContent = currSym;
         renderInicio();
@@ -185,16 +186,6 @@ const TAB_HELP = {
     title: 'Gastos Fixos',
     text: 'Cadastre contas que se repetem todo mês — aluguel, internet, planos, assinaturas. Ficam separados dos gastos do dia a dia para você ter o custo fixo sempre visível.',
   },
-  conversor: {
-    icon: '💱',
-    title: 'Conversor de Moedas',
-    text: 'Converta entre Real, Dólar, Euro e Libra com cotação atualizada automaticamente. Útil para precificar serviços ou comparar preços em outras moedas.',
-  },
-  lembretes: {
-    icon: '🔔',
-    title: 'Lembretes',
-    text: 'Crie lembretes para qualquer coisa — troca de óleo, seguro, revisão, vencimentos. Ativa notificação no dia ou com antecedência. Use o botão Calendário para exportar os vencimentos dos fixos.',
-  },
   ajustes: {
     icon: '⚙️',
     title: 'Ajustes',
@@ -204,7 +195,7 @@ const TAB_HELP = {
     icon: '📋',
     iconSvg: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/></svg>',
     title: 'Pendências',
-    text: 'Registre tudo que precisa resolver — compra, documento, manutenção, conta. Defina prioridade e prazo. Ao concluir, você pode registrar como gasto real se quiser.',
+    text: 'Registre tudo que precisa resolver — compra, documento, manutenção, conta, troca de óleo, seguro. Defina prioridade e prazo. Com prazo, você pode pedir para ser avisado antes e marcar que a pendência se repete toda semana, todo mês ou todo ano. Ao concluir, você pode registrar como gasto real se quiser.',
   },
   dividas: {
     icon: '🧾',
@@ -532,25 +523,10 @@ function renderMais() {
     res:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
     pat:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="14" width="4" height="8" rx="1"/><rect x="9" y="8" width="4" height="14" rx="1"/><rect x="16" y="4" width="4" height="18" rx="1"/></svg>',
     debt: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><circle cx="7" cy="14.5" r="1"/></svg>',
-    conv: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></svg>',
     srch: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
     adj:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="8" cy="6" r="2"/><circle cx="16" cy="12" r="2"/><circle cx="10" cy="18" r="2"/></svg>',
-    lem:  '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>',
     meta: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.4"/></svg>',
   };
-
-  // Duas telas prontas que não tinham porta nenhuma. Metas só era alcançável
-  // pelo cartão da Início, que por sua vez só aparece para quem JÁ tem uma meta
-  // — a porta ficava do lado de dentro. Lembretes não era alcançável de lugar
-  // nenhum: só pelo console.
-  const lemProx = (() => {
-    const hoje = todayStr();
-    const futuros = (D.reminders || []).filter(r => r.date && r.date >= hoje)
-      .sort((a, b) => a.date.localeCompare(b.date));
-    if (!(D.reminders || []).length) return 'Nenhum lembrete';
-    if (!futuros.length) return `${D.reminders.length} lembrete(s) · nenhum à frente`;
-    return `Próximo: ${fmtShort(futuros[0].date)}`;
-  })();
 
   // Reserva e Metas eram DUAS entradas vizinhas neste menu, literalmente duas
   // portas para a mesma ideia. Agora é uma, e o subtítulo diz o que importa:
@@ -566,7 +542,6 @@ function renderMais() {
     <div class="sec-label mais-sec">Resumos</div>
     <div class="mais-group">
       ${item('pendencias', ICO.pend, 'Pendências', pendAbertas > 0 ? `${pendAbertas} em aberto` : 'Nenhuma em aberto')}
-      ${item('lembretes', ICO.lem, 'Lembretes', lemProx)}
       ${item('fixos', ICO.fix, 'Gastos Fixos', `${R(fixTotal)} / mês`)}
       ${item('metas', ICO.meta, 'Metas e reserva', metaResumo)}
       ${item('patrimonio', ICO.pat, 'Patrimônio', custoPat > 0 ? `${R(custoPat)} este mês · líquido ${R(net)}` : `Líquido ${R(net)}`)}
@@ -575,7 +550,6 @@ function renderMais() {
     <div class="sec-label mais-sec">Ferramentas</div>
     <div class="mais-group">
       ${item('pesquisa', ICO.srch, 'Pesquisar lançamentos', '')}
-      ${item('conversor', ICO.conv, 'Conversor de Moedas', '')}
     </div>
     <div class="sec-label mais-sec">Aplicativo</div>
     <div class="mais-group">
@@ -991,6 +965,7 @@ try { if (migratePatrimonioLifecycleV1()) localStorage.setItem('gdcash_v1', JSON
 // loadFromCloud faria a Início nascer sem reserva nenhuma e corrigir-se um
 // instante depois — e nenhuma tela precisaria saber ler os dois formatos.
 try { if (_migrateReservaParaMeta().ran) localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch (e) {}
+try { if (_migrateLembretesParaPendencias().ran) localStorage.setItem('gdcash_v1', JSON.stringify(D)); } catch (e) {}
 
 // ══════════════════════════════════════════
 // MODAL SYSTEM
@@ -1294,6 +1269,24 @@ function dateStr(d)    { const y=d.getFullYear(),m=String(d.getMonth()+1).padSta
 function todayStr()    { return dateStr(new Date()); }
 function parseDate(s)  { return new Date(s+'T12:00:00'); }
 function fmtShort(d)   { return parseDate(d).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); }
+// Dias inteiros entre hoje e uma data ISO.
+//
+// `parseDate` devolve MEIO-DIA local (é assim que ele se protege de fuso), e as
+// contas de prazo espalhadas pelo app comparavam isso com um "hoje" à
+// MEIA-NOITE. Toda diferença saía com meio dia sobrando, e `Math.round`
+// arredondava para cima: TODO PRAZO CONTAVA UM DIA A MAIS, e o ramo "é hoje" —
+// diferença zero — nunca acontecia. Na prática, "avisar no dia" não avisava
+// nunca, "Hoje é o prazo!" nunca aparecia, e quem pedia aviso com dois dias de
+// antecedência era avisado com três.
+//
+// Aqui os dois lados nascem do mesmo relógio, ao meio-dia, e a diferença é um
+// número inteiro de dias.
+function _diasAte(iso) {
+  if (!iso) return null;
+  const alvo = parseDate(iso);
+  if (isNaN(alvo)) return null;
+  return Math.round((alvo - parseDate(todayStr())) / 86400000);
+}
 // Data completa no padrão brasileiro dd/mm/aaaa (armazenamento continua ISO YYYY-MM-DD).
 function _fmtDataBR(d) { if(!d) return ''; const dt = parseDate(d); return isNaN(dt) ? '' : dt.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
 // Campo de data em dd/mm/aaaa (independe do locale do dispositivo). Converte de/para
@@ -2669,6 +2662,63 @@ function _migrateReservaParaMeta() {
   return { ran: criouReserva || metasComRazao > 0, criouReserva, metasComRazao };
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// LEMBRETE VIRA PENDÊNCIA
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Um lembrete é "uma coisa que preciso fazer até uma data". Uma pendência é
+// "uma coisa que preciso fazer até uma data". Eram duas telas, dois modelos,
+// duas entradas no menu e duas listas para a mesma frase.
+//
+// O que o lembrete tinha a mais — avisar com antecedência e repetir — não é
+// outra natureza, é configuração. Uma pendência que repete todo mês e avisa
+// dois dias antes É um lembrete; não precisa de tela própria para isso.
+//
+// A fusão CORRIGE um defeito de lado: o lembrete notificava e depois sumia. Ele
+// não entrava na espinha de compromissos nem na lista "o que precisa de você"
+// da Início, então a tela que responde "o que exige ação" ignorava justamente
+// os itens criados para não serem esquecidos. Como pendência, ele aparece ali
+// com todo o resto.
+//
+// O lembrete não tem valor nem prioridade. Vira pendência de prioridade média
+// e sem valor estimado — nada é inventado: o app já sabe representar pendência
+// sem valor, e a Início já sabe mostrá-la.
+function _migrateLembretesParaPendencias() {
+  const lembretes = Array.isArray(D.reminders) ? D.reminders : [];
+  if (!lembretes.length) return { ran: false, migrados: 0 };
+  if (!Array.isArray(D.pendencias)) D.pendencias = [];
+
+  // Identidade pela ORIGEM, não pelo texto: reimportar um backup antigo não
+  // pode duplicar o que já veio, e renomear a pendência depois não pode fazer
+  // o lembrete "voltar".
+  const jaVeio = new Set(D.pendencias.filter(p => p._idLembrete).map(p => p._idLembrete));
+  let migrados = 0;
+  lembretes.forEach(r => {
+    if (!r || !r.id || jaVeio.has(r.id)) return;
+    D.pendencias.push({
+      id: uid(),
+      _idLembrete: r.id,                 // marca de origem, para não duplicar
+      title: r.name || 'Lembrete',
+      category: 'pessoal',
+      priority: 'media',
+      deadline: r.date || null,
+      estimatedValue: null,
+      note: '',
+      status: 'aberta',
+      createdAt: todayStr(),
+      // O que o lembrete tinha a mais, preservado inteiro.
+      notifDaysBefore: r.notifDaysBefore != null ? r.notifDaysBefore : 2,
+      repeat: r.repeat || 'none',
+      lastNotif: r.lastNotif || '',
+    });
+    migrados++;
+  });
+
+  // `D.reminders` deixa de ser armazenamento. Fica no documento como resquício
+  // legível pelo app antigo em outra aba; nada aqui volta a escrever nele.
+  return { ran: migrados > 0, migrados };
+}
+
 // A tela da Reserva deixou de existir por conta própria: a reserva é a
 // primeira meta, e quem desenha as duas agora é `renderGoals`. O nome fica
 // porque `switchTab` e o roteador de abas o chamam.
@@ -3099,12 +3149,12 @@ function buildMonthSummary(off) {
       parts.push(`Receita <b>${Math.abs(incChange)}%</b> abaixo do mesmo ponto do mês passado.`);
     const urgentGoal=(D.goals||[]).find(g=>{
       if(_metaSaldo(g)>=g.target) return false;
-      const days=Math.round((parseDate(g.deadline)-now)/(1000*60*60*24));
-      return days>=0&&days<=60;
+      const days=_diasAte(g.deadline);
+      return days!=null&&days>=0&&days<=60;
     });
     if(urgentGoal){
       const left=Math.max(0,urgentGoal.target-_metaSaldo(urgentGoal));
-      const days=Math.round((parseDate(urgentGoal.deadline)-now)/(1000*60*60*24));
+      const days=_diasAte(urgentGoal.deadline);
       if(left>0) parts.push(`Meta <b>${urgentGoal.name}</b> em ${days} dias — faltam <b>${R(left)}</b>.`);
     }
   }
@@ -3418,7 +3468,6 @@ function renderGoals() {
     el.innerHTML = '<div class="card"><div class="empty-state">Nenhuma meta ainda</div></div>';
     return;
   }
-  const today = new Date(); today.setHours(0,0,0,0);
 
   el.innerHTML = metas.map(g => {
     const reserva = g.id === META_RESERVA_ID;
@@ -3436,8 +3485,7 @@ function renderGoals() {
       statusClass = done ? 'goal-done-txt' : '';
       cardClass = done ? ' goal-done' : '';
     } else {
-      const dl = parseDate(g.deadline);
-      const daysLeft = Math.round((dl - today) / (1000*60*60*24));
+      const daysLeft = _diasAte(g.deadline);
       statusTxt = done ? 'Meta atingida!'
         : !g.deadline ? (temAlvo ? `${Math.round(pct)}% da meta` : 'Sem valor-alvo')
         : daysLeft < 0 ? 'Prazo encerrado'
@@ -3593,13 +3641,11 @@ function maybePromptNotif() {
 function checkGoalNotifications() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   if (!D.goals || !D.goals.length) return;
-  const today = new Date(); today.setHours(0,0,0,0);
   let changed = false;
   D.goals.forEach(g => {
     if (_metaSaldo(g) >= g.target || g.lastNotif === todayStr()) return;
-    const dl = parseDate(g.deadline);
-    const daysLeft = Math.round((dl - today) / (1000*60*60*24));
-    if (daysLeft < 0 || daysLeft > 30) return;
+    const daysLeft = _diasAte(g.deadline);
+    if (daysLeft == null || daysLeft < 0 || daysLeft > 30) return;
     const body = daysLeft === 0
       ? `Hoje é o prazo! Faltam ${R(Math.max(0, g.target - _metaSaldo(g)))}`
       : `Faltam ${daysLeft} dia${daysLeft !== 1 ? 's' : ''} — ainda precisa de ${R(Math.max(0, g.target - _metaSaldo(g)))}`;
@@ -4485,12 +4531,22 @@ function _atencaoInicio() {
     i.atrasada || (i.vencimento && i.vencimento <= limite) ||
     (i.origem === 'pendencia' && !i.vencimento));
 
-  // Pendências de alta prioridade que a espinha descarta por não terem valor.
+  // Pendências que a espinha descarta por não terem valor. A espinha existe
+  // para responder "dá para pagar agora", e sem valor não há o que pagar; esta
+  // tela pergunta o que precisa de você, que é mais largo.
+  //
+  // Entram três casos, e o terceiro chegou com a fusão dos Lembretes: uma
+  // pendência com PRAZO DENTRO DO HORIZONTE aparece mesmo sem valor. Um
+  // lembrete é exatamente isso — data, sem preço —, e o defeito que ele tinha
+  // como tela própria era notificar e depois sumir: a tela que responde "o que
+  // exige ação" ignorava justamente os itens criados para não serem
+  // esquecidos.
   const jaTem = new Set(itens.filter(i => i.origem === 'pendencia').map(i => i.id));
   (D.pendencias || []).forEach(p => {
     if (p.status !== 'aberta' || jaTem.has(p.id)) return;
     const vencida = !!(p.deadline && p.deadline <= hoje);
-    if (!vencida && p.priority !== 'alta') return;
+    const noHorizonte = !!(p.deadline && p.deadline <= limite);
+    if (!vencida && !noHorizonte && p.priority !== 'alta') return;
     if ((Number(p.estimatedValue) || 0) > 0) return;   // essa a espinha já trouxe
     itens.push({
       origem: 'pendencia', id: p.id,
@@ -5913,7 +5969,7 @@ new MutationObserver((mutations) => {
 // ══════════════════════════════════════════
 // Abas reais da navegação inferior e telas internas acessadas por "Mais".
 const MAIN_TABS = ['inicio','semana','mes','mais'];
-const INTERNAL_TABS = ['pendencias','fixos','patrimonio','dividas','conversor','pesquisa','ajustes','metas','lembretes'];
+const INTERNAL_TABS = ['pendencias','fixos','patrimonio','dividas','pesquisa','ajustes','metas'];
 var _currentMainTab = 'inicio';        // última aba principal ativa (p/ engrenagem)
 var _navOrigin      = 'mais';           // origem do Voltar de telas internas
 
@@ -5923,10 +5979,21 @@ function switchTab(tab, origin) {
   // Compat: a Reserva de Emergência virou a primeira meta. Links antigos,
   // o tour e atalhos guardados continuam funcionando — chegam em Metas.
   if (tab === 'reserva') tab = 'metas';
-  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  // Compat: um lembrete é uma pendência com aviso e repetição. A tela separada
+  // não existe mais; o endereço antigo leva ao lugar onde os lembretes estão.
+  if (tab === 'lembretes') tab = 'pendencias';
+
+  // A tela é resolvida ANTES de qualquer mudança. A ordem antiga apagava
+  // `active` de todas as páginas e só então descobria que o destino não
+  // existia — e saía, deixando o app SEM NENHUMA TELA ATIVA, em branco, com a
+  // navegação inteira apagada. Um destino desconhecido tem de ser um não-fazer,
+  // não um apagar tudo. (Encontrado ao remover o conversor: qualquer atalho
+  // guardado apontando para uma tela que saiu do app derrubava a interface.)
   const page = document.getElementById('page-'+tab);
   if (!page) return;
+
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
   page.classList.add('active');
   // Rascunho do lançamento só faz sentido enquanto o usuário está fora para
   // cadastrar um bem. Ir para qualquer outra aba é sair do fluxo sem intenção
@@ -5949,10 +6016,8 @@ function switchTab(tab, origin) {
   if(tab==='mais')      renderMais();
   if(tab==='metas')     renderGoals();
   if(tab==='fixos')      renderFixos();
-  if(tab==='conversor')  loadConversorRates();
   if(tab==='pesquisa')   { if (origin !== 'patrimonio') _srchState.bem = ''; renderPesquisa(); }
   if(tab==='ajustes')    renderAjustes();
-  if(tab==='lembretes')  renderLembretes();
   if(tab==='pendencias') renderPendencias();
   if(tab==='patrimonio') renderPatrimonio();
   if(tab==='dividas') renderDividas();
@@ -5972,140 +6037,6 @@ function switchTab(tab, origin) {
   // Reset scroll AFTER all DOM mutations so iOS Safari doesn't re-adjust it
   window.scrollTo(0, 0);
   requestAnimationFrame(() => window.scrollTo(0, 0));
-}
-
-// ══════════════════════════════════════════
-// CONVERSOR DE MOEDAS
-// ══════════════════════════════════════════
-// Fonte da cotação (INALTERADA): API pública fawazahmed0/currency-api via CDN jsdelivr,
-// base BRL. convRates[x] = quantos x por 1 BRL. Cache local apenas da última cotação
-// bem-sucedida (chave própria; não altera dados de outras áreas).
-const CONV_CACHE_KEY = 'gdcash_conv_rates';
-const CONV_SYMBOLS = { brl: 'R$', usd: 'US$', eur: '€', gbp: '£' };
-let convRates = null;
-let convRatesSource = null;   // 'live' | 'cache' | null
-let convRatesDate = null;     // data da cotação (da API)
-let convRatesFetchedAt = null;
-
-function _convFmt(v, cur) {
-  return `${CONV_SYMBOLS[cur] || ''} ${(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-function _convFmtRate(v, cur) {
-  const dec = Math.abs(v) < 1 ? 4 : 2; // evita "0,00" em taxas pequenas
-  return `${CONV_SYMBOLS[cur] || ''} ${(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: dec })}`;
-}
-// Aceita vírgula/ponto e valores colados formatados (pt-BR ou en). Nunca NaN, nunca negativo.
-function _convParseAmount(str) {
-  if (str == null) return 0;
-  let s = String(str).trim().replace(/[^\d.,-]/g, '');
-  if (!s) return 0;
-  const hasComma = s.includes(','), hasDot = s.includes('.');
-  if (hasComma && hasDot) {
-    // separador decimal = o que aparece por último; o outro é milhar
-    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
-    else s = s.replace(/,/g, '');
-  } else if (hasComma) {
-    s = s.replace(',', '.');
-  }
-  const n = parseFloat(s);
-  return (isNaN(n) || n < 0) ? 0 : n;
-}
-function _convCacheRead() {
-  try { const s = localStorage.getItem(CONV_CACHE_KEY); if (s) return JSON.parse(s); } catch (e) {}
-  return null;
-}
-function _convFmtWhen(ts, date) {
-  if (ts) { try { return new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) {} }
-  return date || '';
-}
-function _convSetStatus(state) {
-  const updatedEl = document.getElementById('conv-updated');
-  const refreshEl = document.getElementById('conv-refresh');
-  if (!updatedEl) return;
-  updatedEl.classList.remove('conv-cache', 'conv-error');
-  if (refreshEl) refreshEl.textContent = 'Atualizar cotação';
-  if (state === 'loading') {
-    updatedEl.textContent = 'Buscando cotação…';
-    if (refreshEl) refreshEl.textContent = 'Buscando…';
-  } else if (state === 'live') {
-    updatedEl.textContent = 'Atualizado em: ' + _convFmtWhen(convRatesFetchedAt, convRatesDate);
-  } else if (state === 'cache') {
-    updatedEl.textContent = 'Cotação armazenada — atualizada em ' + _convFmtWhen(convRatesFetchedAt, convRatesDate);
-    updatedEl.classList.add('conv-cache');
-  } else if (state === 'error') {
-    updatedEl.textContent = 'Conexão necessária para obter a cotação. Toque em Atualizar para tentar de novo.';
-    updatedEl.classList.add('conv-error');
-    const rateEl = document.getElementById('conv-rate');
-    const resEl = document.getElementById('conv-result');
-    if (rateEl) rateEl.textContent = '';
-    if (resEl) resEl.textContent = '—';
-  }
-}
-
-async function loadConversorRates(force) {
-  // Já temos cotação VIVA nesta sessão e não é atualização forçada → só recalcula.
-  if (convRates && convRatesSource === 'live' && !force) { convertCurrency(); return; }
-  _convSetStatus('loading');
-  try {
-    const res = await fetch('https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/brl.json');
-    if (!res.ok) throw new Error('http ' + res.status);
-    const data = await res.json();
-    if (!data || !data.brl) throw new Error('payload');
-    convRates = { ...data.brl, brl: 1 };
-    convRatesSource = 'live';
-    convRatesDate = data.date || null;
-    convRatesFetchedAt = Date.now();
-    try { localStorage.setItem(CONV_CACHE_KEY, JSON.stringify({ rates: convRates, date: convRatesDate, fetchedAt: convRatesFetchedAt })); } catch (e) {}
-    _convSetStatus('live');
-    convertCurrency();
-  } catch (e) {
-    // Offline / API falhou → usa cache identificado, senão estado de erro claro.
-    const cache = _convCacheRead();
-    if (cache && cache.rates) {
-      convRates = cache.rates; convRatesSource = 'cache';
-      convRatesDate = cache.date || null; convRatesFetchedAt = cache.fetchedAt || null;
-      _convSetStatus('cache');
-      convertCurrency();
-    } else {
-      convRates = null; convRatesSource = null;
-      _convSetStatus('error');
-    }
-  }
-}
-function refreshConvRates() { loadConversorRates(true); }
-
-function convertCurrency() {
-  const resEl = document.getElementById('conv-result');
-  const rateEl = document.getElementById('conv-rate');
-  if (!resEl) return;
-  const amount = _convParseAmount((document.getElementById('conv-amount') || {}).value);
-  const from = (document.getElementById('conv-from') || {}).value;
-  const to = (document.getElementById('conv-to') || {}).value;
-  if (!convRates || !from || !to) { resEl.textContent = '—'; return; } // sem cotação → não calcula
-  const inBRL = amount / convRates[from];
-  const result = inBRL * convRates[to];
-  const rate = convRates[to] / convRates[from];
-  resEl.textContent = amount > 0 ? _convFmt(result, to) : '—';
-  if (rateEl) rateEl.textContent = `1 ${from.toUpperCase()} = ${_convFmtRate(rate, to)}`;
-}
-
-function swapCurrencies() {
-  const fromEl = document.getElementById('conv-from');
-  const toEl   = document.getElementById('conv-to');
-  if (!fromEl || !toEl) return;
-  const tmp    = fromEl.value;
-  fromEl.value = toEl.value;
-  toEl.value   = tmp;
-  convertCurrency();
-}
-function copyConvResult() {
-  const txt = (document.getElementById('conv-result') || {}).textContent || '';
-  if (!txt || txt === '—') { gdToast('Nada para copiar ainda.', { type: 'error' }); return; }
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(txt).then(() => gdToast('Resultado copiado.', { type: 'success' })).catch(() => gdToast('Não foi possível copiar.', { type: 'error' }));
-  } else {
-    gdToast('Cópia não suportada neste dispositivo.', { type: 'error' });
-  }
 }
 
 // ══════════════════════════════════════════
@@ -6218,12 +6149,21 @@ function buildDemoData() {
     ],
     weeklyGoal: 1500,
     catBudgets: { 'Gasolina': 400, 'Alimentação': 300 },
-    reminders: (() => {
+    // Os dois lembretes do demo agora são o que sempre foram: pendências com
+    // prazo, aviso e repetição. `reminders` fica vazio — resquício legível
+    // pelo app antigo, sem nada dentro.
+    reminders: [],
+    pendencias: (() => {
       const d = new Date(); d.setHours(0,0,0,0);
       const add = (n) => { const x = new Date(d); x.setDate(x.getDate()+n); return dateStr(x); };
+      const hoje = dateStr(d);
       return [
-        { id:'rm1', name:'Troca de óleo',  date:add(5),  notifDaysBefore:2, repeat:'monthly', lastNotif:'' },
-        { id:'rm2', name:'Revisão do carro', date:add(18), notifDaysBefore:7, repeat:'yearly',  lastNotif:'' },
+        { id:'pd1', title:'Troca de óleo', category:'carro', priority:'media',
+          deadline:add(5), estimatedValue:null, note:'', status:'aberta', createdAt:hoje,
+          notifDaysBefore:2, repeat:'monthly', lastNotif:'' },
+        { id:'pd2', title:'Revisão do carro', category:'carro', priority:'media',
+          deadline:add(18), estimatedValue:null, note:'', status:'aberta', createdAt:hoje,
+          notifDaysBefore:7, repeat:'yearly', lastNotif:'' },
       ];
     })(),
     incomeItems: [
@@ -7066,109 +7006,32 @@ function deleteCatBudget(cat) {
 // ══════════════════════════════════════════
 // LEMBRETES
 // ══════════════════════════════════════════
-function renderLembretes() {
-  const el = document.getElementById('lembretes-list');
-  if (!el) return;
-  if (!D.reminders || !D.reminders.length) {
-    el.innerHTML = '<div class="card"><div class="empty-state">Nenhum lembrete ainda</div></div>';
-    return;
-  }
-  const today = new Date(); today.setHours(0,0,0,0);
-  const REPEAT = { none:'Não repete', weekly:'Semanal', monthly:'Mensal', yearly:'Anual' };
-  const sorted = [...D.reminders].sort((a,b) => a.date.localeCompare(b.date));
-  el.innerHTML = '<div class="card" style="padding:0">' + sorted.map((r, i) => {
-    const rDate = parseDate(r.date);
-    const daysUntil = Math.round((rDate - today) / (1000*60*60*24));
-    const isUrgent = daysUntil >= 0 && daysUntil <= 3;
-    const isPast = daysUntil < 0;
-    const status = daysUntil === 0 ? 'Hoje!'
-                 : daysUntil === 1 ? 'Amanhã'
-                 : daysUntil > 1  ? `Em ${daysUntil} dias`
-                 : `${Math.abs(daysUntil)} dia${Math.abs(daysUntil)!==1?'s':''} atrás`;
-    return `<div class="lembrete-item${isUrgent?' lembrete-urgent':''}${isPast?' lembrete-past':''}${i>0?' lembrete-sep':''}">
-      <div class="lembrete-icon">🔔</div>
-      <div class="lembrete-info">
-        <div class="lembrete-name">${r.name}</div>
-        <div class="lembrete-meta">${fmtShort(r.date)} · ${REPEAT[r.repeat||'none']}</div>
-      </div>
-      <div class="lembrete-right">
-        <span class="lembrete-status${isUrgent?' lembrete-status-urgent':''}">${status}</span>
-        <button class="fixed-del" onclick="openLembreteModal('${r.id}')">···</button>
-        <button class="fixed-del" onclick="deleteLembrete('${r.id}')">✕</button>
-      </div>
-    </div>`;
-  }).join('') + '</div>';
-}
-
-function openLembreteModal(id) {
-  const r = id ? D.reminders.find(r => r.id === id) : null;
-  document.getElementById('lembrete-modal-title').textContent = r ? 'Editar Lembrete' : 'Novo Lembrete';
-  document.getElementById('lembrete-edit-id').value = id || '';
-  document.getElementById('lem-name').value = r?.name || '';
-  document.getElementById('lem-date').value = r?.date || '';
-  document.getElementById('lem-notif').value = String(r?.notifDaysBefore ?? 2);
-  document.getElementById('lem-repeat').value = r?.repeat || 'none';
-  openOverlay('modal-lembrete');
-}
-
-function saveLembrete() {
-  const id = document.getElementById('lembrete-edit-id').value;
-  const name = document.getElementById('lem-name').value.trim();
-  const date = document.getElementById('lem-date').value;
-  const notifDaysBefore = parseInt(document.getElementById('lem-notif').value) || 0;
-  const repeat = document.getElementById('lem-repeat').value;
-  if (!name || !date) { gdToast('Preencha nome e data.', { type: 'error' }); return; }
-  if (!D.reminders) D.reminders = [];
-  if (id) {
-    const idx = D.reminders.findIndex(r => r.id === id);
-    if (idx !== -1) D.reminders[idx] = { ...D.reminders[idx], name, date, notifDaysBefore, repeat };
-  } else {
-    D.reminders.push({ id: uid(), name, date, notifDaysBefore, repeat, lastNotif: '' });
-    maybePromptNotif();
-  }
-  save(); closeOverlay('modal-lembrete'); renderLembretes();
-}
-
-// O ✕ da lista chamava esta função direto: era a única exclusão do app que
-// apagava sem perguntar. O resto — gasto fixo, pendência, meta — passa por
-// gdConfirm. Lembretes não passava porque a tela estava órfã e nunca recebeu o
-// polimento que as outras receberam.
-function deleteLembrete(id) {
-  const r = (D.reminders || []).find(x => x.id === id);
-  if (!r) return;
-  gdConfirm({
-    title: 'Excluir lembrete',
-    msg: `Deseja excluir "${r.name}" permanentemente?`,
-    confirmText: 'Excluir',
-    variant: 'danger',
-    onConfirm: () => { _deleteLembreteAgora(id); haptic(10); gdToast('Lembrete excluído.', { type: 'success' }); },
-  });
-}
-function _deleteLembreteAgora(id) {
-  D.reminders = (D.reminders || []).filter(r => r.id !== id);
-  save(); renderLembretes();
-}
-
+// O aviso com antecedência era exclusivo do lembrete. Agora é de qualquer
+// pendência: quem quiser ser avisado marca "avisar antes", e quem não quiser
+// simplesmente não marca — que é o estado de toda pendência já existente.
+//
+// A repetição avança o PRAZO da própria pendência, como fazia com a data do
+// lembrete. Uma pendência que repete não é concluída e recriada; ela
+// simplesmente aponta para a próxima ocorrência.
 function checkReminders() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
-  if (!D.reminders || !D.reminders.length) return;
-  const today = new Date(); today.setHours(0,0,0,0);
+  const pends = (D.pendencias || []).filter(p => p.status === 'aberta' && p.deadline && p.notifDaysBefore != null);
+  if (!pends.length) return;
   let changed = false;
-  D.reminders.forEach(r => {
-    if (!r.date || r.lastNotif === todayStr()) return;
-    const rDate = parseDate(r.date);
-    const daysUntil = Math.round((rDate - today) / (1000*60*60*24));
-    const notifyWhen = r.notifDaysBefore || 0;
+  pends.forEach(p => {
+    if (p.lastNotif === todayStr()) return;
+    const daysUntil = _diasAte(p.deadline);
+    const notifyWhen = p.notifDaysBefore || 0;
     if (daysUntil === notifyWhen) {
       const body = notifyWhen > 0 ? `Daqui ${notifyWhen} dia${notifyWhen!==1?'s':''}` : 'É hoje!';
-      new Notification(`🔔 ${r.name}`, { body, icon: '/GD-CASH/icon-192.png' });
-      r.lastNotif = todayStr();
-      if (r.repeat && r.repeat !== 'none') {
-        const next = new Date(rDate);
-        if (r.repeat === 'weekly')  next.setDate(next.getDate() + 7);
-        if (r.repeat === 'monthly') next.setMonth(next.getMonth() + 1);
-        if (r.repeat === 'yearly')  next.setFullYear(next.getFullYear() + 1);
-        r.date = dateStr(next);
+      new Notification(`🔔 ${p.title}`, { body, icon: '/GD-CASH/icon-192.png' });
+      p.lastNotif = todayStr();
+      if (p.repeat && p.repeat !== 'none') {
+        const next = parseDate(p.deadline);
+        if (p.repeat === 'weekly')  next.setDate(next.getDate() + 7);
+        if (p.repeat === 'monthly') next.setMonth(next.getMonth() + 1);
+        if (p.repeat === 'yearly')  next.setFullYear(next.getFullYear() + 1);
+        p.deadline = dateStr(next);
       }
       changed = true;
     }
@@ -9022,12 +8885,19 @@ function renderPendList() {
       else if (proxima) { prazoLbl = `Vence em ${d}`; prazoCls = ' pend2-prazo-near'; }
       else              { prazoLbl = `Vence em ${d}`; }
     }
+    // O que veio dos Lembretes fica visível na linha: sem isto, uma pendência
+    // que avisa e repete seria indistinguível de uma que não faz nem uma coisa
+    // nem outra, e o usuário não teria como saber que o aviso está ligado.
+    const REPETE = { weekly: 'toda semana', monthly: 'todo mês', yearly: 'todo ano' };
+    const avisaLbl = (p.status === 'aberta' && p.deadline && p.notifDaysBefore != null)
+      ? (p.notifDaysBefore > 0 ? `avisa ${p.notifDaysBefore}d antes` : 'avisa no dia') : '';
+    const extras = [REPETE[p.repeat] || '', avisaLbl].filter(Boolean);
     const meta = [prioLbl, prazoLbl].filter(Boolean);
     return `<div class="pend-card pend2${done ? ' pend2-done' : ''}${vencida ? ' pend-vencida' : (proxima || hojeDl) ? ' pend-proxima' : ''}">
       <div class="pend2-body">
         <div class="pend2-title">${pendEsc(p.title)}</div>
         ${ctx ? `<div class="pend2-ctx">${pendEsc(ctx)}</div>` : ''}
-        ${meta.length ? `<div class="pend2-meta">${pendEsc(meta[0])}${meta[1] ? ` · <span class="pend2-prazo${prazoCls}">${pendEsc(meta[1])}</span>` : ''}</div>` : ''}
+        ${meta.length ? `<div class="pend2-meta">${pendEsc(meta[0])}${meta[1] ? ` · <span class="pend2-prazo${prazoCls}">${pendEsc(meta[1])}</span>` : ''}${extras.length ? ` · ${pendEsc(extras.join(' · '))}` : ''}</div>` : ''}
         ${p.estimatedValue ? `<div class="pend2-val">${R(p.estimatedValue)}</div>` : ''}
         ${p.note ? `<div class="pend-card-note">${pendEsc(p.note)}</div>` : ''}
       </div>
@@ -9075,6 +8945,17 @@ function pendFmtDate(dateStr) {
   return `${d}/${m}/${y}`;
 }
 
+// Avisar e repetir só existem se houver prazo — os dois se medem a partir
+// dele. Sem prazo eles não são "opcionais", são sem sentido, e um campo sem
+// sentido na tela é uma pergunta que o usuário tenta responder à toa.
+function _onPendPrazoChange() {
+  const temPrazo = !!document.getElementById('pend-deadline')?.value;
+  ['pend-avisar-row', 'pend-repete-row'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = temPrazo ? '' : 'none';
+  });
+}
+
 function openPendenciaModal(id) {
   const modal = document.getElementById('modal-pendencia');
   if (!modal) return;
@@ -9086,8 +8967,14 @@ function openPendenciaModal(id) {
   modal.querySelector('#pend-prio-sel').value = p ? p.priority : 'media';
   modal.querySelector('#pend-deadline').value = p ? (p.deadline || '') : '';
   modal.querySelector('#pend-value').value = p ? (p.estimatedValue || '') : '';
+  // Avisar e repetir: vieram da tela de Lembretes. "Não avisar" é o padrão e o
+  // estado de toda pendência que já existia — ninguém passa a ser notificado
+  // por causa da fusão.
+  modal.querySelector('#pend-notif').value = (p && p.notifDaysBefore != null) ? String(p.notifDaysBefore) : '';
+  modal.querySelector('#pend-repeat').value = (p && p.repeat) ? p.repeat : 'none';
   modal.querySelector('#pend-note').value = p ? (p.note || '') : '';
   _onPendCatChange();
+  _onPendPrazoChange();
   const _ref = p ? _pendAssetRef(p) : null;
   if (_ref && _ref.kind === 'vehicle') {
     const vehRow = document.getElementById('pend-veh-row');
@@ -9112,6 +8999,12 @@ function savePendencia() {
   const valRaw = parseFloat(document.getElementById('pend-value')?.value);
   const estimatedValue = valRaw > 0 ? valRaw : null;
   const note = document.getElementById('pend-note')?.value?.trim() || '';
+  // Sem prazo não há o que avisar nem o que repetir: os dois campos ficam
+  // ocultos e o que estiver neles é descartado, em vez de virar dado morto.
+  const notifRaw = document.getElementById('pend-notif')?.value;
+  const notifDaysBefore = (deadline && notifRaw !== '' && notifRaw != null) ? (parseInt(notifRaw) || 0) : null;
+  const repeatRaw = document.getElementById('pend-repeat')?.value || 'none';
+  const repeat = deadline ? repeatRaw : 'none';
   const pendVehRow = document.getElementById('pend-veh-row');
   const vehicleId = (pendVehRow && pendVehRow.style.display !== 'none')
     ? (document.getElementById('pend-veh-sel')?.value || null) : null;
@@ -9120,7 +9013,7 @@ function savePendencia() {
     const idx = D.pendencias.findIndex(p => p.id === id);
     if (idx >= 0) {
       const old = D.pendencias[idx];
-      const updated = { ...old, title, category: cat, priority: prio, deadline, estimatedValue, note };
+      const updated = { ...old, title, category: cat, priority: prio, deadline, estimatedValue, note, notifDaysBefore, repeat };
       if (vehicleId) updated.vehicleId = vehicleId; else delete updated.vehicleId;
       // Normalização na edição: patrimonioId de tipo veículo vira
       // vehicleId direto (vínculos de imóvel/outro bem são preservados)
@@ -9132,7 +9025,7 @@ function savePendencia() {
       _syncPendVehicleLink(id, vehicleId);
     }
   } else {
-    const pObj = { id: uid(), title, category: cat, priority: prio, deadline, estimatedValue, note, status: 'aberta', createdAt: todayStr() };
+    const pObj = { id: uid(), title, category: cat, priority: prio, deadline, estimatedValue, note, notifDaysBefore, repeat, lastNotif: '', status: 'aberta', createdAt: todayStr() };
     if (vehicleId) pObj.vehicleId = vehicleId;
     D.pendencias.push(pObj);
     _syncPendVehicleLink(pObj.id, vehicleId);

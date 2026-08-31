@@ -979,32 +979,7 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 }
 
 /* ── Conversor ── */
-.conv-card{display:flex;flex-direction:column;gap:12px}
-.conv-field{display:flex;flex-direction:column;gap:6px}
-.conv-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
-.conv-input{font-size:clamp(22px,7vw,28px);font-weight:800;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
-.conv-select{font-size:14px;font-weight:600}
-.conv-swap-row{display:flex;justify-content:center;margin:-2px 0}
-.conv-swap-btn{
-  background:rgba(255,184,0,.12);border:1px solid rgba(255,184,0,.2);
-  border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;
-  color:var(--gold);cursor:pointer;transition:background .2s;-webkit-tap-highlight-color:transparent;
-}
-.conv-swap-btn:active{background:rgba(255,184,0,.25)}
-.conv-swap-btn:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
-.conv-result-box{
-  background:rgba(255,184,0,.06);border:1px solid rgba(255,184,0,.15);
-  border-radius:12px;padding:16px;text-align:center;margin-top:2px;
-}
-.conv-result-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);margin-bottom:4px}
 /* Resultado é a informação principal; nunca corta */
-.conv-result{font-size:clamp(24px,8vw,34px);font-weight:900;color:var(--gold);letter-spacing:-.5px;line-height:1.1;white-space:nowrap}
-.conv-rate{font-size:12px;color:var(--text3);margin-top:6px;font-variant-numeric:tabular-nums}
-.conv-updated{font-size:11.5px;color:var(--text3);text-align:center;line-height:1.4}
-.conv-updated.conv-cache{color:var(--c-warning);font-weight:600}
-.conv-updated.conv-error{color:var(--rd);font-weight:600}
-.conv-actions{display:flex;gap:10px}
-.conv-act{flex:1}
 
 /* ── Ajustes ── */
 .settings-list{display:flex;flex-direction:column;padding:2px 14px}
@@ -1506,19 +1481,6 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 /* ══════════════════════════════════════════
    LEMBRETES
    ══════════════════════════════════════════ */
-.lembrete-item{
-  display:flex;align-items:center;gap:10px;padding:12px 14px;
-}
-.lembrete-sep{border-top:1px solid var(--border)}
-.lembrete-icon{font-size:20px;flex-shrink:0;width:32px;text-align:center}
-.lembrete-info{flex:1;min-width:0}
-.lembrete-name{font-size:14px;font-weight:700;color:var(--text)}
-.lembrete-meta{font-size:11.5px;color:var(--text3);margin-top:2px}
-.lembrete-right{display:flex;align-items:center;gap:4px;flex-shrink:0}
-.lembrete-status{font-size:11.5px;font-weight:700;color:var(--text3);white-space:nowrap}
-.lembrete-status-urgent{color:var(--red)}
-.lembrete-urgent .lembrete-name{color:var(--red)}
-.lembrete-past{opacity:.5}
 
 /* ══════════════════════════════════════════
    NÚMERO VOANDO
@@ -1681,9 +1643,6 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .iitem-pending-total{background:var(--gold-t06)}
 
 /* ── Conversor ── */
-.conv-swap-btn{background:var(--gold-t12);border-color:var(--gold-t20)}
-.conv-swap-btn:active{background:var(--gold-t25)}
-.conv-result-box{background:var(--gold-t06);border-color:var(--gold-t12)}
 
 /* ── Sheet handle (fixes invisible handle in light mode) ── */
 .sheet-handle{background:var(--handle-bg)}
@@ -1771,7 +1730,7 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .page-header-title{font-size:15px;letter-spacing:-.2px}
 
 /* ── Smooth transition on gold tinted elements ── */
-.curr-chip,.tab-help-btn,.iitems-add-btn,.conv-swap-btn,
+.curr-chip,.tab-help-btn,.iitems-add-btn,
 .inicio-goal-wrap,.install-step-ico,.ig-step-num{
   transition:background .15s,border-color .15s,transform .1s
 }
@@ -2959,14 +2918,11 @@ textarea.form-input{resize:none}
    ══════════════════════════════════════════ */
 
 /* Warm background — mesmo padrão da Home, Semana e Mês */
-#page-reserva, #page-metas, #page-fixos, #page-lembretes,
-#page-pendencias, #page-conversor, #page-ajustes, #page-patrimonio { background: #F2F0EA; }
-:root[data-theme="dark"] #page-reserva,
+#page-metas, #page-fixos,
+#page-pendencias, #page-ajustes, #page-patrimonio { background: #F2F0EA; }
 :root[data-theme="dark"] #page-metas,
 :root[data-theme="dark"] #page-fixos,
-:root[data-theme="dark"] #page-lembretes,
 :root[data-theme="dark"] #page-pendencias,
-:root[data-theme="dark"] #page-conversor,
 :root[data-theme="dark"] #page-ajustes,
 :root[data-theme="dark"] #page-patrimonio { background: var(--surface); }
 
@@ -3023,35 +2979,31 @@ select.form-select {
    Reset comum em TODAS as linhas horizontais de botões do app.
    (Se criar uma nova linha horizontal de .btn, adicione o contêiner aqui.) */
 .btn-row .btn + .btn,
-.res-actions .btn + .btn,
 .res-q-actions .btn + .btn,
 .veh-form-btns .btn + .btn,
 .veh-detail-footer .btn + .btn,
-.conv-actions .btn + .btn,
 .av-dialog-actions.av-row .btn + .btn { margin-top: 0; }
 
 /* Cards nas telas secundárias — mesmo estilo Home/Mês */
-#page-reserva .card, #page-fixos .card, #page-pendencias .card,
-#page-metas .card, #page-conversor .card, #page-ajustes .card,
+#page-fixos .card, #page-pendencias .card,
+#page-metas .card, #page-ajustes .card,
 #page-patrimonio .card {
   border-radius: 16px; box-shadow: 0 1px 6px rgba(13,20,64,.06); border: 1px solid var(--border);
 }
-:root[data-theme="dark"] #page-reserva .card,
 :root[data-theme="dark"] #page-fixos .card,
 :root[data-theme="dark"] #page-pendencias .card,
 :root[data-theme="dark"] #page-metas .card,
-:root[data-theme="dark"] #page-conversor .card,
 :root[data-theme="dark"] #page-ajustes .card,
 :root[data-theme="dark"] #page-patrimonio .card { box-shadow: none; background: var(--surface2); }
 
 /* Sec-title nas telas secundárias — mesmo padrão da aba Mês */
-#page-reserva .sec-title, #page-fixos .sec-title,
+#page-fixos .sec-title,
 #page-pendencias .sec-title, #page-metas .sec-title {
   display: flex; align-items: center; gap: 7px;
   font-size: 9px; font-weight: 700; color: var(--text3);
   text-transform: uppercase; letter-spacing: .13em; margin: 20px 0 10px;
 }
-#page-reserva .sec-title::before, #page-fixos .sec-title::before,
+#page-fixos .sec-title::before,
 #page-pendencias .sec-title::before, #page-metas .sec-title::before {
   content: ''; display: inline-block; width: 0; height: 0;
   border-left: 3.5px solid transparent; border-right: 3.5px solid transparent;
@@ -4400,9 +4352,11 @@ button:focus-visible, [role="button"]:focus-visible {
 
 /* Ícone SVG no card de ajuda (uso opcional por aba) */
 .thc-icon-svg { display:flex; align-items:center; justify-content:center; color:var(--ac); }
-/* Área clicável ~44px e foco visível nos botões de ícone das pendências */
+/* Área clicável de 44px e foco visível nos botões de ícone das pendências.
+   O inset parte da caixa de PADDING, dentro da borda de 1px: com -6px a área
+   dava 42px, dois a menos que o mínimo. -7px fecha a conta. */
 .pend2-act { position:relative; }
-.pend2-act::after { content:''; position:absolute; inset:-6px; }
+.pend2-act::after { content:''; position:absolute; inset:-7px; }
 .pend2-act:focus-visible { outline:2px solid var(--ac); outline-offset:2px; }
 
 /* Detalhe integrado de veículo — elementos próprios */
@@ -4878,7 +4832,6 @@ body { padding-bottom: 0; }
 #page-mes .mes-sheet .av-sec-title,
 #page-semana .sem-sheet .sec-title,
 #page-semana .sem-sheet .av-sec-title,
-#page-reserva .sec-title,
 #page-fixos .sec-title,
 #page-pendencias .sec-title,
 #page-metas .sec-title {
@@ -4894,7 +4847,6 @@ body { padding-bottom: 0; }
 }
 #page-mes .mes-sheet .sec-title::before,
 #page-semana .sem-sheet .sec-title::before,
-#page-reserva .sec-title::before,
 #page-fixos .sec-title::before,
 #page-pendencias .sec-title::before,
 #page-metas .sec-title::before { content: none; }

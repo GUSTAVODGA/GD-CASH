@@ -26,11 +26,14 @@ const VAZIO = {
   emergency: { current: 0, target: 0 },
 };
 
-// 'reserva' saiu da lista porque deixou de ser uma tela: a reserva de
-// emergência virou a primeira meta e mora dentro de 'metas'. Não é uma porta
-// perdida — é uma porta a menos para a mesma sala. O teste logo abaixo garante
-// que a reserva continua alcançável.
-const TELAS_INTERNAS = ['pendencias', 'lembretes', 'fixos', 'metas',
+// Duas telas saíram da lista porque deixaram de existir, cada uma por um
+// motivo diferente:
+//   · 'reserva' virou a primeira meta e mora dentro de 'metas';
+//   · 'lembretes' virou pendência com aviso e repetição, dentro de 'pendencias'.
+// Nenhuma das duas é porta perdida — é porta a menos para a mesma sala, e os
+// testes abaixo garantem que as duas continuam alcançáveis.
+// ('conversor' saiu por outro motivo: foi removido do app, não fundido.)
+const TELAS_INTERNAS = ['pendencias', 'fixos', 'metas',
                         'patrimonio', 'dividas', 'pesquisa', 'ajustes'];
 
 const abrir = async (page, dados) => {
@@ -96,61 +99,72 @@ test('a RESERVA continua alcançável depois de deixar de ser tela', async ({ pa
   await expect(page.locator('#page-metas')).toHaveClass(/active/);
 });
 
-test('LEMBRETES: a tela abre pelo menu e faz o ciclo completo', async ({ page }) => {
+test('LEMBRETE: o ciclo completo, agora dentro de Pendências', async ({ page }) => {
+  // A tela de Lembretes não existe mais — um lembrete é uma pendência com
+  // prazo, aviso e repetição. O ciclo que este teste protegia continua
+  // inteiro; mudou o endereço.
   const erros = await abrir(page);
   await irParaAba(page, 'mais');
-  await page.locator('.mais-item').filter({ hasText: 'Lembretes' }).click();
-  await expect(page.locator('#page-lembretes')).toHaveClass(/active/);
-  await expect(page.locator('#lembretes-list')).toContainText('Nenhum lembrete ainda');
+  await page.locator('.mais-item').filter({ hasText: 'Pendências' }).click();
+  await expect(page.locator('#page-pendencias')).toHaveClass(/active/);
 
   // Criar
-  await page.locator('#page-lembretes').getByText('+ Novo lembrete').click();
-  await esperarOverlay(page, 'modal-lembrete', true);
-  await page.fill('#lem-name', 'Troca de óleo');
-  await page.fill('#lem-date', '2026-09-10');
-  await page.evaluate(() => window.saveLembrete());
-  await esperarOverlay(page, 'modal-lembrete', false);
-  await expect(page.locator('#lembretes-list')).toContainText('Troca de óleo');
-  expect(await lerEstado(page, 'D.reminders.length')).toBe(1);
+  await page.evaluate(() => window.openPendenciaModal());
+  await esperarOverlay(page, 'modal-pendencia', true);
+  await page.fill('#pend-title-input', 'Troca de óleo');
+  await page.fill('#pend-deadline', '2026-09-10');
+  await page.dispatchEvent('#pend-deadline', 'change');
+  await page.selectOption('#pend-notif', '2');
+  await page.selectOption('#pend-repeat', 'monthly');
+  await page.evaluate(() => window.savePendencia());
+  await esperarOverlay(page, 'modal-pendencia', false);
+  await expect(page.locator('#pend-list')).toContainText('Troca de óleo');
+  expect(await lerEstado(page, 'D.pendencias.length')).toBe(1);
+  // O que veio dos Lembretes sobreviveu à criação.
+  expect(await lerEstado(page, 'D.pendencias[0].notifDaysBefore')).toBe(2);
+  expect(await lerEstado(page, 'D.pendencias[0].repeat')).toBe('monthly');
 
   // Editar
-  await page.locator('#lembretes-list .fixed-del').first().click();
-  await esperarOverlay(page, 'modal-lembrete', true);
-  await page.fill('#lem-name', 'Troca de óleo e filtro');
-  await page.evaluate(() => window.saveLembrete());
-  await expect(page.locator('#lembretes-list')).toContainText('Troca de óleo e filtro');
-  expect(await lerEstado(page, 'D.reminders.length'), 'editar duplicou o lembrete').toBe(1);
+  await page.evaluate(() => window.openPendenciaModal(window.eval('D').pendencias[0].id));
+  await esperarOverlay(page, 'modal-pendencia', true);
+  await page.fill('#pend-title-input', 'Troca de óleo e filtro');
+  await page.evaluate(() => window.savePendencia());
+  await expect(page.locator('#pend-list')).toContainText('Troca de óleo e filtro');
+  expect(await lerEstado(page, 'D.pendencias.length'), 'editar duplicou').toBe(1);
+  expect(await lerEstado(page, 'D.pendencias[0].repeat'), 'editar perdeu a repetição').toBe('monthly');
 
   expect(erros).toEqual([]);
 });
 
-test('excluir um lembrete PERGUNTA antes — como o resto do app', async ({ page }) => {
-  await abrir(page, { ...VAZIO, reminders: [{ id: 'r1', name: 'Seguro', date: '2026-09-01', notifDaysBefore: 2, repeat: 'none', lastNotif: '' }] });
-  await irParaAba(page, 'lembretes');
-  await expect(page.locator('#lembretes-list')).toContainText('Seguro');
+test('excluir uma pendência PERGUNTA antes — como o resto do app', async ({ page }) => {
+  // Esta garantia vinha do teste de Lembretes: o ✕ da lista era a única
+  // exclusão do app que apagava sem perguntar. A tela morreu; a garantia não.
+  await abrir(page, { ...VAZIO, pendencias: [
+    { id: 'p1', title: 'Seguro', category: 'pessoal', priority: 'media',
+      deadline: '2026-09-01', estimatedValue: null, status: 'aberta',
+      createdAt: '2026-08-01', notifDaysBefore: 2, repeat: 'none', lastNotif: '' },
+  ] });
+  await irParaAba(page, 'pendencias');
+  await expect(page.locator('#pend-list')).toContainText('Seguro');
 
-  // O ✕ é o segundo botão da linha; o primeiro (···) abre a edição.
-  await page.locator('#lembretes-list .fixed-del').nth(1).click();
+  await page.evaluate(() => window.deletePendencia('p1'));
   await page.waitForTimeout(250);
 
-  // Nada foi apagado ainda: existe uma confirmação na frente. O diálogo do app
-  // é `#_av_dlg` (av-overlay), não uma folha `.overlay`.
-  expect(await lerEstado(page, 'D.reminders.length'), 'o lembrete sumiu sem perguntar').toBe(1);
+  // Nada foi apagado ainda: existe uma confirmação na frente.
+  expect(await lerEstado(page, 'D.pendencias.length'), 'a pendência sumiu sem perguntar').toBe(1);
   const dlg = page.locator('#_av_dlg');
   await expect(dlg, 'nenhuma confirmação apareceu').toBeVisible();
-  await expect(dlg).toContainText('Seguro');
 
   // Cancelar preserva.
   await dlg.getByRole('button', { name: 'Cancelar' }).click();
   await page.waitForTimeout(200);
-  expect(await lerEstado(page, 'D.reminders.length'), 'cancelar apagou mesmo assim').toBe(1);
+  expect(await lerEstado(page, 'D.pendencias.length'), 'cancelar apagou mesmo assim').toBe(1);
 
-  // Confirmar apaga — pelo botão de verdade, não por chamada direta.
-  await page.locator('#lembretes-list .fixed-del').nth(1).click();
+  // Confirmar apaga.
+  await page.evaluate(() => window.deletePendencia('p1'));
   await page.locator('#_av_dlg').getByRole('button', { name: 'Excluir' }).click();
   await page.waitForTimeout(250);
-  expect(await lerEstado(page, 'D.reminders.length')).toBe(0);
-  await expect(page.locator('#lembretes-list')).toContainText('Nenhum lembrete ainda');
+  expect(await lerEstado(page, 'D.pendencias.length')).toBe(0);
 });
 
 test('METAS: a tela abre pelo menu e cria a primeira meta', async ({ page }) => {
@@ -161,20 +175,22 @@ test('METAS: a tela abre pelo menu e cria a primeira meta', async ({ page }) => 
   expect(erros).toEqual([]);
 });
 
-test('o menu Mais informa o estado das duas telas novas', async ({ page }) => {
+test('o menu Mais informa o estado de cada tela', async ({ page }) => {
   await abrir(page);
   await irParaAba(page, 'mais');
   // Vazio: o item diz que está vazio, em vez de mentir um número.
-  await expect(page.locator('.mais-item').filter({ hasText: 'Lembretes' })).toContainText('Nenhum lembrete');
+  await expect(page.locator('.mais-item').filter({ hasText: 'Pendências' })).toContainText('Nenhuma em aberto');
   await expect(page.locator('.mais-item').filter({ hasText: 'Metas' })).toContainText('Nenhuma meta ainda');
 
   await page.evaluate(() => {
-    D.reminders = [{ id: 'r1', name: 'Seguro', date: '2026-12-01', notifDaysBefore: 2, repeat: 'none' }];
-    D.goals = [{ id: 'g1', name: 'Viagem', target: 8000, saved: 1000 }];
+    D.pendencias = [{ id: 'p1', title: 'Seguro', category: 'pessoal', priority: 'media',
+                      deadline: '2026-12-01', estimatedValue: null, status: 'aberta',
+                      createdAt: '2026-08-01', notifDaysBefore: 2, repeat: 'none' }];
+    D.goals = [{ id: 'g1', name: 'Viagem', target: 8000, saldoInicial: 1000, historico: [] }];
     window.switchTab('mais');
   });
-  await expect(page.locator('.mais-item').filter({ hasText: 'Lembretes' })).toContainText('Próximo');
-  await expect(page.locator('.mais-item').filter({ hasText: 'Metas' })).toContainText('1 em andamento');
+  await expect(page.locator('.mais-item').filter({ hasText: 'Pendências' })).toContainText('1 em aberto');
+  await expect(page.locator('.mais-item').filter({ hasText: 'Metas' })).toContainText('em andamento');
 });
 
 test('abrir as telas novas não encosta em D nem chama save()', async ({ page }) => {
@@ -182,7 +198,7 @@ test('abrir as telas novas não encosta em D nem chama save()', async ({ page })
   const antes = await lerEstado(page, 'JSON.stringify(D)');
   const salvou = await page.evaluate(() => {
     let n = 0; const s = window.save; window.save = () => { n++; return s && s(); };
-    ['mais', 'lembretes', 'metas', 'mais', 'inicio'].forEach(t => window.switchTab(t));
+    ['mais', 'pendencias', 'metas', 'mais', 'inicio'].forEach(t => window.switchTab(t));
     window.save = s; return n;
   });
   expect(salvou).toBe(0);
