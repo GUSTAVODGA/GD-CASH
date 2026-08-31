@@ -148,9 +148,12 @@ test('o mensal não muda — o ritmo só muda o divisor', async ({ page }) => {
 
 test('O PASSO parte de vazio e o "menos" já nasce sem função', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, ...LIGADO });
-  await expect(page.locator('.rit-step-val')).toHaveText('—');
+  await expect(page.locator('.rit-step-val')).toHaveText('?');
   await expect(page.getByRole('button', { name: 'Um dia a menos' })).toBeDisabled();
-  await expect(cartao(page)).toContainText('sem isso a conta divide pelos 31 dias do mês');
+  // O vazio diz o que FAZER. Foi por não dizer isto que o passo passou
+  // despercebido na primeira vez que foi ao ar.
+  await expect(cartao(page)).toContainText('Quantos dias por semana você pretende rodar?');
+  await expect(cartao(page)).toContainText('Toque no + para dizer');
 });
 
 test('o passo escreve o número e ele persiste', async ({ page }) => {
@@ -160,7 +163,7 @@ test('o passo escreve o número e ele persiste', async ({ page }) => {
 
   expect(await lerEstado(page, 'D.ritmo.diasPorSemana')).toBe(5);
   await expect(page.locator('.rit-step-val')).toHaveText('5');
-  await expect(cartao(page)).toContainText('cada dia rodado precisa render R$ 150,00');
+  await expect(cartao(page)).toContainText('Cada dia rodado precisa render R$ 150,00');
 });
 
 test('o passo não passa de 7 nem cai abaixo de zero', async ({ page }) => {

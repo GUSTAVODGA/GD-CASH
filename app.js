@@ -4536,6 +4536,66 @@ const RITMO_DIAS_MEDIA = 14;   // janela para a média por dia rodado
 
 function _ritmoLigado() { return !!(D.ritmo && D.ritmo.ligado); }
 
+// ══════════════════════════════════════════════════════════════════════════
+// O CUSTO DA RUA — e por que ignorá-lo quebrava a linha de chegada
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Até aqui a linha do dia era só o custo de EXISTIR: gastos fixos e parcelas
+// de dívida. Faltava o que o trabalho consome para acontecer — gasolina,
+// comida na rua, manutenção, pedágio.
+//
+// O efeito disso não era acadêmico. Com só o fixo, a linha nascia MUITO
+// abaixo do que um dia de fato precisa render, e o placar da semana chegava a
+// dizer "faltam 5 dias e R$ 224 — dá R$ 44 por dia". Uma linha baixa demais é
+// pior que nenhuma: ela dá permissão para parar cedo, que é exatamente o que
+// este recurso existe para não fazer.
+//
+// A DIVISÃO É DIFERENTE PARA CADA PARTE, e isso é o ponto:
+//
+//   O FIXO é dividido pelos dias de RODAGEM do mês. O aluguel corre no domingo
+//   também, então quem paga por ele são os dias em que se roda.
+//
+//   O VARIÁVEL é POR DIA RODADO, direto — sem divisão nenhuma. Gasolina não
+//   acontece no dia de folga; ela acontece porque se rodou. Diluí-la pelos
+//   dias do mês faria a linha mentir para menos no dia em que ela é cobrada.
+//
+// CONTINUA DERIVADO, NÃO DIGITADO. Sai das despesas já lançadas e se corrige
+// sozinho quando o preço da gasolina muda. Um número à mão envelheceria em
+// silêncio, que é o defeito que este recurso inteiro evita.
+const RITMO_DIAS_CUSTO = 30;   // janela do custo variável
+
+/**
+ * Quanto um DIA RODADO consome de custo variável, pela janela recente.
+ *
+ * Só entra despesa de consumo que NÃO veio de baixa de gasto fixo: o fixo já é
+ * contado adiante, pela lista de gastos fixos cadastrados. Contá-lo duas vezes
+ * inflaria a linha e o erro seria invisível.
+ */
+function _custoVariavelPorDiaRodado(janelaDias) {
+  const n = janelaDias || RITMO_DIAS_CUSTO;
+  const hoje = todayStr();
+  const dias = new Set();
+  for (let i = 1; i <= n; i++) dias.add(_addDaysISO(hoje, -i));   // hoje não fechou
+
+  let gastoC = 0;
+  (D.expenses || []).forEach(e => {
+    if (!dias.has(localDateKey(e.date))) return;
+    if (_movementNature(e) !== 'consumo') return;          // dívida e patrimônio ficam fora
+    const src = e.meta && e.meta.source;
+    if (src === 'fixed-payment') return;                   // já contado como fixo
+    gastoC += _c(e.amount);
+  });
+
+  let rodados = 0;
+  dias.forEach(d => { if (_c(sumDayIncome(d)) > 0) rodados++; });
+
+  return {
+    dias: n, rodados,
+    total: _r(gastoC),
+    porDiaRodado: rodados > 0 ? _r(Math.round(gastoC / rodados)) : 0,
+  };
+}
+
 /** O custo de um dia do mês `off`, e do que ele é feito. */
 function _custoDoDia(off) {
   const mes = Number.isFinite(off) ? off : 0;
@@ -4573,6 +4633,25 @@ function _custoDoDia(off) {
   const porDiaRodadoC = diasRodagem > 0 ? Math.round(mensalC / diasRodagem) : 0;
   const porDiaC = Math.round(mensalC / total);
 
+  // O custo da rua, por dia rodado. Sem histórico ele é zero e tudo se comporta
+  // como antes — ninguém vê um número aparecer sem ter de onde.
+  const varInfo = _custoVariavelPorDiaRodado();
+  const variavelC = _c(varInfo.porDiaRodado);
+
+  // A parte fixa da linha: dividida pelos dias de rodagem quando há ritmo, pelos
+  // dias do mês quando não há.
+  const fixoDaLinhaC = diasRodagem > 0 ? porDiaRodadoC : porDiaC;
+
+  // Quantos dias rodados o mês vai ter. Com ritmo declarado é a conta do
+  // usuário; sem ele, a taxa recente — nunca um palpite redondo.
+  const rodagemPrevista = diasRodagem > 0
+    ? diasRodagem
+    : (varInfo.rodados > 0 ? Math.round(varInfo.rodados * total / varInfo.dias) : 0);
+
+  // O que o mês inteiro precisa render: o fixo dele mais o que a rua vai
+  // consumir nos dias em que se roda.
+  const mensalTotalC = mensalC + variavelC * rodagemPrevista;
+
   return {
     dias: total,
     mensal: _r(mensalC),
@@ -4583,13 +4662,22 @@ function _custoDoDia(off) {
     porSemana,
     diasRodagem,
     porDiaRodado: _r(porDiaRodadoC),
-    // A linha que VALE agora: a do dia rodado quando há ritmo declarado, a do
-    // dia de existir quando não há. Quem desenha não decide isso sozinho.
-    alvo: _r(diasRodagem > 0 ? porDiaRodadoC : porDiaC),
+    // O custo da rua e de onde ele saiu — a composição precisa ser mostrável.
+    variavel: _r(variavelC),
+    variavelJanela: varInfo.dias,
+    variavelRodados: varInfo.rodados,
+    variavelTotal: varInfo.total,
+    temVariavel: variavelC > 0,
+    fixoDaLinha: _r(fixoDaLinhaC),
+    rodagemPrevista,
+    mensalTotal: _r(mensalTotalC),
+    // A linha que VALE agora: a parte fixa (por dia rodado quando há ritmo, por
+    // dia do mês quando não há) MAIS o que a rua custa num dia rodado.
+    alvo: _r(fixoDaLinhaC + variavelC),
     temRitmo: diasRodagem > 0,
     // Sem nenhum custo cadastrado a linha de chegada seria zero, e "o dia se
     // pagou" perderia o sentido. Quem chama decide o que fazer com isto.
-    semBase: mensalC <= 0,
+    semBase: (mensalC + variavelC) <= 0,
   };
 }
 
@@ -4669,7 +4757,9 @@ function _ritmoMes(off) {
     if (alvoC > 0 && v >= alvoC) bateram++;
   });
 
-  const faltaC = Math.max(0, _c(custo.mensal) - entrouC);
+  // O mês se paga contra o custo INTEIRO — fixo mais o que a rua consome nos
+  // dias rodados. Cobrar só o fixo declarava "o mês já se pagou" cedo demais.
+  const faltaC = Math.max(0, _c(custo.mensalTotal) - entrouC);
   const diasRestantes = dias.filter(d => d >= hoje).length;
   const rodagemRestante = custo.temRitmo
     ? Math.max(0, Math.min(custo.diasRodagem - rodados, diasRestantes))
@@ -4678,7 +4768,8 @@ function _ritmoMes(off) {
   return {
     rodados, bateram,
     entrou: _r(entrouC),
-    custoMes: custo.mensal,
+    custoMes: custo.mensalTotal,
+    custoFixoMes: custo.mensal,
     falta: _r(faltaC),
     diasRestantes,
     rodagemRestante,
@@ -5489,17 +5580,24 @@ function renderHomeRitmo() {
   const passo = `
     <div class="rit-passo">
       <div class="rit-passo-txt">
-        <div class="rit-passo-tit">Pretendo rodar</div>
+        <div class="rit-passo-tit">${c.temRitmo
+          ? `Pretendo rodar ${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana`
+          : 'Quantos dias por semana você pretende rodar?'}</div>
         <div class="rit-passo-sub">${
           c.temRitmo
-            ? `${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana · cada dia rodado precisa render ${R(c.porDiaRodado)}`
-            : `dias por semana — sem isso a conta divide pelos ${c.dias} dias do mês`
+            ? `Cada dia rodado precisa render ${R(c.alvo)}`
+              + (c.temVariavel ? ` — ${R(c.porDiaRodado)} de fixo e ${R(c.variavel)} de rua` : '')
+            // Vazio: diz o que fazer, não o que está faltando. Foi por não dizer
+            // isto que o passo passou despercebido na primeira vez que foi ao ar.
+            : 'Toque no + para dizer. Sem isso a conta divide pelos '
+              + `${c.dias} dias do mês, e a linha do dia de trabalho fica baixa demais.`
         }</div>
       </div>
       <div class="rit-step" role="group" aria-label="Dias por semana">
         <button class="rit-step-btn" onclick="ajustarDiasPorSemana(-1)"
           aria-label="Um dia a menos"${c.porSemana <= 0 ? ' disabled' : ''}>−</button>
-        <span class="rit-step-val" aria-live="polite">${c.porSemana || '—'}</span>
+        <span class="rit-step-val${c.porSemana ? '' : ' rit-step-vazio'}" aria-live="polite"
+          >${c.porSemana || '?'}</span>
         <button class="rit-step-btn" onclick="ajustarDiasPorSemana(1)"
           aria-label="Um dia a mais"${c.porSemana >= 7 ? ' disabled' : ''}>+</button>
       </div>
@@ -5546,11 +5644,22 @@ function abrirRitmo() {
   if (c.temRitmo) {
     partes.push(`Você pretende rodar ${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana`
       + ` — cerca de ${c.diasRodagem} dias no mês.`);
-    partes.push(`Cada dia rodado precisa render ${R(c.porDiaRodado)}.`);
+    partes.push(`Fixo por dia rodado: ${R(c.porDiaRodado)}`);
   } else {
-    partes.push(`Dividido pelos ${c.dias} dias do mês: ${R(c.porDia)} por dia.`);
-    partes.push('Dizendo quantos dias por semana pretende rodar, a conta passa a dividir'
-      + ' pelos dias rodados — e a linha do dia de trabalho sobe para o que ela é de verdade.');
+    partes.push(`Fixo por dia: ${R(c.porDia)} (dividido pelos ${c.dias} dias do mês).`);
+  }
+
+  // O custo da rua entra explicitamente, com a janela de onde saiu: sem isso a
+  // linha subiria sem explicação e pareceria arbitrária.
+  if (c.temVariavel) {
+    partes.push(`Gasolina, comida e manutenção: ${R(c.variavel)} por dia rodado`
+      + ` (${R(c.variavelTotal)} em ${c.variavelRodados} dia${c.variavelRodados !== 1 ? 's' : ''} rodado${c.variavelRodados !== 1 ? 's' : ''} nos últimos ${c.variavelJanela}).`);
+  }
+  partes.push(`━ Um dia rodado precisa render ${R(c.alvo)}.`);
+
+  if (!c.temRitmo) {
+    partes.push('Dizendo quantos dias por semana pretende rodar, a parte fixa passa a dividir'
+      + ' pelos dias rodados — e a linha sobe para o que ela é de verdade.');
   }
 
   const msg = _ritmoLigado()

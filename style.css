@@ -671,6 +671,9 @@ main{background:var(--bg);min-height:100dvh}
   font-family: var(--font-disp); font-size: 16px; font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+/* Vazio. Antes era um travessão, que ao lado do "−" lia como um segundo sinal
+   de menos e escondia que ali havia algo a preencher. */
+.rit-step-vazio { color: var(--tx3); }
 
 /* ── O dia, no campo do hero ──
    Vive sobre o verde, então usa os tokens do campo (`--on-flood`), não os da
