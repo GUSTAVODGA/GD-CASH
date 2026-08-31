@@ -613,6 +613,65 @@ main{background:var(--bg);min-height:100dvh}
 .srow-alerta { border-left: 3px solid var(--rd); }
 .srow-extra { font-size: 11.5px; color: var(--tx3); margin-left: auto; padding-left: 10px; white-space: nowrap; }
 
+/* ── O placar de ritmo, dentro do baralho ── */
+.rit-bloco { display: flex; flex-direction: column; gap: 4px; }
+.rit-bloco--sep { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.rit-tit { font-size: 11.5px; color: var(--tx3); }
+.rit-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.rit-forte { font-size: 15px; font-weight: 700; }
+.rit-val {
+  font-family: var(--font-disp); font-size: 15px; font-weight: 700;
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+.rit-sub { font-size: 12px; color: var(--tx3); line-height: 1.45; }
+.rit-ok { color: var(--gn); font-weight: 600; }
+.rit-barra {
+  height: 6px; border-radius: 999px; background: var(--border);
+  overflow: hidden; margin: 6px 0 2px;
+}
+.rit-barra > i {
+  display: block; height: 100%; border-radius: 999px; background: var(--gn);
+  transition: width var(--dur-slow, .34s) cubic-bezier(.2,.85,.25,1);
+}
+.rit-placar {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 8px; font-size: 12px; color: var(--tx3);
+}
+.rit-placar b { color: var(--tx); font-weight: 700; }
+
+/* ── O passo: dias por semana ──
+   O único campo do recurso. Fica no topo do cartão porque é o número que
+   muda todos os outros. */
+.rit-passo {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; padding-bottom: 12px;
+}
+.rit-passo-txt { min-width: 0; }
+.rit-passo-tit { font-size: 13px; font-weight: 600; }
+.rit-passo-sub { font-size: 11.5px; color: var(--tx3); line-height: 1.4; margin-top: 2px; }
+.rit-step {
+  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+  border: 1px solid var(--border); border-radius: 999px; padding: 2px;
+}
+.rit-step-btn {
+  width: 34px; height: 34px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--tx);
+  font-size: 19px; line-height: 1; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; position: relative;
+  transition: background var(--dur-fast, .14s) var(--ease-out);
+}
+/* O alvo de toque cresce além do desenho: 34px de botão dentro de um alvo de
+   44px, como todo controle do app. */
+.rit-step-btn::before { content: ''; position: absolute; inset: -6px; }
+.rit-step-btn:active:not(:disabled) { background: var(--ol2); }
+.rit-step-btn:disabled { opacity: .32; cursor: default; }
+.rit-step-val {
+  min-width: 24px; text-align: center;
+  font-family: var(--font-disp); font-size: 16px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── O dia, no campo do hero ──
    Vive sobre o verde, então usa os tokens do campo (`--on-flood`), não os da
    folha: `--tx3` ali é tinta escura e sumiria. */

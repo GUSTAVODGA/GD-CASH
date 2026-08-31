@@ -4558,13 +4558,35 @@ function _custoDoDia(off) {
     ? _c(D.ritmo.custoMensalManual) : null;
   const mensalC = manual != null ? manual : (fixosC + dividasC);
 
+  // ── O ritmo pretendido, quando declarado ──
+  //
+  // Sem ele a linha de chegada é o custo de UM DIA DE EXISTIR: mensal ÷ dias do
+  // mês. É honesto e não julga folga, mas é baixo para um dia de trabalho —
+  // porque os dias parados também precisam ser pagos por alguém.
+  //
+  // Declarando "pretendo rodar N dias por semana", a linha passa a ser o que um
+  // DIA RODADO precisa render para o mês fechar. Aí sim pular um dia sobe a
+  // barra dos outros — e sobe por uma conta que o próprio usuário escolheu, não
+  // por punição.
+  const porSemana = (D.ritmo && D.ritmo.diasPorSemana) || 0;
+  const diasRodagem = porSemana > 0 ? Math.max(1, Math.round(porSemana * total / 7)) : 0;
+  const porDiaRodadoC = diasRodagem > 0 ? Math.round(mensalC / diasRodagem) : 0;
+  const porDiaC = Math.round(mensalC / total);
+
   return {
     dias: total,
     mensal: _r(mensalC),
-    porDia: _r(Math.round(mensalC / total)),
+    porDia: _r(porDiaC),
     fixos: _r(fixosC),
     dividas: _r(dividasC),
     manual: manual != null,
+    porSemana,
+    diasRodagem,
+    porDiaRodado: _r(porDiaRodadoC),
+    // A linha que VALE agora: a do dia rodado quando há ritmo declarado, a do
+    // dia de existir quando não há. Quem desenha não decide isso sozinho.
+    alvo: _r(diasRodagem > 0 ? porDiaRodadoC : porDiaC),
+    temRitmo: diasRodagem > 0,
     // Sem nenhum custo cadastrado a linha de chegada seria zero, e "o dia se
     // pagou" perderia o sentido. Quem chama decide o que fazer com isto.
     semBase: mensalC <= 0,
@@ -4576,18 +4598,114 @@ function _diaSePagou(dataISO) {
   const data = dataISO || todayStr();
   const custo = _custoDoDia(0);
   const entrouC = _c(sumDayIncome(data));
-  const alvoC   = _c(custo.porDia);
+  const alvoC   = _c(custo.alvo);
   const faltaC  = alvoC - entrouC;
   return {
     data,
     entrou: _r(entrouC),
-    alvo: custo.porDia,
+    alvo: custo.alvo,
+    temRitmo: custo.temRitmo,
     pagou: faltaC <= 0,
     falta: _r(Math.max(0, faltaC)),
     sobra: _r(Math.max(0, -faltaC)),          // o que já é seu
     pct: alvoC > 0 ? Math.min(100, Math.round(entrouC / alvoC * 100)) : 0,
     semBase: custo.semBase,
   };
+}
+
+/** O placar da semana corrente: o que foi feito e o que falta para o combinado. */
+function _ritmoSemana() {
+  const custo = _custoDoDia(0);
+  const dias  = weekDates(0);
+  const hoje  = todayStr();
+
+  let entrouC = 0, rodados = 0, bateram = 0;
+  const alvoC = _c(custo.alvo);
+  dias.forEach(d => {
+    if (d > hoje) return;                     // dia futuro não é dia perdido
+    const v = _c(sumDayIncome(d));
+    entrouC += v;
+    if (v > 0) rodados++;
+    if (alvoC > 0 && v >= alvoC) bateram++;
+  });
+
+  const prometidos = custo.porSemana || 0;
+  const metaC = alvoC * prometidos;
+  const faltaC = Math.max(0, metaC - entrouC);
+  // Dias que ainda dá para rodar: o que falta do combinado, limitado pelos dias
+  // que ainda existem na semana. Prometer sete dias numa quinta não cria dias.
+  const restamNaSemana = dias.filter(d => d >= hoje).length;
+  const faltamDias = prometidos > 0
+    ? Math.max(0, Math.min(prometidos - rodados, restamNaSemana)) : 0;
+
+  return {
+    prometidos, rodados, bateram,
+    entrou: _r(entrouC),
+    meta: _r(metaC),
+    falta: _r(faltaC),
+    faltamDias,
+    // A conta que decide a tarde: o que cada dia restante precisa render.
+    porDiaRestante: faltamDias > 0 ? _r(Math.round(faltaC / faltamDias)) : 0,
+    alvo: custo.alvo,
+    temRitmo: custo.temRitmo,
+    cumpriu: prometidos > 0 && rodados >= prometidos,
+  };
+}
+
+/** O placar do mês: quanto foi feito, quantos dias bateram, e o que resta. */
+function _ritmoMes(off) {
+  const mes = Number.isFinite(off) ? off : 0;
+  const custo = _custoDoDia(mes);
+  const dias = monthDates(mes);
+  const hoje = todayStr();
+  const alvoC = _c(custo.alvo);
+
+  let entrouC = 0, rodados = 0, bateram = 0;
+  dias.forEach(d => {
+    if (d > hoje) return;
+    const v = _c(sumDayIncome(d));
+    entrouC += v;
+    if (v > 0) rodados++;
+    if (alvoC > 0 && v >= alvoC) bateram++;
+  });
+
+  const faltaC = Math.max(0, _c(custo.mensal) - entrouC);
+  const diasRestantes = dias.filter(d => d >= hoje).length;
+  const rodagemRestante = custo.temRitmo
+    ? Math.max(0, Math.min(custo.diasRodagem - rodados, diasRestantes))
+    : diasRestantes;
+
+  return {
+    rodados, bateram,
+    entrou: _r(entrouC),
+    custoMes: custo.mensal,
+    falta: _r(faltaC),
+    diasRestantes,
+    rodagemRestante,
+    porDiaRestante: rodagemRestante > 0 ? _r(Math.round(faltaC / rodagemRestante)) : 0,
+    media: rodados ? _r(Math.round(entrouC / rodados)) : 0,
+    fechou: faltaC <= 0,
+    alvo: custo.alvo,
+    temRitmo: custo.temRitmo,
+    semBase: custo.semBase,
+  };
+}
+
+// ── A única coisa que se digita ──────────────────────────────────────────
+//
+// Quantos dias por semana você PRETENDE rodar. Não é um contrato e não gera
+// cobrança: é o divisor da conta. Zero significa "não quero prometer nada" —
+// e é o estado inicial, porque prometer no lugar do usuário é o começo de um
+// número em que ele não acredita.
+function ajustarDiasPorSemana(delta) {
+  if (!D.ritmo) D.ritmo = {};
+  const atual = D.ritmo.diasPorSemana || 0;
+  const novo = Math.max(0, Math.min(7, atual + delta));
+  if (novo === atual) return;
+  D.ritmo.diasPorSemana = novo;
+  haptic(10);
+  save();
+  renderInicio();
 }
 
 /** Média por DIA RODADO — dia sem receita não é fracasso, é dia que não houve. */
@@ -5329,6 +5447,91 @@ function renderHomeDia() {
   </div>`;
 }
 
+// ── O placar, no baralho da Início ────────────────────────────────────────
+//
+// A semana e o mês respondem a pergunta que o cartão do dia não responde:
+// "estou no ritmo?". Ficam no baralho, não no campo, porque são para olhar —
+// não para decidir agora.
+function renderHomeRitmo() {
+  const sec = document.getElementById('home-ritmo-section');
+  const box = document.getElementById('home-ritmo');
+  if (!sec || !box) return;
+  const c = _custoDoDia(0);
+  if (!_ritmoLigado() || c.semBase) { sec.style.display = 'none'; return; }
+  sec.style.display = '';
+
+  const sem = _ritmoSemana();
+  const mes = _ritmoMes(0);
+
+  // Sem ritmo declarado o cartão ainda vale: mostra o que aconteceu, sem
+  // prometer nada em nome do usuário.
+  const linhaSemana = sem.temRitmo
+    ? `<div class="rit-linha">
+         <span class="rit-forte">${sem.rodados} de ${sem.prometidos} dias</span>
+         <span class="rit-val">${R(sem.entrou)}</span>
+       </div>
+       ${sem.faltamDias > 0
+         ? `<div class="rit-sub">Faltam ${sem.faltamDias} dia${sem.faltamDias !== 1 ? 's' : ''} e ${R(sem.falta)} — dá ${R(sem.porDiaRestante)} por dia</div>`
+         : sem.cumpriu
+           ? `<div class="rit-sub rit-ok">Semana cumprida</div>`
+           : `<div class="rit-sub">${R(sem.entrou)} nesta semana</div>`}`
+    : `<div class="rit-linha">
+         <span class="rit-forte">${sem.rodados} dia${sem.rodados !== 1 ? 's' : ''} rodado${sem.rodados !== 1 ? 's' : ''}</span>
+         <span class="rit-val">${R(sem.entrou)}</span>
+       </div>
+       <div class="rit-sub">Diga quantos dias por semana pretende rodar para ver o quanto falta.</div>`;
+
+  const barra = mes.custoMes > 0
+    ? Math.min(100, Math.round(_c(mes.entrou) / _c(mes.custoMes) * 100)) : 0;
+
+  // O ajuste fica no cartão, não escondido num diálogo: é o número que muda
+  // todos os outros, e mudar de ideia sobre ele tem que custar um toque.
+  const passo = `
+    <div class="rit-passo">
+      <div class="rit-passo-txt">
+        <div class="rit-passo-tit">Pretendo rodar</div>
+        <div class="rit-passo-sub">${
+          c.temRitmo
+            ? `${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana · cada dia rodado precisa render ${R(c.porDiaRodado)}`
+            : `dias por semana — sem isso a conta divide pelos ${c.dias} dias do mês`
+        }</div>
+      </div>
+      <div class="rit-step" role="group" aria-label="Dias por semana">
+        <button class="rit-step-btn" onclick="ajustarDiasPorSemana(-1)"
+          aria-label="Um dia a menos"${c.porSemana <= 0 ? ' disabled' : ''}>−</button>
+        <span class="rit-step-val" aria-live="polite">${c.porSemana || '—'}</span>
+        <button class="rit-step-btn" onclick="ajustarDiasPorSemana(1)"
+          aria-label="Um dia a mais"${c.porSemana >= 7 ? ' disabled' : ''}>+</button>
+      </div>
+    </div>`;
+
+  box.innerHTML = `
+    ${passo}
+    <div class="rit-bloco rit-bloco--sep">
+      <div class="rit-tit">Esta semana</div>
+      ${linhaSemana}
+    </div>
+    <div class="rit-bloco rit-bloco--sep">
+      <div class="rit-tit">Este mês</div>
+      <div class="rit-linha">
+        <span class="rit-forte">${mes.rodados} dia${mes.rodados !== 1 ? 's' : ''} rodado${mes.rodados !== 1 ? 's' : ''}</span>
+        <span class="rit-val">${R(mes.entrou)}</span>
+      </div>
+      <div class="rit-barra"><i style="width:${barra}%"></i></div>
+      <div class="rit-sub">${
+        mes.fechou
+          ? `O mês já se pagou · ${R(mes.entrou)} de ${R(mes.custoMes)}`
+          : mes.rodagemRestante > 0
+            ? `Faltam ${R(mes.falta)} em ${mes.rodagemRestante} dia${mes.rodagemRestante !== 1 ? 's' : ''} — dá ${R(mes.porDiaRestante)} por dia`
+            : `Faltam ${R(mes.falta)} para o mês se pagar`
+      }</div>
+      ${mes.rodados > 0 ? `<div class="rit-placar">
+        <span><b>${mes.bateram}</b> ${mes.bateram === 1 ? 'dia bateu' : 'dias bateram'} a meta de ${R(mes.alvo)}</span>
+        <span><b>${R(mes.media)}</b> por dia rodado</span>
+      </div>` : ''}
+    </div>`;
+}
+
 // O interruptor. Explica o que liga ANTES de ligar, e mostra a conta que vai
 // ser usada — ninguém deve descobrir a própria linha de chegada por surpresa.
 function abrirRitmo() {
@@ -5340,7 +5543,15 @@ function abrirRitmo() {
     partes.push(`Gastos fixos: ${R(c.fixos)}` + (c.dividas > 0 ? `\nParcelas de dívida do mês: ${R(c.dividas)}` : ''));
     partes.push(`Total do mês: ${R(c.mensal)}`);
   }
-  partes.push(`Dividido por ${c.dias} dias: ${R(c.porDia)} por dia.`);
+  if (c.temRitmo) {
+    partes.push(`Você pretende rodar ${c.porSemana} dia${c.porSemana !== 1 ? 's' : ''} por semana`
+      + ` — cerca de ${c.diasRodagem} dias no mês.`);
+    partes.push(`Cada dia rodado precisa render ${R(c.porDiaRodado)}.`);
+  } else {
+    partes.push(`Dividido pelos ${c.dias} dias do mês: ${R(c.porDia)} por dia.`);
+    partes.push('Dizendo quantos dias por semana pretende rodar, a conta passa a dividir'
+      + ' pelos dias rodados — e a linha do dia de trabalho sobe para o que ela é de verdade.');
+  }
 
   const msg = _ritmoLigado()
     ? 'A Início mostra quanto falta para o dia de hoje se pagar, e quanto já é seu depois disso.\n\n'
@@ -8069,6 +8280,7 @@ function renderHomeNew() {
 
   renderHomeManchete();
   renderHomeDia();
+  renderHomeRitmo();
   setTimeout(renderDeckDots, 60);
 
   const incEl = document.getElementById('home-inc');

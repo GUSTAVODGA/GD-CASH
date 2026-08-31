@@ -90,15 +90,17 @@ test('o que precisa de você fica junto e no topo da folha', async ({ page }) =>
   expect(ordem.deck).toBeLessThan(ordem.recentes);
 });
 
-test('o baralho tem os três cartões e todos são alcançáveis de lado', async ({ page }) => {
+test('o baralho tem os quatro cartões e todos são alcançáveis de lado', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await abrir(page);
   const deck = page.locator('.hc-deck');
-  await expect(deck.locator('> .hc-section')).toHaveCount(3);
+  // Quatro desde a v83, quando o placar de ritmo entrou no baralho. Ele nasce
+  // oculto (o recurso é opcional), mas o elemento existe e mora aqui.
+  await expect(deck.locator('> .hc-section')).toHaveCount(4);
 
   // Cada cartão do baralho é alcançável rolando na horizontal — e nenhum deles
   // depende de estar visível no carregamento para existir.
-  for (const sel of ['#home-chart', '#home-resv-section', '#home-goal-section']) {
+  for (const sel of ['#home-chart', '#home-resv-section', '#home-ritmo-section', '#home-goal-section']) {
     const noDeck = await page.locator(sel).evaluate(el => !!el.closest('.hc-deck'));
     expect(noDeck, `${sel} não está no baralho`).toBe(true);
   }
@@ -120,7 +122,7 @@ test('o próximo cartão aparece cortado na borda — é o que diz que há mais'
   expect(r.primeiro).toBeLessThan(r.largura - 20);
 });
 
-test('a Home encolheu: as três seções do baralho dividem uma altura, não três', async ({ page }) => {
+test('a Home encolheu: as seções do baralho dividem uma altura, não uma cada', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await abrir(page);
   await page.waitForTimeout(150);
@@ -129,7 +131,7 @@ test('a Home encolheu: as três seções do baralho dividem uma altura, não tr�
     cartoes: [...document.querySelectorAll('.hc-deck > .hc-section')]
       .reduce((s, el) => s + el.getBoundingClientRect().height, 0),
   }));
-  // Empilhados somariam ~3x; lado a lado, o baralho tem a altura de UM.
+  // Empilhados somariam a altura de todos; lado a lado, o baralho tem a de UM.
   expect(alturas.deck).toBeLessThan(alturas.cartoes * 0.55);
 });
 
