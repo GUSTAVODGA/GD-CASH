@@ -3053,9 +3053,14 @@ function _semanaBarra(s) {
  * UMA frase, um alvo, um número por dia. A fase decide qual — nunca os dois.
  */
 function _semanaFrase(s) {
-  const porDia = s.faltamDias > 0
+  // O rateio por dia só aparece quando EXIGE MAIS que um dia normal — ver a
+  // nota em `_ritmoSemana`. Abaixo disso ele contradiria a linha do dia e
+  // daria permissão para render menos.
+  const porDia = s.precisaAcelerar
     ? ` — <b>${R(s.porDiaRestante)}</b> ${s.faltamDias === 1 ? 'hoje' : `por dia nos ${s.faltamDias} dias que faltam`}`
-    : '';
+    : s.faltamDias > 0
+      ? ` em ${s.faltamDias} dia${s.faltamDias !== 1 ? 's' : ''} de rodagem`
+      : '';
   if (s.fase === 'piso') {
     return `Faltam <b>${R(s.falta)}</b> para a semana se pagar${porDia}`;
   }
@@ -4849,6 +4854,28 @@ function _ritmoSemana(off) {
   // certo dentro dela.
   const escalaC = Math.max(pisoC, metaC);
 
+  // ── A LINHA DO DIA NÃO SE DIVIDE DE NOVO ──
+  //
+  // O cartão dizia "R$ 89,19 por dia nos 5 dias que faltam" logo acima de "um
+  // dia rodado precisa render R$ 123,17". Dois "por dia" diferentes na mesma
+  // tela, e quem leu perguntou qual valia.
+  //
+  // A aritmética estava certa: quem faz R$ 293,07 num dia que custa R$ 123,17
+  // fica R$ 169,90 adiantado, e esse excedente abate o resto da semana. Mas o
+  // NÚMERO estava errado de mostrar, por duas razões:
+  //
+  //   Ele contradiz a linha do dia, que é a referência e não muda porque
+  //   ontem foi bom.
+  //
+  //   E ele DÁ PERMISSÃO PARA RENDER MENOS — exatamente o defeito que a v84
+  //   corrigiu ("uma linha baixa demais dá permissão para parar cedo"),
+  //   reintroduzido por outra porta.
+  //
+  // Então o rateio só aparece quando ele EXIGE MAIS que um dia normal. Abaixo
+  // disso, o que vale dizer é outra coisa: quanto você está adiantado.
+  const porDiaRestanteC = faltamDias > 0 ? Math.round(faltaC / faltamDias) : 0;
+  const adiantadoC = entrouC - rodados * alvoC;
+
   return {
     prometidos, rodados, bateram,
     entrou: _r(entrouC),
@@ -4860,9 +4887,12 @@ function _ritmoSemana(off) {
     alvoAtual: _r(alvoAtual),
     falta: _r(faltaC),
     faltamDias,
-    // A conta que decide a tarde: o que cada dia restante precisa render para
-    // alcançar o alvo DA FASE atual.
-    porDiaRestante: faltamDias > 0 ? _r(Math.round(faltaC / faltamDias)) : 0,
+    porDiaRestante: _r(porDiaRestanteC),
+    // Só é para MOSTRAR quando pede mais que um dia normal.
+    precisaAcelerar: faltamDias > 0 && alvoC > 0 && porDiaRestanteC > alvoC,
+    // O quanto os dias já rodados renderam além do que custaram. Positivo é
+    // notícia boa e verdadeira; negativo é o buraco a cobrir.
+    adiantado: _r(adiantadoC),
     // Posições na barra, em % da escala — quem desenha não recalcula nada.
     pctEntrou: escalaC > 0 ? Math.min(100, Math.round(entrouC / escalaC * 100)) : 0,
     pctPiso:   escalaC > 0 ? Math.min(100, Math.round(pisoC   / escalaC * 100)) : 0,
@@ -5663,10 +5693,25 @@ function _ritmoBlocoSemana(s) {
               : s.fase === 'meta'  ? (s.temPiso ? 'Já se pagou. Falta para a sua meta' : 'Falta para a sua meta')
               : 'A semana fechou o alvo';
 
-  const acao = s.faltamDias > 0 && s.fase !== 'completa'
-    ? `<div class="rit-acao"><b>${R(s.porDiaRestante)}</b> por dia
-        ${s.faltamDias === 1 ? 'hoje' : `nos ${s.faltamDias} dias que faltam`}</div>`
-    : '';
+  // Uma frase, e ela NUNCA repete a linha do dia por outro caminho.
+  //   Atrasado  → diz quanto por dia é preciso, e que é acima do normal.
+  //   Em dia    → diz só quantos dias restam.
+  //   Adiantado → diz o quanto você está à frente. É verdade, e é notícia boa.
+  let acao = '';
+  if (s.fase !== 'completa' && s.faltamDias > 0) {
+    if (s.precisaAcelerar) {
+      acao = `<div class="rit-acao"><b>${R(s.porDiaRestante)}</b> por dia`
+        + ` ${s.faltamDias === 1 ? 'hoje' : `nos ${s.faltamDias} dias que faltam`}`
+        + ` — acima dos ${R(s.alvo)} de um dia normal</div>`;
+    } else {
+      acao = `<div class="rit-acao">em ${s.faltamDias}`
+        + ` dia${s.faltamDias !== 1 ? 's' : ''} de rodagem</div>`;
+    }
+  }
+  if (s.adiantado > 0 && s.rodados > 0) {
+    acao += `<div class="rit-acao rit-adianta">Você está <b>${R(s.adiantado)}</b>`
+      + ' à frente do que os dias rodados custaram</div>';
+  }
 
   return `<div class="rit-bloco">
     <div class="rit-tit">${rotulo}</div>

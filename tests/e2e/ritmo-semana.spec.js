@@ -67,6 +67,14 @@ const SEMANA = {
   '2026-08-20': { p1: 90 },
 };
 
+// Dois dias fracos: 200 em 2 dias rodados. O que falta para o piso (750 − 200)
+// dividido pelos 3 dias que restam dá 183,33 — ACIMA dos 150 de um dia normal.
+const ATRASADA = { '2026-08-17': { p1: 100 }, '2026-08-18': { p1: 100 } };
+
+// Um dia forte: 400 num dia que custava 150. Fica 250 à frente, e o resto da
+// semana passa a exigir 87,50 por dia — ABAIXO de um dia normal.
+const ADIANTADA = { '2026-08-17': { p1: 400 } };
+
 const abrir = async (page, dados, aba = 'inicio') => {
   await page.setViewportSize({ width: 390, height: 844 });
   const erros = await abrirAppEmDemo(page, { agora: AGORA });
@@ -89,7 +97,8 @@ test('UMA RESPOSTA: a Início e a tela Semana dizem o MESMO número por dia', as
   // Este é o teste que o defeito original teria reprovado: R$ 228,00 na tela
   // Semana e R$ 33,22 na Início, para a mesma pergunta.
   await abrir(page, {
-    fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO, weeklyGoal: 1500,
+    fixedExpenses: FIXOS, ...COM_RITMO, weeklyGoal: 1500,
+    dailyIncome: ATRASADA,
   });
   const s = await semana(page);
   const naInicio = await cartao(page).innerText();
@@ -144,8 +153,58 @@ test('UM ALVO DE CADA VEZ: abaixo do piso, persegue o piso', async ({ page }) =>
   const b = blocoSemana(page);
   await expect(b).toContainText('Falta para a semana se pagar');
   await expect(b).toContainText('R$ 300,00');
-  await expect(b).toContainText('R$ 150,00');
   await expect(b, 'mostrou os dois alvos ao mesmo tempo').not.toContainText('R$ 1.500,00');
+});
+
+// ── O rateio por dia não pode contradizer a linha do dia ──────────────────
+
+test('EM DIA: o rateio some — repeti-lo seria dizer a linha do dia duas vezes', async ({ page }) => {
+  // 450 em 3 dias rodados contra 150 por dia: exatamente no ritmo. O que falta
+  // (300 em 2 dias) dá 150 por dia — o MESMO número da linha. Mostrá-lo seria
+  // dizer duas vezes a mesma coisa, com outra cara.
+  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
+  const s = await semana(page);
+  expect(s.porDiaRestante).toBe(150);
+  expect(s.precisaAcelerar, 'o rateio empatado virou cobrança').toBe(false);
+  expect(s.adiantado).toBe(0);
+
+  const b = blocoSemana(page);
+  await expect(b).toContainText('em 2 dias de rodagem');
+  await expect(b, 'repetiu a linha do dia por outro caminho').not.toContainText('por dia');
+});
+
+test('ADIANTADO: o app NÃO dá permissão para render menos', async ({ page }) => {
+  // Foi o defeito relatado: "R$ 89,19 por dia nos 5 dias que faltam" logo
+  // acima de "um dia rodado precisa render R$ 123,17". A aritmética estava
+  // certa — o número é que não podia estar lá. Uma linha baixa demais dá
+  // permissão para parar cedo, que é o que a v84 corrigiu.
+  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: ADIANTADA, ...COM_RITMO });
+  const s = await semana(page);
+  expect(s.entrou).toBe(400);
+  expect(s.adiantado, '400 num dia que custava 150').toBe(250);
+  expect(s.porDiaRestante, '350 em 4 dias').toBe(87.5);
+  expect(s.precisaAcelerar).toBe(false);
+
+  const b = blocoSemana(page);
+  await expect(b, 'ofereceu um alvo diário MENOR que a linha do dia')
+    .not.toContainText('R$ 87,50');
+  await expect(b, 'não diz a notícia boa que é verdadeira').toContainText('R$ 250,00');
+  await expect(b).toContainText('à frente');
+});
+
+test('ATRASADO: aí sim o rateio aparece, e diz que é acima do normal', async ({ page }) => {
+  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: ATRASADA, ...COM_RITMO });
+  const s = await semana(page);
+  expect(s.entrou).toBe(200);
+  expect(s.adiantado, '200 em 2 dias que custavam 150 cada').toBe(-100);
+  expect(s.porDiaRestante, '550 em 3 dias').toBe(183.33);
+  expect(s.precisaAcelerar, 'exige mais que um dia normal e não avisou').toBe(true);
+
+  const b = blocoSemana(page);
+  await expect(b).toContainText('R$ 183,33');
+  await expect(b, 'não diz que o pedido é acima do normal')
+    .toContainText('acima dos R$ 150,00 de um dia normal');
+  await expect(b, 'anunciou vantagem estando atrás').not.toContainText('à frente');
 });
 
 test('passado o piso, o alvo vira a meta — e a frase diz que já se pagou', async ({ page }) => {

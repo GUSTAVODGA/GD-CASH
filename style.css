@@ -635,7 +635,11 @@ main{background:var(--bg);min-height:100dvh}
 /* A frase que decide a tarde. É a única linha do cartão com cor de destaque —
    se tudo for destaque, nada é. */
 .rit-acao { font-size: 12.5px; color: var(--tx2); margin-top: 3px; }
-.rit-acao b { color: var(--gn); font-weight: 700; }
+.rit-acao b { color: var(--gn); font-weight: 700; white-space: nowrap; }
+/* Estar adiantado é notícia, não alarme: fica na tinta de apoio, não na de
+   destaque. Se tudo for destaque, nada é. */
+.rit-adianta { color: var(--tx3); }
+.rit-adianta b { color: var(--gn); }
 .rit-sub { font-size: 12px; color: var(--tx3); line-height: 1.45; }
 .rit-ok { color: var(--gn); }
 .rit-barra {
