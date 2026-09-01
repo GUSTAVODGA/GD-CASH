@@ -193,32 +193,6 @@ test('dia sem receita: falta o alvo inteiro, e nada de vermelho', async ({ page 
 
 // ── A média ───────────────────────────────────────────────────────────────
 
-test('DIA SEM RECEITA NÃO É FRACASSO: a média é por DIA RODADO', async ({ page }) => {
-  // Quatro dias rodados de 300 e seis dias parados. A média é 300, não 120.
-  const inc = {};
-  for (const d of ['2026-08-19', '2026-08-17', '2026-08-15', '2026-08-13']) inc[d] = { p1: 300 };
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: inc, ...LIGADO });
-  const m = await page.evaluate(() => window._mediaPorDiaRodado());
-  expect(m.rodados).toBe(4);
-  expect(m.media, 'os dias parados entraram na média e a diluíram').toBe(300);
-  await expect(page.locator('#home-dia')).toContainText('Sua média por dia rodado');
-});
-
-test('a média não aparece sem base para ela', async ({ page }) => {
-  // Com um ou dois dias rodados, uma "média" seria ruído com cara de estatística.
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: { '2026-08-19': { p1: 300 } }, ...LIGADO });
-  await expect(page.locator('#home-dia')).not.toContainText('média por dia rodado');
-});
-
-test('a média ignora HOJE — o dia ainda não fechou', async ({ page }) => {
-  const inc = { '2026-08-20': { p1: 10 } };   // hoje, ainda começando
-  for (const d of ['2026-08-19', '2026-08-18', '2026-08-17']) inc[d] = { p1: 300 };
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: inc, ...LIGADO });
-  const m = await page.evaluate(() => window._mediaPorDiaRodado());
-  expect(m.rodados, 'hoje entrou na média e a puxou para baixo').toBe(3);
-  expect(m.media).toBe(300);
-});
-
 // ── A porta ───────────────────────────────────────────────────────────────
 
 test('AJUSTES: a porta existe e mostra o estado', async ({ page }) => {
@@ -254,7 +228,7 @@ test('calcular o dia é só leitura: não encosta em D nem salva', async ({ page
   const antes = await lerEstado(page, 'JSON.stringify(D)');
   const salvou = await page.evaluate(() => {
     let n = 0; const s = window.save; window.save = () => { n++; return s && s(); };
-    window._custoDoDia(0); window._diaSePagou(); window._mediaPorDiaRodado();
+    window._custoDoDia(0); window._diaSePagou();
     window.renderHomeDia(); window.renderInicio();
     window.save = s; return n;
   });

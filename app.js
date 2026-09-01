@@ -4541,7 +4541,6 @@ function _obrigacoesEmAberto() {
 // folga, só mostra que o dia parado custou o mesmo e que outro dia vai pagar.
 //
 // NASCE DESLIGADO. Quem não ligar não vê nada mudar na tela.
-const RITMO_DIAS_MEDIA = 14;   // janela para a média por dia rodado
 
 function _ritmoLigado() { return !!(D.ritmo && D.ritmo.ligado); }
 
@@ -4717,29 +4716,9 @@ function _custoDoDia(off) {
   // dias do mês quando não há.
   const fixoDaLinhaC = diasRodagem > 0 ? porDiaRodadoC : porDiaC;
 
-  // Quantos dias rodados o mês vai ter. Com ritmo declarado é a conta do
-  // usuário; sem ele, a taxa recente — nunca um palpite redondo.
-  const rodagemPrevista = diasRodagem > 0
-    ? diasRodagem
-    : (varInfo.rodados > 0 ? Math.round(varInfo.rodados * total / varInfo.dias) : 0);
-
-  // ── O gasto único sai da conta POR DIA, mas não some do MÊS ──
-  //
-  // Ele ficou de fora da média por dia porque não define quanto custa um dia
-  // comum. Mas o dinheiro saiu de verdade, e o mês precisa cobri-lo. Somá-lo
-  // aqui uma vez é o que impede o mês de declarar "já se pagou" cedo demais —
-  // o mesmo defeito que a v84 corrigiu por outro caminho.
-  //
-  // Só entram os que caem no MÊS exibido: a janela do variável é de 30 dias
-  // corridos, e um gasto de três semanas atrás pode pertencer ao mês passado.
-  const diasDoMes = new Set(dias);
-  const unicosDoMesC = (varInfo.foraDoPadrao || [])
-    .filter(x => diasDoMes.has(x.data))
-    .reduce((s, x) => s + _c(x.total), 0);
-
-  // O que o mês inteiro precisa render: o fixo dele, mais o que a rua vai
-  // consumir nos dias em que se roda, mais os gastos únicos deste mês.
-  const mensalTotalC = mensalC + variavelC * rodagemPrevista + unicosDoMesC;
+  // O gasto único fica de fora da média POR DIA — ele não define quanto custa
+  // um dia comum. Ele continua aparecendo na folha, com nome e valor, e
+  // continua contado no resultado do mês, que é feito do que de fato saiu.
 
   return {
     dias: total,
@@ -4761,11 +4740,8 @@ function _custoDoDia(off) {
     // Os gastos únicos, para a folha poder mostrá-los em vez de escondê-los.
     variavelForaDoPadrao: varInfo.foraDoPadrao,
     variavelTotalFora: varInfo.totalForaDoPadrao,
-    unicosDoMes: _r(unicosDoMesC),
     temVariavel: variavelC > 0,
     fixoDaLinha: _r(fixoDaLinhaC),
-    rodagemPrevista,
-    mensalTotal: _r(mensalTotalC),
     // A linha que VALE agora: a parte fixa (por dia rodado quando há ritmo, por
     // dia do mês quando não há) MAIS o que a rua custa num dia rodado.
     alvo: _r(fixoDaLinhaC + variavelC),
@@ -4897,48 +4873,6 @@ function _ritmoSemana(off) {
   };
 }
 
-/** O placar do mês: quanto foi feito, quantos dias bateram, e o que resta. */
-function _ritmoMes(off) {
-  const mes = Number.isFinite(off) ? off : 0;
-  const custo = _custoDoDia(mes);
-  const dias = monthDates(mes);
-  const hoje = todayStr();
-  const alvoC = _c(custo.alvo);
-
-  let entrouC = 0, rodados = 0, bateram = 0;
-  dias.forEach(d => {
-    if (d > hoje) return;
-    const v = _c(sumDayIncome(d));
-    entrouC += v;
-    if (v > 0) rodados++;
-    if (alvoC > 0 && v >= alvoC) bateram++;
-  });
-
-  // O mês se paga contra o custo INTEIRO — fixo mais o que a rua consome nos
-  // dias rodados. Cobrar só o fixo declarava "o mês já se pagou" cedo demais.
-  const faltaC = Math.max(0, _c(custo.mensalTotal) - entrouC);
-  const diasRestantes = dias.filter(d => d >= hoje).length;
-  const rodagemRestante = custo.temRitmo
-    ? Math.max(0, Math.min(custo.diasRodagem - rodados, diasRestantes))
-    : diasRestantes;
-
-  return {
-    rodados, bateram,
-    entrou: _r(entrouC),
-    custoMes: custo.mensalTotal,
-    custoFixoMes: custo.mensal,
-    falta: _r(faltaC),
-    diasRestantes,
-    rodagemRestante,
-    porDiaRestante: rodagemRestante > 0 ? _r(Math.round(faltaC / rodagemRestante)) : 0,
-    media: rodados ? _r(Math.round(entrouC / rodados)) : 0,
-    fechou: faltaC <= 0,
-    alvo: custo.alvo,
-    temRitmo: custo.temRitmo,
-    semBase: custo.semBase,
-  };
-}
-
 // ── A única coisa que se digita ──────────────────────────────────────────
 //
 // Quantos dias por semana você PRETENDE rodar. Não é um contrato e não gera
@@ -4954,19 +4888,6 @@ function ajustarDiasPorSemana(delta) {
   haptic(10);
   save();
   renderInicio();
-}
-
-/** Média por DIA RODADO — dia sem receita não é fracasso, é dia que não houve. */
-function _mediaPorDiaRodado(janelaDias) {
-  const n = janelaDias || RITMO_DIAS_MEDIA;
-  const hoje = todayStr();
-  let soma = 0, rodados = 0;
-  for (let i = 1; i <= n; i++) {                 // ontem para trás; hoje não fechou
-    const d = _addDaysISO(hoje, -i);
-    const v = _c(sumDayIncome(d));
-    if (v > 0) { soma += v; rodados++; }
-  }
-  return { dias: n, rodados, media: rodados ? _r(Math.round(soma / rodados)) : 0, total: _r(soma) };
 }
 
 function _sobraLivre(off) {
@@ -5669,11 +5590,10 @@ function renderHomeDia() {
     return;
   }
 
-  const media = _mediaPorDiaRodado();
-  // A média entra só como referência do que É possível para você — nunca como
-  // cobrança, e nunca comparando com ninguém.
-  const rodape = media.rodados >= 3
-    ? `<div class="home-dia-media">Sua média por dia rodado: <b>${R(media.media)}</b></div>` : '';
+  // A MÉDIA POR DIA RODADO SAIU DAQUI na v88. Ela era referência sem ação:
+  // ninguém decide nada com ela às três da tarde, e quem a leu perguntou o
+  // que era. Um número que precisa ser explicado e não muda decisão nenhuma é
+  // um número a menos que se deve mostrar.
 
   if (d.pagou) {
     el.innerHTML = `<div class="home-dia home-dia-ok">
@@ -5681,7 +5601,6 @@ function renderHomeDia() {
       <div class="home-dia-val">${R(d.sobra)} <span class="home-dia-val-sub">são seus</span></div>
       <div class="home-dia-barra"><i style="width:100%"></i></div>
       <div class="home-dia-sub">Entrou ${R(d.entrou)} · o dia custa ${R(d.alvo)}</div>
-      ${rodape}
     </div>`;
     return;
   }
@@ -5691,7 +5610,6 @@ function renderHomeDia() {
     <div class="home-dia-val">faltam ${R(d.falta)}</div>
     <div class="home-dia-barra"><i style="width:${d.pct}%"></i></div>
     <div class="home-dia-sub">Entrou ${R(d.entrou)} de ${R(d.alvo)}</div>
-    ${rodape}
   </div>`;
 }
 
@@ -5708,12 +5626,14 @@ function renderHomeRitmo() {
   if (!_ritmoLigado() || c.semBase) { sec.style.display = 'none'; return; }
   sec.style.display = '';
 
-  const sem = _ritmoSemana(0);
-  const mes = _ritmoMes(0);
-
+  // SÓ A SEMANA. O mês saiu daqui na v88: ele já tem dono na manchete da
+  // Início ("Sobra livre" e "Resultado do mês") e na aba Mês. Ter o mês
+  // também aqui, com uma conta PROJETADA em vez do que de fato saiu, punha
+  // "O MÊS JÁ SE PAGOU · R$ 4.758,51" a dois dedos de "Resultado do mês
+  // −R$ 851,90" na mesma tela. Duas respostas para "o mês está bem?" — o
+  // mesmo defeito que a v85 corrigiu na semana, repetido aqui.
   box.innerHTML = `
-    ${_ritmoBlocoSemana(sem)}
-    ${_ritmoBlocoMes(mes)}
+    ${_ritmoBlocoSemana(_ritmoSemana(0))}
     ${_ritmoRodape(c)}`;
 }
 
@@ -5760,21 +5680,6 @@ function _ritmoBlocoSemana(s) {
     <div class="rit-escala">
       <span>${R(s.entrou)} nesta semana</span>
       <span>${s.rodados} de ${s.prometidos || '?'} dias</span>
-    </div>
-  </div>`;
-}
-
-/** O mês: o mesmo formato, uma escala acima. */
-function _ritmoBlocoMes(m) {
-  const barra = m.custoMes > 0
-    ? Math.min(100, Math.round(_c(m.entrou) / _c(m.custoMes) * 100)) : 0;
-  return `<div class="rit-bloco rit-bloco--sep">
-    <div class="rit-tit">${m.fechou ? 'O mês já se pagou' : 'Falta para o mês se pagar'}</div>
-    <div class="rit-medio${m.fechou ? ' rit-ok' : ''}">${m.fechou ? R(m.entrou) : R(m.falta)}</div>
-    <div class="rit-barra"><i style="width:${barra}%"></i></div>
-    <div class="rit-escala">
-      <span>${R(m.entrou)} de ${R(m.custoMes)}</span>
-      <span>${m.rodados} dia${m.rodados !== 1 ? 's' : ''} rodado${m.rodados !== 1 ? 's' : ''}</span>
     </div>
   </div>`;
 }

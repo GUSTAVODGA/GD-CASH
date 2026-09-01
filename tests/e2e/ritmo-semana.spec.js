@@ -76,7 +76,6 @@ const abrir = async (page, dados, aba = 'inicio') => {
 
 const custo  = page => page.evaluate(() => window._custoDoDia(0));
 const semana = page => page.evaluate(() => window._ritmoSemana(0));
-const mes    = page => page.evaluate(() => window._ritmoMes(0));
 
 const secao  = page => page.locator('#home-ritmo-section');
 const cartao = page => page.locator('#home-ritmo');
@@ -341,34 +340,6 @@ test('os dias que bateram a meta são contados', async ({ page }) => {
 
 // ── O mês ─────────────────────────────────────────────────────────────────
 
-test('o mês conta dias rodados e o que falta para se pagar', async ({ page }) => {
-  await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
-  const m = await mes(page);
-  expect(m.rodados).toBe(3);
-  expect(m.bateram).toBe(2);
-  expect(m.entrou).toBe(450);
-  expect(m.media, '450 em 3 dias rodados').toBe(150);
-  expect(m.custoMes).toBe(3300);
-  expect(m.falta).toBe(2850);
-  expect(m.fechou).toBe(false);
-
-  const c = cartao(page);
-  await expect(c).toContainText('Falta para o mês se pagar');
-  await expect(c).toContainText('R$ 2.850,00');
-  await expect(c).toContainText('R$ 450,00 de R$ 3.300,00');
-  await expect(c).toContainText('3 dias rodados');
-});
-
-test('mês que já se pagou não cobra mais', async ({ page }) => {
-  await abrir(page, {
-    fixedExpenses: FIXOS, dailyIncome: { '2026-08-05': { p1: 3400 } }, ...COM_RITMO,
-  });
-  const m = await mes(page);
-  expect(m.fechou).toBe(true);
-  expect(m.falta).toBe(0);
-  await expect(cartao(page)).toContainText('O mês já se pagou');
-});
-
 // ── Linguagem, explicação e pureza ────────────────────────────────────────
 
 test('o placar informa, não cobra', async ({ page }) => {
@@ -411,7 +382,7 @@ test('ler o placar é só leitura: não encosta em D nem salva', async ({ page }
   const antes = await lerEstado(page, 'JSON.stringify(D)');
   const salvou = await page.evaluate(() => {
     let n = 0; const s = window.save; window.save = () => { n++; return s && s(); };
-    window._ritmoSemana(0); window._ritmoMes(0); window._custoDoDia(0);
+    window._ritmoSemana(0); window._custoDoDia(0);
     window.renderHomeRitmo(); window.renderInicio();
     window.save = s; return n;
   });

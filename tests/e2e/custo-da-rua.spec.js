@@ -235,27 +235,6 @@ test('O DEFEITO ORIGINAL: a semana deixa de dar permissão para parar cedo', asy
   expect(s.piso).toBe(973.32);
 });
 
-test('o mês se paga contra o custo INTEIRO, não só contra o fixo', async ({ page }) => {
-  // Cobrar só o fixo declarava "o mês já se pagou" cedo demais.
-  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO, ...janelaDeRua() });
-  const c = await custo(page);
-  expect(c.rodagemPrevista).toBe(22);
-  expect(c.mensalTotal, '3.300 de fixo + 40 × 22 dias de rua').toBe(4180);
-
-  const m = await page.evaluate(() => window._ritmoMes(0));
-  expect(m.custoMes).toBe(4180);
-  expect(m.custoFixoMes, 'a composição perdeu a parte fixa').toBe(3300);
-});
-
-test('sem ritmo, a rodagem prevista sai da taxa recente, não de um palpite', async ({ page }) => {
-  // 10 dias rodados em 30 → cerca de 1/3 dos dias. Em agosto, ~10 dias.
-  await abrir(page, { fixedExpenses: FIXOS, ritmo: { ligado: true }, ...janelaDeRua() });
-  const c = await custo(page);
-  expect(c.temRitmo).toBe(false);
-  expect(c.rodagemPrevista, 'round(10 × 31 ÷ 30)').toBe(10);
-  expect(c.mensalTotal, '3.300 + 40 × 10').toBe(3700);
-});
-
 // ── A prestação de contas ─────────────────────────────────────────────────
 
 test('a folha mostra a composição INTEIRA, com a janela de onde a rua saiu', async ({ page }) => {
@@ -342,35 +321,6 @@ test('O CASO REAL: a entrada de um carro não pode inflar a linha do dia', async
   // A linha do dia volta a ser a de antes da compra: 400 ÷ 10 = 40 de rua.
   expect(c.variavel, 'a entrada do carro entrou na média por dia').toBe(40);
   expect(c.alvo).toBe(190);
-});
-
-test('O DINHEIRO NÃO SOME: o gasto único continua cobrado no total do MÊS', async ({ page }) => {
-  // Tirá-lo da média por dia sem devolvê-lo ao mês faria o mês declarar "já se
-  // pagou" cedo demais — o mesmo defeito que a v84 corrigiu por outro caminho.
-  const { dailyIncome, expenses } = janelaDeRua();
-  expenses.push({ id: 'ent1', date: iso(-9), category: 'Carros', amount: 2000,
-                  description: 'Entrada do FUSION' });
-  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO, dailyIncome, expenses });
-
-  const c = await custo(page);
-  expect(c.unicosDoMes, 'o gasto único sumiu do mês').toBe(2000);
-  // 3.300 de fixo + 40 × 22 dias de rodagem + 2.000 do gasto único.
-  expect(c.mensalTotal).toBe(6180);
-
-  const m = await page.evaluate(() => window._ritmoMes(0));
-  expect(m.custoMes).toBe(6180);
-});
-
-test('gasto único de OUTRO MÊS não é cobrado neste', async ({ page }) => {
-  // A janela do variável é de 30 dias corridos e atravessa a virada do mês.
-  const { dailyIncome, expenses } = janelaDeRua({ dias: 25 });
-  expenses.push({ id: 'ent1', date: iso(-25), category: 'Carros', amount: 5000,
-                  description: 'Entrada do FUSION' });   // 26/07, mês passado
-  await abrir(page, { fixedExpenses: FIXOS, ...COM_RITMO, dailyIncome, expenses });
-
-  const c = await custo(page);
-  expect(c.variavelForaDoPadrao, 'não foi reconhecido como gasto único').toHaveLength(1);
-  expect(c.unicosDoMes, 'cobrou de agosto um gasto de julho').toBe(0);
 });
 
 test('A FOLHA MOSTRA o que ficou de fora — esconder seria pior', async ({ page }) => {
@@ -483,7 +433,7 @@ test('calcular a rua é só leitura: não encosta em D nem salva', async ({ page
   const salvou = await page.evaluate(() => {
     let n = 0; const s = window.save; window.save = () => { n++; return s && s(); };
     window._custoVariavelPorDiaRodado(); window._custoDoDia(0);
-    window._ritmoSemana(0); window._ritmoMes(0); window.renderInicio();
+    window._ritmoSemana(0); window.renderInicio();
     window.save = s; return n;
   });
   expect(salvou).toBe(0);
