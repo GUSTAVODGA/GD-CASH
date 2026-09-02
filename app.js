@@ -8263,18 +8263,37 @@ function exportCalendar() {
   const ics = `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Avenco//PT\r\nCALSCALE:GREGORIAN\r\nMETHOD:PUBLISH\r\n${events}END:VCALENDAR`;
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const blob = new Blob([ics], {type:'text/calendar'});
+  const url = URL.createObjectURL(blob);
   if (isIOS) {
-    // No iOS: abre link com data URI — Safari reconhece text/calendar e abre o Calendário
-    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
-    const a = document.createElement('a');
-    a.href = dataUri;
-    a.target = '_blank';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // ══════════════════════════════════════════════════════════════════════
+    // TELA BRANCA — o que causava, e por que a correção é navegar a MESMA
+    // janela, nunca abrir uma nova.
+    //
+    // A versão anterior criava uma URI `data:text/calendar` e um
+    // `<a target="_blank">`. Numa aba comum do Safari isso funciona: o
+    // WebKit intercepta a navegação, reconhece o tipo do arquivo e mostra a
+    // folha nativa "Adicionar eventos" sem sair da aba.
+    //
+    // Mas o app roda instalado (`display: "standalone"` no manifest — sem
+    // barra de navegador). Um app instalado não tem "aba" para abrir uma
+    // segunda: o iOS cria um contexto novo, sem a interface do Safari, e
+    // ESSE contexto não tem a lógica que reconhece calendário. Ele tenta
+    // desenhar o conteúdo como se fosse uma página, não há HTML nenhum para
+    // desenhar, e o resultado é a tela em branco relatada.
+    //
+    // A correção: navegação de página INTEIRA na mesma janela, para um Blob
+    // de verdade (não uma URI data:), sem target="_blank" e sem o atributo
+    // download. Sendo a própria janela que navega, o WebKit intercepta o
+    // tipo do arquivo ANTES de tentar desenhar qualquer coisa — e mostra a
+    // folha nativa por cima do app, sem o app trocar de tela. É a técnica
+    // usada por bibliotecas de "adicionar ao calendário" em produção, e
+    // funciona tanto numa aba do Safari quanto dentro do app instalado.
+    window.location.href = url;
+    // Sem revogar a URL logo em seguida: a interceptação do navegador
+    // acontece de forma assíncrona, e revogar cedo demais apagaria o
+    // arquivo antes dele ser lido — a mesma tela branca, por outro motivo.
   } else {
-    const blob = new Blob([ics], {type:'text/calendar'});
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href=url; a.download='avenco-vencimentos.ics';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 3000);

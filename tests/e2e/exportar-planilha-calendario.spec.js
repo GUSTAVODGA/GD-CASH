@@ -167,6 +167,81 @@ test('o .ics carrega o vencimento e o lembrete de 2 dias antes', async ({ page }
   expect((ics.match(/BEGIN:VEVENT/g) || []).length).toBeGreaterThanOrEqual(11);
 });
 
+// ── A TELA BRANCA no iPhone ────────────────────────────────────────────────
+//
+// Relato do usuário: "não funciona, tá abrindo uma tela toda branca".
+//
+// A versão anterior, só para iOS, criava uma URI `data:text/calendar` e um
+// `<a target="_blank">`. Numa aba comum do Safari isso funciona: o WebKit
+// intercepta a navegação e mostra a folha nativa "Adicionar eventos" sem
+// sair da aba. Mas o Avenco roda INSTALADO (`display: "standalone"` no
+// manifest — sem barra de navegador). Um app instalado não tem aba para
+// abrir uma segunda: o iOS cria um contexto novo, sem a interface do Safari,
+// e esse contexto não reconhece calendário — tenta desenhar o conteúdo como
+// página, não há HTML nenhum, e o resultado é a tela em branco relatada.
+//
+// A correção é navegar a MESMA janela (`location.href`) para um Blob de
+// verdade — nunca `target="_blank"`, nunca uma URI `data:`. Sendo navegação
+// de página inteira, o WebKit intercepta o tipo do arquivo antes de tentar
+// desenhar qualquer coisa, e mostra a folha nativa por cima do app.
+//
+// A folha nativa em si é interface do sistema operacional: nenhum motor de
+// teste, Chromium incluso, consegue reproduzi-la. O que ESTES testes provam
+// é a garantia que sobra em qualquer motor: o app NUNCA sai do ar. Um
+// diagnóstico à parte (fora deste arquivo) confirmou o comportamento exato do
+// Chromium para `location.href = <Blob text/calendar>`: a navegação é
+// abortada (`net::ERR_ABORTED`) e vira um evento de download — a página
+// nunca troca de URL, nunca sai da tela, nunca fica em branco. É a mesma
+// garantia que o WebKit real oferece por outro caminho (a navegação é
+// interceptada antes de renderizar). O teste de código-fonte
+// (`tests/unit/calendario-sem-tela-branca.test.mjs`) é quem prova os
+// detalhes que só existem no texto: ausência de target="_blank" e de data:.
+function simularIOS(page, ua) {
+  return page.evaluate(agente => {
+    Object.defineProperty(navigator, 'userAgent', { value: agente, configurable: true });
+  }, ua);
+}
+const UA_IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
+
+test('IPHONE: o app NUNCA sai do ar — nenhuma tela nova, nenhuma tela branca', async ({ page }) => {
+  await abrir(page, COM_DADOS);
+  await espionar(page);
+  await simularIOS(page, UA_IPHONE);
+  const urlAntes = page.url();
+
+  const download = page.waitForEvent('download', { timeout: 5000 });
+  await linhaAjustes(page, 'Exportar vencimentos (calendário)').click();
+  const arquivo = await download;
+
+  // A garantia central: a página do app é a MESMA antes e depois. Não abriu
+  // aba, não navegou para longe, não existe tela em branco possível — porque
+  // não existe tela nenhuma além da que já estava lá.
+  expect(page.url(), 'a página navegou para longe do app').toBe(urlAntes);
+  await expect(page.locator('#page-ajustes.active'), 'o app saiu da tela').toBeVisible();
+  expect(arquivo.suggestedFilename()).toMatch(/\.ics$/);
+
+  // E nenhum <a target="_blank"> foi criado — a técnica antiga não voltou.
+  const semAncora = await page.evaluate(() => window.__down.length === 0);
+  expect(semAncora, 'criou um <a> — o padrão antigo (target="_blank") voltou').toBe(true);
+});
+
+test('IPAD (heurística MacIntel + multitouch): a mesma garantia', async ({ page }) => {
+  await abrir(page, COM_DADOS);
+  await espionar(page);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel', configurable: true });
+    Object.defineProperty(navigator, 'maxTouchPoints', { value: 5, configurable: true });
+  });
+  const urlAntes = page.url();
+
+  const download = page.waitForEvent('download', { timeout: 5000 });
+  await linhaAjustes(page, 'Exportar vencimentos (calendário)').click();
+  await download;
+
+  expect(page.url()).toBe(urlAntes);
+  await expect(page.locator('#page-ajustes.active')).toBeVisible();
+});
+
 // ── Pureza ────────────────────────────────────────────────────────────────
 
 test('exportar não grava em D nem chama save()', async ({ page }) => {
