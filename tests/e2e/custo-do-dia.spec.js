@@ -205,6 +205,39 @@ test('AJUSTES: a porta existe e mostra o estado', async ({ page }) => {
   await expect(linha, 'ligado, não mostra o número que está valendo').toContainText('R$ 100,00 por dia');
 });
 
+test('AJUSTES E INÍCIO MOSTRAM O MESMO NÚMERO — mesmo quando divergem entre si', async ({ page }) => {
+  // Relato: a Início dizia "R$ 116,43 por dia" e os Ajustes diziam
+  // "R$ 76,45 por dia" para a mesma pergunta, na mesma sessão. A causa: os
+  // Ajustes liam `_custoDoDia().porDia` — uma quantidade INTERNA (só a parte
+  // fixa, dividida pelos dias do calendário) — em vez de `.alvo`, a linha que
+  // vale de verdade. Com ritmo declarado e custo de rua, os dois divergem.
+  const dailyIncome = {}, expenses = [];
+  for (let i = 1; i <= 10; i++) {
+    const d = new Date(AGORA); d.setDate(d.getDate() - i);
+    const dISO = d.toISOString().slice(0, 10);
+    dailyIncome[dISO] = { p1: 300 };
+    expenses.push({ id: 'g' + i, date: dISO, category: 'Gasolina', amount: 40, description: 'Posto' });
+  }
+  await abrir(page, {
+    fixedExpenses: FIXOS, dailyIncome, expenses,
+    ritmo: { ligado: true, diasPorSemana: 5 },
+  }, 'ajustes');
+
+  const c = await page.evaluate(() => window._custoDoDia(0));
+  expect(c.porDia, 'o cenário não cobre o caso em que porDia ≠ alvo').not.toBe(c.alvo);
+  const { alvoTxt, porDiaTxt } = await page.evaluate(() =>
+    ({ alvoTxt: window.R(window._custoDoDia(0).alvo), porDiaTxt: window.R(window._custoDoDia(0).porDia) }));
+
+  const linha = page.locator('.srow', { hasText: 'Custo do dia' });
+  await expect(linha, 'os Ajustes mostraram a quantidade interna, não a linha que vale')
+    .toContainText(`${alvoTxt} por dia rodado`);
+  await expect(linha, 'os Ajustes mostraram o número errado').not.toContainText(porDiaTxt);
+
+  await page.evaluate(() => window.switchTab('inicio'));
+  await page.waitForTimeout(900);
+  await expect(page.locator('#home-dia')).toContainText(alvoTxt);
+});
+
 test('a folha explica a conta ANTES de ligar', async ({ page }) => {
   // Ninguém deve descobrir a própria linha de chegada por surpresa.
   await abrir(page, { fixedExpenses: FIXOS }, 'ajustes');

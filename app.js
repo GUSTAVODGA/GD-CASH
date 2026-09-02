@@ -9766,9 +9766,14 @@ function renderAjustes() {
   // O custo do dia é opcional e nasce desligado: o subtítulo diz o estado e,
   // quando ligado, o número que está valendo.
   const _rc = _custoDoDia(0);
+  // `alvo`, não `porDia`. `porDia` é uma quantidade INTERNA — a parte fixa
+  // dividida pelos dias do calendário — que só vale como fallback de quem não
+  // declarou ritmo. Mostrá-la aqui punha R$ 76,45 nos Ajustes ao lado de
+  // R$ 116,43 na Início, para a mesma pergunta: "quanto custa o meu dia?".
+  // Terceira reincidência do mesmo padrão; agora com teste que a barra.
   const ritmoSub = !_ritmoLigado() ? 'Desligado'
     : _rc.semBase ? 'Ligado · sem gastos fixos cadastrados'
-    : `${R(_rc.porDia)} por dia`;
+    : `${R(_rc.alvo)} por dia rodado`;
 
   const _sy = syncStatus();
   const syncLabel = !CLOUD_ENABLED ? 'Somente local'
