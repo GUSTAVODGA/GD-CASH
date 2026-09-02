@@ -3382,7 +3382,13 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
     padding-left: 220px;
   }
 
-  /* ── Barra lateral (ex-nav inferior) ── */
+  /* ── Barra lateral (ex-nav inferior) ──
+     Continua com o fundo escuro de `--nav-bg` (não muda com o tema — ver
+     regra de base de `.bottom-nav`), então as cores aqui embaixo usam a
+     mesma paleta "sobre escuro" da marca (`--on-flood-*`, `--mint`), não
+     `--ac`/`--border`/`--ol2`: esses assumem uma superfície CLARA e ficavam
+     ilegíveis (verde-escuro ou cinza quase invisível sobre o fundo já quase
+     preto da barra). */
   .bottom-nav {
     left: 0; top: 0; bottom: 0; right: auto;
     width: 220px; height: 100dvh;
@@ -3391,7 +3397,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
     align-items: stretch;
     padding: 68px 12px 32px;
     border-top: none;
-    border-right: 1px solid var(--border);
+    border-right: 1px solid var(--on-flood-3);
     border-radius: 0;
     overflow: hidden;
   }
@@ -3402,11 +3408,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
     display: block;
     font-size: 17px;
     font-weight: 900;
-    color: var(--ac);
+    color: var(--mint);
     letter-spacing: -.5px;
     padding: 0 14px 16px;
     margin-bottom: 8px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--on-flood-3);
   }
 
   /* Itens da nav: horizontais com ícone + texto */
@@ -3421,13 +3427,14 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
     min-width: unset;
     width: 100%;
     letter-spacing: -.1px;
+    color: var(--on-flood-2);
   }
 
   .nav-item svg { width: 19px; height: 19px; }
 
   .nav-item.active {
-    background: var(--ac-t);
-    color: var(--ac);
+    background: rgba(123,227,168,.14);
+    color: var(--mint);
   }
 
   /* ── Topbar permanece sticky mas respeita o padding-left do body ── */
@@ -3474,7 +3481,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
 
 /* ── Hover state para desktop com mouse ── */
 @media (min-width: 1200px) and (hover: hover) {
-  .nav-item:not(.active):hover { background: var(--ol2); }
+  .nav-item:not(.active):hover { background: var(--on-flood-3); }
   .settings-row:hover { background: var(--ol1); }
   .hc-tool-item:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 }
@@ -4667,7 +4674,27 @@ button:focus-visible, [role="button"]:focus-visible {
    chegar ao mesmo resultado com mais chance de errar.
    ══════════════════════════════════════════════════════════════════════════ */
 
-/* ── O campo ─────────────────────────────────────────────────────────────
+/* Guarda de largura: esta casca (campo verde sangrando de borda a borda,
+   folha flutuante, pílula de navegação) é o desenho de telefone e tablet.
+   Sem esta media query, cada regra aqui embaixo — sem exceção — VENCE por
+   ordem de cascata qualquer regra igual ou anterior no arquivo, INCLUSIVE
+   a barra lateral do desktop (min-width:1200px, seção acima). Foi assim
+   que a pílula de navegação (pensada para caber numa faixa curta no rodapé
+   do celular) vazou para dentro da barra lateral de 800px de altura: mesma
+   regra ".nav-item{border-radius:999px}", agora aplicada a um botão alto
+   e estreito, vira uma bolha oval gigante. A mesma fuga de cascata cortava
+   a palavra "Avenco" do topo da barra (o padding-top da pílula, 7px,
+   vencia o padding-top:68px pensado pra abrir espaço pra ela) e trocava o
+   respiro generoso da folha desktop (padding 28px 48px) pelo respiro
+   apertado do celular (16px).
+
+   O topo (`.topbar` e seu conteúdo) NÃO entra nessa guarda: o campo verde
+   sangrando por trás do topo é o mesmo em qualquer largura — a barra
+   lateral do desktop não define nada para essas propriedades, então não
+   há cascata para vazar, e a marca fica consistente do celular à tela
+   grande. */
+
+/* ── O campo ───────────────────────────────────────────────────────────────
    Sem blur e sem borda inferior: o topo não é uma barra sobre o conteúdo, é
    o fundo do app aparecendo. A folha é que o cobre. */
 .topbar {
@@ -4709,106 +4736,112 @@ button:focus-visible, [role="button"]:focus-visible {
   color: var(--on-flood);
 }
 
-/* O campo continua atrás de tudo: é ele que aparece pelos cantos da folha. */
-main { background: var(--flood); }
+@media (max-width: 1199px) {
+  /* O campo continua atrás de tudo: é ele que aparece pelos cantos da folha.
+     Só até 1199px — dali pra cima o desktop usa `main{background:var(--bg)}`
+     (bloco de 1200px acima): não há folha subindo por cima de um campo,
+     então o campo sangrando aqui só criava uma tarja verde solta acima do
+     conteúdo nas abas sem herói (Ajustes, Fixos, etc). */
+  main { background: var(--flood); }
 
-/* ── A folha ─────────────────────────────────────────────────────────────
-   Sobe 18px por cima do campo. O `padding-bottom` reserva o espaço da pílula
-   de navegação — sem ele o último cartão fica embaixo dela, que é o defeito
-   que o FAB tinha antes. */
-.page {
-  background: var(--bg);
-  border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
-  box-shadow: var(--sheet-shadow);
-  padding: 22px 16px 132px;
-  margin-top: -18px;
-  position: relative;
-  z-index: 1;
-}
-.page.active { min-height: calc(100dvh - 40px); }
+  /* ── A folha ─────────────────────────────────────────────────────────────
+     Sobe 18px por cima do campo. O `padding-bottom` reserva o espaço da pílula
+     de navegação — sem ele o último cartão fica embaixo dela, que é o defeito
+     que o FAB tinha antes. */
+  .page {
+    background: var(--bg);
+    border-radius: var(--sheet-radius) var(--sheet-radius) 0 0;
+    box-shadow: var(--sheet-shadow);
+    padding: 22px 16px 132px;
+    margin-top: -18px;
+    position: relative;
+    z-index: 1;
+  }
+  .page.active { min-height: calc(100dvh - 40px); }
 
-/* Alça da folha: o mesmo sinal de "isto se puxa" dos bottom sheets do app. */
-.page.active::before {
-  content: "";
-  display: block;
-  width: 38px; height: 4px;
-  border-radius: 999px;
-  background: var(--handle-bg);
-  margin: -8px auto 16px;
-}
+  /* Alça da folha: o mesmo sinal de "isto se puxa" dos bottom sheets do app. */
+  .page.active::before {
+    content: "";
+    display: block;
+    width: 38px; height: 4px;
+    border-radius: 999px;
+    background: var(--handle-bg);
+    margin: -8px auto 16px;
+  }
 
-/* ── A pílula de navegação ───────────────────────────────────────────────
-   Flutua sobre a folha em vez de ser uma barra colada na borda. O vão à
-   direita é onde o "+" pousa. */
-.bottom-nav {
-  left: 16px; right: 16px;
-  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
-  background: var(--nav-bg);
-  border: none;
-  border-radius: 999px;
-  box-shadow: 0 10px 30px rgba(20,25,20,.28), 0 0 0 1px rgba(20,25,20,.04);
-  /* No escuro a pílula é quase da cor da folha; sem um contorno ela deixa de
-     existir como objeto flutuante e vira um rodapé colado. */
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  padding: 7px 66px 7px 8px;
-  justify-content: space-between;
-}
-.nav-item {
-  color: rgba(253,246,236,.46);
-  min-height: 44px;
-  justify-content: center;
-  border-radius: 999px;
-  font-size: 9.5px;
-  letter-spacing: .01em;
-}
-.nav-item svg { width: 20px; height: 20px; }
-.nav-item.active { color: var(--mint); }
-/* O brilho no ícone ativo era decoração; a cor já diz onde você está. */
-.nav-item.active svg { filter: none; }
+  /* ── A pílula de navegação ───────────────────────────────────────────────
+     Flutua sobre a folha em vez de ser uma barra colada na borda. O vão à
+     direita é onde o "+" pousa. */
+  .bottom-nav {
+    left: 16px; right: 16px;
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    background: var(--nav-bg);
+    border: none;
+    border-radius: 999px;
+    box-shadow: 0 10px 30px rgba(20,25,20,.28), 0 0 0 1px rgba(20,25,20,.04);
+    /* No escuro a pílula é quase da cor da folha; sem um contorno ela deixa de
+       existir como objeto flutuante e vira um rodapé colado. */
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    padding: 7px 66px 7px 8px;
+    justify-content: space-between;
+  }
+  .nav-item {
+    color: rgba(253,246,236,.46);
+    min-height: 44px;
+    justify-content: center;
+    border-radius: 999px;
+    font-size: 9.5px;
+    letter-spacing: .01em;
+  }
+  .nav-item svg { width: 20px; height: 20px; }
+  .nav-item.active { color: var(--mint); }
+  /* O brilho no ícone ativo era decoração; a cor já diz onde você está. */
+  .nav-item.active svg { filter: none; }
 
-/* ── O "+" ───────────────────────────────────────────────────────────────
-   Continua `position: fixed` com `right`/`bottom` numéricos porque é assim
-   que a suíte deriva o retângulo que ele ocupa (jornada-fab). Fica pousado
-   na ponta direita da pílula, e por isso lê como parte dela. */
-.global-fab {
-  right: 22px;
-  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-  width: 48px; height: 48px;
-  border-radius: 999px;
-}
+  /* ── O "+" ───────────────────────────────────────────────────────────────
+     Continua `position: fixed` com `right`/`bottom` numéricos porque é assim
+     que a suíte deriva o retângulo que ele ocupa (jornada-fab). Fica pousado
+     na ponta direita da pílula, e por isso lê como parte dela. */
+  .global-fab {
+    right: 22px;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    width: 48px; height: 48px;
+    border-radius: 999px;
+  }
 
-/* ── Alvos de toque ─────────────────────────────────────────────────────
-   Medidos a 320 e 390px: `nav-arrow` era 36×36, `tab-help-btn` 26×26 (com o
-   "?" cortado), `bud-del` 18×18. O mínimo confortável é 44. Onde o desenho
-   pede um botão pequeno, o alvo cresce por ::before, sem engordar o visual. */
-.nav-arrow { width: 44px; height: 44px; }
-.tab-help-btn {
-  width: 30px; height: 30px;
-  font-size: 13px;
-  line-height: 1;
-  position: relative;
-  overflow: visible;
-}
-.tab-help-btn::before,
-.bud-del::before,
-.wg-edit::before,
-.dacc-tx-edit::before,
-.dacc-tx-del::before {
-  content: ""; position: absolute; top: 50%; left: 50%;
-  transform: translate(-50%, -50%); width: 44px; height: 44px;
-}
-.bud-del, .wg-edit, .dacc-tx-edit, .dacc-tx-del { position: relative; }
+  /* ── Alvos de toque ─────────────────────────────────────────────────────
+     Medidos a 320 e 390px: `nav-arrow` era 36×36, `tab-help-btn` 26×26 (com o
+     "?" cortado), `bud-del` 18×18. O mínimo confortável é 44. Onde o desenho
+     pede um botão pequeno, o alvo cresce por ::before, sem engordar o visual. */
+  .nav-arrow { width: 44px; height: 44px; }
+  .tab-help-btn {
+    width: 30px; height: 30px;
+    font-size: 13px;
+    line-height: 1;
+    position: relative;
+    overflow: visible;
+  }
+  .tab-help-btn::before,
+  .bud-del::before,
+  .wg-edit::before,
+  .dacc-tx-edit::before,
+  .dacc-tx-del::before {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); width: 44px; height: 44px;
+  }
+  .bud-del, .wg-edit, .dacc-tx-edit, .dacc-tx-del { position: relative; }
 
-/* A folha já reserva o espaço da pílula; o padding do body viraria vão morto. */
-body { padding-bottom: 0; }
+  /* A folha já reserva o espaço da pílula; o padding do body viraria vão morto. */
+  body { padding-bottom: 0; }
 
-/* ── Ajustes do tema escuro na casca ─────────────────────────────────────── */
-:root[data-theme="dark"] .bottom-nav {
-  background: var(--surface2);
-  box-shadow: 0 10px 30px rgba(0,0,0,.55), 0 0 0 1px rgba(241,237,227,.09);
+  /* ── Ajustes do tema escuro na casca ─────────────────────────────────────── */
+  :root[data-theme="dark"] .bottom-nav {
+    background: var(--surface2);
+    box-shadow: 0 10px 30px rgba(0,0,0,.55), 0 0 0 1px rgba(241,237,227,.09);
+  }
+  :root[data-theme="dark"] .page { box-shadow: var(--sheet-shadow); }
 }
-:root[data-theme="dark"] .page { box-shadow: var(--sheet-shadow); }
 
 /* ══════════════════════════════════════════════════════════════════════════
    COFRE — INÍCIO
