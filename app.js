@@ -8228,6 +8228,12 @@ function exportCSV() {
       if(v&&v>0&&!hasItems) rows.push([date,'Receita',p.name,p.name,v]);
     });
   });
+  // Mesmo guarda de "nada para exportar" que `exportCalendar` já usava: um CSV
+  // com só o cabeçalho abriria em branco e pareceria um erro, não um estado.
+  if (!rows.length) {
+    gdToast('Ainda não há lançamentos para exportar.', { type: 'error' });
+    return;
+  }
   rows.sort((a,b) => String(a[0]).localeCompare(String(b[0])));
   rows.unshift(header);
   const csv = rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')).join('\n');
@@ -8236,6 +8242,7 @@ function exportCSV() {
   const a = document.createElement('a'); a.href=url; a.download=`avenco-${todayStr()}.csv`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+  gdToast('Planilha exportada.', { type: 'success' });
 }
 
 function exportCalendar() {
@@ -8271,6 +8278,9 @@ function exportCalendar() {
     const a = document.createElement('a'); a.href=url; a.download='avenco-vencimentos.ics';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 3000);
+    // Só aqui: no ramo do iOS a página perde o foco para o app de Calendário
+    // antes que o aviso apareceria, e ficaria um toast órfão ao voltar.
+    gdToast('Arquivo de vencimentos exportado.', { type: 'success' });
   }
 }
 
@@ -9761,6 +9771,19 @@ function renderAjustes() {
     ? 'Último: ' + lastBackup.split('-').reverse().join('/')
     : 'Nunca exportado';
 
+  // Duas exportações que não são backup: uma serve para ANALISAR fora do app
+  // (planilha), a outra para SER AVISADO fora do app (calendário do celular).
+  // Nenhuma delas mexe no que está guardado — são cópias, não substituições.
+  const nLancamentos = (D.expenses||[]).length + (D.incomeItems||[]).length +
+    Object.values(D.dailyIncome||{}).reduce((s,pm) => s + Object.values(pm).filter(v => v > 0).length, 0);
+  const csvSub = nLancamentos
+    ? `${nLancamentos} lançamento${nLancamentos !== 1 ? 's' : ''}`
+    : 'Nada lançado ainda';
+  const nVencimentos = (D.fixedExpenses||[]).filter(f => f.dueDay).length;
+  const calSub = nVencimentos
+    ? `${nVencimentos} gasto${nVencimentos !== 1 ? 's' : ''} fixo${nVencimentos !== 1 ? 's' : ''} com vencimento`
+    : 'Nenhum gasto fixo com dia de vencimento';
+
   // Dizia "Firebase ativo" como texto fixo — afirmava que estava sincronizando
   // mesmo com semanas de falha acumulada. Agora responde pelo estado real.
   // O custo do dia é opcional e nasce desligado: o subtítulo diz o estado e,
@@ -9810,6 +9833,8 @@ function renderAjustes() {
     phone:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>`,
     shield:  `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
     file:    `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
+    table:   `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/></svg>`,
+    calendar:`<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
     user:    `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
   };
   const chev = `<svg class="srow-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>`;
@@ -9916,6 +9941,24 @@ function renderAjustes() {
         <div class="srow-right">${chev}</div>
       </button>
       <div class="sdivider"></div>
+      <button class="srow" onclick="exportCSV()">
+        <span class="srow-icon">${ic.table}</span>
+        <div class="srow-body">
+          <div class="srow-label">Exportar planilha (CSV)</div>
+          <div class="srow-value">${csvSub}</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      <div class="sdivider"></div>
+      <button class="srow" onclick="exportCalendar()">
+        <span class="srow-icon">${ic.calendar}</span>
+        <div class="srow-body">
+          <div class="srow-label">Exportar vencimentos (calendário)</div>
+          <div class="srow-value">${calSub}</div>
+        </div>
+        <div class="srow-right">${chev}</div>
+      </button>
+      <div class="sdivider"></div>
       <div class="srow${syncCls}"${CLOUD_ENABLED ? ' onclick="abrirDiagnosticoSync()" role="button" tabindex="0"' : ''}>
         <span class="srow-icon">${ic.cloud}</span>
         <div class="srow-body">
@@ -9950,7 +9993,7 @@ function renderAjustes() {
       <div class="sdivider"></div>
       <div class="srow srow-muted">
         <span class="srow-icon">${ic.info}</span>
-        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v90</div></div>
+        <div class="srow-body"><div class="srow-label">Versão</div><div class="srow-value">Avenco v91</div></div>
       </div>
       <div class="sdivider"></div>
       <div class="srow srow-muted">
