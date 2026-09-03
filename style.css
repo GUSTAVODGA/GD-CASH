@@ -3144,11 +3144,20 @@ select.form-select {
 /* ...mas em linhas horizontais (flex + gap) o margin-top empurraria o 2º botão
    para baixo, gerando a assimetria "um embaixo, outro em cima".
    Reset comum em TODAS as linhas horizontais de botões do app.
-   (Se criar uma nova linha horizontal de .btn, adicione o contêiner aqui.) */
+
+   Esta lista é escrita à mão, e por isso já falhou duas vezes em silêncio:
+   `.meta-acoes` (Guardar/Retirar das metas) e `.df-actions` (Cancelar/Vender)
+   nasceram horizontais sem entrar aqui, e o 2º botão de cada uma ficou 8px
+   mais baixo que o 1º — foi assim que o defeito chegou ao aparelho de quem usa.
+   Quem esquecer de novo não depende mais de alguém reparar: o teste
+   `tests/e2e/linhas-de-botoes.spec.js` mede TODA linha horizontal de botões do
+   app e falha se dois botões da mesma linha não começarem na mesma altura. */
 .btn-row .btn + .btn,
 .res-q-actions .btn + .btn,
 .veh-form-btns .btn + .btn,
 .veh-detail-footer .btn + .btn,
+.meta-acoes .btn + .btn,
+.df-actions .btn + .btn,
 .av-dialog-actions.av-row .btn + .btn { margin-top: 0; }
 
 /* Cards nas telas secundárias — mesmo estilo Home/Mês */
