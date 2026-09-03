@@ -1023,10 +1023,10 @@ main{background:var(--bg);min-height:100dvh}
 .btn{border:none;border-radius:var(--radius-sm);height:var(--h-btn);padding:0 16px;font-size:14.5px;font-weight:700;cursor:pointer;width:100%;display:flex;align-items:center;justify-content:center;font-family:inherit;transition:box-shadow var(--dur-normal) var(--ease-default),transform var(--dur-fast) var(--ease-default),opacity var(--dur-fast) var(--ease-default);position:relative;overflow:hidden}
 .btn-primary{
   background:linear-gradient(135deg,var(--gold),var(--orange));color:#fff;
-  box-shadow:0 4px 18px var(--gold-glow), 0 2px 6px rgba(0,0,0,.2);
+  box-shadow:0 2px 8px var(--gold-glow), 0 1px 3px rgba(0,0,0,.15);
   transition:box-shadow .2s, transform .1s;
 }
-.btn-primary:active{transform:scale(.95);box-shadow:0 1px 4px var(--gold-glow);filter:brightness(.92)}
+.btn-primary:active{transform:scale(.95);box-shadow:0 1px 3px var(--gold-glow);filter:brightness(.92)}
 .btn-secondary{background:var(--ol1);color:var(--text);border:1px solid var(--border-strong);transition:background .15s,box-shadow .15s}
 .btn-secondary:active{background:var(--ol3);box-shadow:inset 0 1px 3px rgba(13,20,64,.08)}
 .btn-row{display:flex;gap:8px;margin-top:6px}
@@ -1051,7 +1051,7 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 @keyframes btn-spin{to{transform:rotate(360deg)}}
 /* ── Hover — dispositivos com ponteiro ── */
 @media(hover:hover){
-  .btn-primary:hover{box-shadow:0 6px 22px var(--gold-glow),0 3px 8px rgba(0,0,0,.25)}
+  .btn-primary:hover{box-shadow:0 3px 12px var(--gold-glow),0 2px 5px rgba(0,0,0,.2)}
   .btn-secondary:hover{background:var(--ol2)}
   .btn-ghost:hover{background:var(--ol2);border-color:var(--ac)}
   .btn-danger:hover{box-shadow:0 6px 20px var(--rd-t),0 2px 6px rgba(0,0,0,.2)}
@@ -1919,9 +1919,14 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 /* ── Active bigcard elevation ── */
 .dacc.open{box-shadow:var(--shadow-elevated)}
 
-/* ── Primary button enhanced glow ── */
-.btn-primary{box-shadow:0 4px 20px var(--gold-t40),0 2px 6px rgba(0,0,0,.2)}
-.btn-primary:active{box-shadow:0 2px 8px var(--gold-t25)}
+/* ── Primary button — sombra de elevação, não halo ──
+   Era 20px de raio a 40% de opacidade: um raio grande combinado com uma cor
+   CLARA (o mint do tema escuro) sobre fundo quase preto lê como um brilho de
+   neon vazando ao redor do botão, não como sombra — relatado como "feio e
+   errado" numa captura real de iPhone. Raio menor e opacidade mais baixa
+   mantêm o toque de cor sem o halo. */
+.btn-primary{box-shadow:0 2px 8px var(--gold-glow),0 1px 3px rgba(0,0,0,.15)}
+.btn-primary:active{box-shadow:0 1px 3px var(--gold-glow)}
 
 /* ── Nav title pick (fixes dotted underline in light mode) ── */
 .nav-title-pick{text-decoration-color:var(--border)}
