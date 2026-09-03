@@ -1086,15 +1086,6 @@
 </nav>
 
 <!-- ════ FAB GLOBAL ════ -->
-<div class="fab-backdrop" id="fab-backdrop" style="display:none" onclick="closeFabMenu()"></div>
-<div class="fab-actions" id="fab-actions" style="display:none;opacity:0;transform:translateY(12px)">
-  <button class="fab-action-item" onclick="fabAction('income')">
-    <span class="fab-action-icon fab-action-green">↑</span>Receita do dia
-  </button>
-  <button class="fab-action-item" onclick="fabAction('expense')">
-    <span class="fab-action-icon fab-action-red">↓</span>Gasto do dia
-  </button>
-</div>
 <button class="global-fab" id="global-fab" onclick="openQuickAdd()">
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
@@ -1153,7 +1144,7 @@
     <div id="add-exp-section">
       <div class="dd-section-lbl">Adicionar gasto</div>
       <div class="fi-row" style="margin-bottom:8px">
-        <select class="fi" id="exp-cat" style="flex:1" onchange="_onExpCatChange()" aria-label="Categoria do gasto"></select>
+        <select class="fi" id="exp-cat" style="flex:1" aria-label="Categoria do gasto"></select>
         <input class="fi" type="number" id="exp-val" min="0" step="0.01" placeholder="Valor" style="flex:1">
       </div>
       <input class="fi" type="text" id="exp-desc" placeholder="Descrição (ex: Shell, Pizza, Spotify...)" style="margin-bottom:8px">

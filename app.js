@@ -452,7 +452,6 @@ function openDayDetail(idx) {
   selDayIdx = idx;
   document.querySelectorAll('#days-grid .day-btn').forEach((btn, i) => btn.classList.toggle('sel', i === idx));
   populateExpCatSel();
-  _onExpCatChange();
   renderDayDetail();
   openOverlay('modal-day-detail');
 }
@@ -809,56 +808,6 @@ function srchOpen(refStr) {
   let ref;
   try { ref = JSON.parse(decodeURIComponent(refStr)); } catch (e) { return; }
   openQuickAdd(ref);
-}
-
-let _fabOpen = false;
-function toggleFabMenu() { haptic(6); _fabOpen ? closeFabMenu() : openFabMenu(); }
-
-function openFabMenu() {
-  _fabOpen = true;
-  const bd = document.getElementById('fab-backdrop');
-  const ac = document.getElementById('fab-actions');
-  const btn = document.getElementById('global-fab');
-  bd.style.display = ''; ac.style.display = '';
-  btn.classList.add('fab-open');
-  requestAnimationFrame(() => {
-    bd.style.opacity = '1';
-    ac.style.opacity = '1';
-    ac.style.transform = 'translateY(0)';
-  });
-}
-
-function closeFabMenu() {
-  _fabOpen = false;
-  const bd = document.getElementById('fab-backdrop');
-  const ac = document.getElementById('fab-actions');
-  bd.style.opacity = '0';
-  ac.style.opacity = '0';
-  ac.style.transform = 'translateY(12px)';
-  document.getElementById('global-fab').classList.remove('fab-open');
-  setTimeout(() => { bd.style.display = 'none'; ac.style.display = 'none'; }, 220);
-}
-
-function fabAction(type) {
-  closeFabMenu();
-  setTimeout(() => {
-    const goToDay = () => {
-      openDayDetail(selDayIdx);
-      if (type === 'expense') {
-        setTimeout(() => {
-          const sheet = document.querySelector('#modal-day-detail .sheet');
-          const expSec = document.getElementById('add-exp-section');
-          if (sheet && expSec) sheet.scrollTop = expSec.offsetTop - 20;
-        }, 400);
-      }
-    };
-    if (!document.getElementById('page-semana')?.classList.contains('active')) {
-      switchTab('semana');
-      setTimeout(goToDay, 350);
-    } else {
-      goToDay();
-    }
-  }, 250);
 }
 
 // ══════════════════════════════════════════
@@ -2068,43 +2017,6 @@ function toggleFolga() {
 
 function populateExpCatSel() {
   document.getElementById('exp-cat').innerHTML=D.expCats.map(c=>`<option value="${c}">${c}</option>`).join('');
-}
-
-function _isVehCat(cat) {
-  if (!cat) return false;
-  const c = cat.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-  return /gasolina|combustiv|manutenc|estacion|pedagio|seguro|ipva|carro|oficina|revisao|pneu|troca|lubrific/.test(c);
-}
-
-function _populateExpVehSel() {
-  const sel = document.getElementById('exp-veh-sel');
-  if (!sel) return;
-  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
-  sel.innerHTML = '<option value="">— Veículo (opcional) —</option>' + vehs.map(v => `<option value="${v.id}">${escHtml(v.name)}</option>`).join('');
-}
-
-function _onExpCatChange() {
-  const vehs = (D.vehicles || []).filter(v => v.status !== 'arquivado' && v.status !== 'vendido');
-  const vehSel   = document.getElementById('exp-veh-sel');
-  const linkRow  = document.getElementById('exp-veh-link-row');
-  if (!vehSel || vehs.length === 0) { if (vehSel) vehSel.style.display = 'none'; if (linkRow) linkRow.style.display = 'none'; return; }
-  const cat = document.getElementById('exp-cat')?.value || '';
-  if (_isVehCat(cat)) {
-    _populateExpVehSel();
-    vehSel.style.display = '';
-    if (linkRow) linkRow.style.display = 'none';
-  } else {
-    vehSel.style.display = 'none';
-    if (linkRow) linkRow.style.display = '';
-  }
-}
-
-function _showExpVehManual() {
-  _populateExpVehSel();
-  const vehSel  = document.getElementById('exp-veh-sel');
-  const linkRow = document.getElementById('exp-veh-link-row');
-  if (vehSel) vehSel.style.display = '';
-  if (linkRow) linkRow.style.display = 'none';
 }
 
 function _populatePendVehSel() {
@@ -8496,14 +8408,6 @@ function initTheme() {
   const dark = saved === 'dark' ? true : saved === 'light' ? false : prefersDark;
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
 }
-function toggleTheme() {
-  const isDark = document.documentElement.dataset.theme === 'dark';
-  setTheme(isDark ? 'light' : 'dark');
-}
-function updateThemeToggle(dark) {
-  const btn = document.getElementById('theme-toggle-btn');
-  if (btn) btn.classList.toggle('on', dark);
-}
 function setTheme(mode) {
   localStorage.setItem('gdcash_theme', mode);
   const dark = mode === 'dark' ? true : mode === 'light' ? false
@@ -8742,14 +8646,6 @@ function renderHomeNew() {
     } else {
       resvSection.style.display = 'none';
     }
-  }
-
-  // Tools section — badge showing count of open pendências
-  const toolsBadge = document.getElementById('tools-pend-badge');
-  if (toolsBadge) {
-    const openCount = (D.pendencias || []).filter(p => p.status === 'aberta').length;
-    toolsBadge.textContent = openCount > 9 ? '9+' : openCount;
-    toolsBadge.style.display = openCount > 0 ? '' : 'none';
   }
 }
 
