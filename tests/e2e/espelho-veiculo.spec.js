@@ -21,7 +21,7 @@
 // Migrar passou a ser sincronizar. Estes testes prendem as duas metades da
 // regra: o que é do veículo acompanha, e o que é do patrimônio não é tocado.
 import { test, expect } from '@playwright/test';
-import { abrirAppEmDemo, semearDados, lerEstado, irParaAba } from './_helpers.js';
+import { abrirAppEmDemo, semearDados, lerEstado, irParaAba, esperarOverlay } from './_helpers.js';
 
 const AGORA = new Date(2026, 7, 20, 12, 0, 0);
 
@@ -354,13 +354,10 @@ test('NADA SE PERDEU: o custo por veículo continua somando e nomeando', async (
   expect(custo.uso, 'a soma de uso e manutenção mudou').toBe(550);
 });
 
-// A varredura de código morto removeu openVehEvent/saveVehEvent/deleteVehHistItem
-// e o modal "Apontamento" — um fluxo que já não tinha nenhum botão que o
-// alcançasse (nenhum onclick no app inteiro chamava openVehEvent). O
-// histórico de eventos ANTIGOS (v.history) continua sendo só leitura na
-// tela de detalhe; este teste garante que remover o formulário morto não
-// levou junto a exibição do que já existia.
-test('detalhe do veículo mostra histórico legado sem erro, mesmo sem o formulário morto', async ({ page }) => {
+// Este teste garante que a tela de detalhe continua exibindo o histórico
+// (antigo ou novo) mesmo com o formulário de apontamento montado no meio do
+// caminho — a exibição e a edição são coisas independentes.
+test('detalhe do veículo mostra histórico sem erro', async ({ page }) => {
   const erros = [];
   const abrirComErros = async () => {
     const e = await abrirAppEmDemo(page, { agora: AGORA });
@@ -383,4 +380,92 @@ test('detalhe do veículo mostra histórico legado sem erro, mesmo sem o formul�
   await expect(page.locator('#veh-menu-sheet')).toHaveClass(/open/);
 
   expect(erros, `erros de console: ${erros.join(' | ')}`).toEqual([]);
+});
+
+// ── Apontamento: o botão que faltava ──────────────────────────────────────
+//
+// O modal existia no código, mas nenhum botão em lugar nenhum do app abria
+// `openVehEvent` — feature morta, sem porta de entrada. Restaurada com um
+// botão de verdade ("+ Apontamento", no cabeçalho de Histórico, mesmo padrão
+// do "+ Evento" do patrimônio genérico) e com exclusão de item, que também
+// nunca teve botão.
+
+test('"+ Apontamento" atualiza a quilometragem e aparece no histórico', async ({ page }) => {
+  await abrir(page);
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+
+  await page.getByRole('button', { name: '+ Apontamento' }).click();
+  await esperarOverlay(page, 'modal-veh-event', true);
+  await page.locator('#ve-type').selectOption('km_update');
+  await expect(page.locator('#ve-km-row')).toBeVisible();
+  await page.locator('#ve-km').fill('85000');
+  await page.locator('#ve-date').fill('2026-08-15');
+  await page.locator('#modal-veh-event').getByRole('button', { name: 'Salvar' }).click();
+
+  await esperarOverlay(page, 'modal-veh-event', false);
+  expect(await lerEstado(page, "D.vehicles[0].km")).toBe(85000);
+  expect(await lerEstado(page, "D.vehicles[0].history.length")).toBe(1);
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Atualização de km');
+  // "85.000 km" aparece duas vezes: no hero (km atual) e na linha do histórico.
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('85.000 km');
+});
+
+test('"+ Apontamento" registra evento/manutenção sem mexer na quilometragem', async ({ page }) => {
+  await abrir(page);
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+
+  await page.getByRole('button', { name: '+ Apontamento' }).click();
+  await esperarOverlay(page, 'modal-veh-event', true);
+  await expect(page.locator('#ve-km-row')).toBeHidden(); // "evento" é o tipo padrão
+  await page.locator('#ve-note').fill('Troca de óleo');
+  await page.locator('#ve-amount').fill('180');
+  await page.locator('#ve-date').fill('2026-08-10');
+  await page.locator('#modal-veh-event').getByRole('button', { name: 'Salvar' }).click();
+
+  await esperarOverlay(page, 'modal-veh-event', false);
+  expect(await lerEstado(page, "D.vehicles[0].km")).toBe(80000); // km original, intocado
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Troca de óleo');
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('R$ 180,00');
+});
+
+test('apontamento sem quilometragem informada é recusado', async ({ page }) => {
+  await abrir(page);
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await page.getByRole('button', { name: '+ Apontamento' }).click();
+  await page.locator('#ve-type').selectOption('km_update');
+  await page.locator('#modal-veh-event').getByRole('button', { name: 'Salvar' }).click();
+  // Não fechou: a folha continua aberta e nada foi salvo.
+  await expect(page.locator('#modal-veh-event')).toHaveClass(/open/);
+  expect(await lerEstado(page, "D.vehicles[0].history.length")).toBe(0);
+});
+
+test('excluir um apontamento tira ele do histórico', async ({ page }) => {
+  await abrir(page, {
+    ...BASE,
+    vehicles: [{ ...VEICULO, history: [{ id: 'h1', type: 'evento', date: '2026-08-01', note: 'Pneu novo' }] }],
+  });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Pneu novo');
+
+  await page.locator('.pat-hist-item', { hasText: 'Pneu novo' })
+    .getByRole('button', { name: 'Excluir apontamento' }).click();
+
+  expect(await lerEstado(page, "D.vehicles[0].history.length")).toBe(0);
+  await expect(page.locator('#pat-veh-detail-cont')).not.toContainText('Pneu novo');
+});
+
+test('veículo vendido (só leitura) não mostra "+ Apontamento" nem excluir', async ({ page }) => {
+  await abrir(page, {
+    ...BASE,
+    vehicles: [{ ...VEICULO, status: 'vendido', history: [{ id: 'h1', type: 'evento', date: '2026-08-01', note: 'Revisão' }] }],
+  });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Revisão');
+  await expect(page.getByRole('button', { name: '+ Apontamento' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Excluir apontamento' })).toHaveCount(0);
 });

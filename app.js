@@ -8329,6 +8329,7 @@ var PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baix
 var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
 var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'var(--c-warning)', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
 var _vehDetailId = null;
+var _vehEventTarget = null;
 var _vehLinkExpTarget = null;
 var _vehLinkPendTarget = null;
 var _vehStatusTarget = null;
@@ -10704,6 +10705,63 @@ function resizeVehPhoto(file) {
   });
 }
 
+// ── Apontamento modal ──
+function openVehEvent(vehId) {
+  _vehEventTarget = vehId;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  document.getElementById('veh-event-modal-title').textContent = 'Apontamento — ' + v.name;
+  document.getElementById('ve-date').value = todayStr();
+  document.getElementById('ve-type').value = 'evento';
+  document.getElementById('ve-note').value = '';
+  document.getElementById('ve-km').value = '';
+  document.getElementById('ve-amount').value = '';
+  _vehEventTypeToggle();
+  openOverlay('modal-veh-event');
+}
+
+function _vehEventTypeToggle() {
+  const t = document.getElementById('ve-type')?.value;
+  const kmRow   = document.getElementById('ve-km-row');
+  const noteRow = document.getElementById('ve-note-row');
+  if (kmRow)   kmRow.style.display   = (t === 'km_update') ? '' : 'none';
+  if (noteRow) noteRow.style.display = (t !== 'km_update') ? '' : 'none';
+}
+
+function saveVehEvent() {
+  const vehId = _vehEventTarget;
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  const type   = document.getElementById('ve-type').value;
+  const date   = document.getElementById('ve-date').value || todayStr();
+  const note   = (document.getElementById('ve-note').value || '').trim();
+  const kmVal  = document.getElementById('ve-km').value;
+  const amtVal = document.getElementById('ve-amount').value;
+  if (type === 'km_update') {
+    if (!kmVal) { gdToast('Informe a quilometragem.'); return; }
+    v.km = Number(kmVal);
+  } else {
+    if (!note) { gdToast('Informe uma descrição.'); return; }
+  }
+  if (!v.history) v.history = [];
+  const entry = { id: uid(), type, date, note };
+  if (kmVal)  entry.km     = Number(kmVal);
+  if (amtVal) entry.amount = Number(amtVal);
+  v.history.push(entry);
+  save();
+  closeOverlay('modal-veh-event');
+  _refreshVehDetail(vehId);
+  gdToast('Apontamento salvo.');
+}
+
+function deleteVehHistItem(vehId, histId) {
+  const v = (D.vehicles || []).find(x => x.id === vehId);
+  if (!v) return;
+  v.history = (v.history || []).filter(h => h.id !== histId);
+  save();
+  _refreshVehDetail(vehId);
+}
+
 // ── Vincular despesa ──
 var _vehLinkExpTarget = null;
 function openVehLinkExp(vehId) {
@@ -12735,7 +12793,7 @@ function renderVehPatDetail(id) {
   // ── Histórico: eventos legacy (v.history) + reavaliações (patrimônio) ──
   const histItems = [];
   (v.history || []).forEach(h => histItems.push({
-    kind: h.type === 'km_update' ? 'km' : 'evento',
+    id: h.id, kind: h.type === 'km_update' ? 'km' : 'evento',
     data: h.date, title: h.type === 'km_update' ? 'Atualização de km' : (h.note || 'Evento'),
     body: h.type === 'km_update' ? (h.km != null ? `${Number(h.km).toLocaleString('pt-BR')} km` : '') : (h.amount ? R(h.amount) : ''),
   }));
@@ -12749,7 +12807,10 @@ function renderVehPatDetail(id) {
   }
   histItems.sort((a, b) => String(b.data || '').localeCompare(String(a.data || '')));
   const histHtml = `
-    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Histórico</div></div>
+    <div class="pat-det-sec-head">
+      <div class="sec-label" style="margin:0">Histórico</div>
+      ${readonly ? '' : `<button class="pat-link-add" onclick="openVehEvent('${v.id}')">+ Apontamento</button>`}
+    </div>
     <div class="pat-list-group pat-det-lastgroup">
       ${histItems.length === 0
         ? _patEmptyState('historico', 'Nenhum evento ainda', 'Atualizações de km e reavaliações do veículo aparecem aqui.')
@@ -12761,6 +12822,7 @@ function renderVehPatDetail(id) {
             ${e.body ? `<div class="pat-hist-val">${e.body}</div>` : ''}
             <div class="pat-hist-date">${_patFmtDate(e.data)}</div>
           </div>
+          ${(e.id && !readonly) ? `<button class="pat-mini-del" onclick="deleteVehHistItem('${v.id}','${e.id}')" aria-label="Excluir apontamento">${_patTrashSvg()}</button>` : ''}
         </div>`).join('')}
     </div>`;
 
