@@ -391,6 +391,44 @@ test('PROMETER SETE NUMA QUINTA NÃO CRIA DIAS', async ({ page }) => {
   expect(s.faltamDias, 'pediu mais dias do que a semana tem').toBe(4);
 });
 
+test('FOLGA FUTURA JÁ MARCADA TAMBÉM NÃO É DIA DISPONÍVEL', async ({ page }) => {
+  // Doming0 (23/08) marcado como folga cheia COM ANTECEDÊNCIA, antes de a
+  // semana chegar nele. Sem a marcação, "PROMETER SETE NUMA QUINTA NÃO CRIA
+  // DIAS" mostra que só restam 4 dias (quinta a domingo). Com o domingo já
+  // sabido como folga, só sobram 3 dias em que ainda dá pra rodar de verdade
+  // — contar o domingo como disponível prometeria uma conta mais barata do
+  // que a semana de fato permite cumprir.
+  await abrir(page, {
+    fixedExpenses: FIXOS, ...COM_RITMO, daysOff: ['2026-08-23'],
+  });
+  const s = await semana(page);
+  expect(s.rodados).toBe(0);
+  expect(s.faltamDias, 'contou domingo como disponível mesmo já sabendo que é folga').toBe(3);
+
+  // E o número que o app pede por dia sobe de verdade, porque agora ele
+  // divide os R$ 750 que faltam por 3 dias reais, não por 4 dias de calendário
+  // dos quais um já está descartado.
+  expect(s.porDiaRestante, '750 dividido pelos 3 dias que sobram de verdade').toBe(250);
+  expect(s.precisaAcelerar).toBe(true);
+
+  const b = blocoSemana(page);
+  await expect(b).toContainText('R$ 250,00');
+  await expect(b).toContainText('nos 3 dias que faltam');
+});
+
+test('DUAS MEIAS FOLGAS FUTURAS SOMAM UM DIA A MENOS DISPONÍVEL', async ({ page }) => {
+  // Sexta e sábado já marcados como meia folga com antecedência: juntos valem
+  // um dia inteiro a menos do que o calendário cru sugere (quinta, sexta,
+  // sábado e domingo seriam 4; meio dia de cada um dos dois tira 1).
+  await abrir(page, {
+    fixedExpenses: FIXOS, ...COM_RITMO,
+    daysHalfOff: ['2026-08-21', '2026-08-22'],
+  });
+  const s = await semana(page);
+  expect(s.rodados).toBe(0);
+  expect(s.faltamDias, 'duas meias folgas futuras não tiraram nada da conta').toBe(3);
+});
+
 test('os dias que bateram a meta são contados', async ({ page }) => {
   await abrir(page, { fixedExpenses: FIXOS, dailyIncome: SEMANA, ...COM_RITMO });
   // 200 e 160 passaram dos 150; 90 não.

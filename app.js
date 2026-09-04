@@ -4809,10 +4809,25 @@ function _ritmoSemana(off) {
   // Os dias do calendário que sobraram, limitados pelo que você ainda pretende
   // rodar. Prometer seis dias numa quinta não cria dias; e ter quatro dias de
   // calendário não obriga ninguém a rodar os quatro.
-  // Arredondado para cima: ninguém roda "meio dia" por decisão, então o que
-  // falta sempre aparece em dias inteiros — mesmo quando `rodados` é fracionário
-  // por causa de uma meia folga.
-  const restamNaSemana = corrente ? dias.filter(d => d >= hoje).length : 0;
+  //
+  // Mas nem todo dia do calendário vale um dia cheio: dá pra marcar a folga
+  // (ou a meia folga) de um dia FUTURO com antecedência, antes de ele chegar.
+  // Contar esse dia como disponível pra rodar, quando já se sabe que ele não
+  // vai render (ou só vai render metade), prometia uma conta mais barata do
+  // que a semana de fato dá pra cumprir. Cada dia que sobra vale 1 — a não
+  // ser que já esteja marcado: aí vale só o que já foi decidido pra ele, 0,5
+  // ou 0.
+  // Arredondado para baixo: um dia que só pode valer meio não conta como um
+  // dia inteiro disponível, e o resultado final continua sempre em dias
+  // inteiros — mesmo quando `rodados` é fracionário por causa de uma meia
+  // folga.
+  const restamNaSemana = corrente
+    ? Math.floor(dias.filter(d => d >= hoje).reduce((soma, d) => {
+        if (D.daysOff.includes(d)) return soma;
+        if ((D.daysHalfOff||[]).includes(d)) return soma + 0.5;
+        return soma + 1;
+      }, 0))
+    : 0;
   const faltamDias = prometidos > 0
     ? Math.max(0, Math.min(Math.ceil(prometidos - rodados), restamNaSemana))
     : restamNaSemana;
