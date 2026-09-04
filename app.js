@@ -1888,6 +1888,7 @@ function renderDayDetail() {
   const fb=document.getElementById('btn-folga');
   fb.className='btn-folga'+(isOff?' on':isHalfOff?' half':'');
   fb.textContent=isOff?'✓ Folga':isHalfOff?'½ Meia folga':'Marcar folga';
+  _toggleExpFuelFields();
 
   const inc=getDayIncome(date);
   const cols=Math.min(D.platforms.length,3);
@@ -1912,15 +1913,18 @@ function renderDayDetail() {
   const emEl=document.getElementById('exp-empty-msg');
   const listEl=document.getElementById('exp-list');
   emEl.style.display=exps.length?'none':'block';
-  listEl.innerHTML=exps.map(e=>`
+  listEl.innerHTML=exps.map(e=>{
+    const mpg=_mpgAbastecimento(e);
+    return `
     <div class="exp-item">
       <div class="exp-info">
         <div class="exp-cat">${e.category}</div>
-        <div class="exp-desc">${e.description||e.category}</div>
+        <div class="exp-desc">${e.description||e.category}${mpg?' · '+mpg.toFixed(1)+' MPG':''}</div>
       </div>
       <span class="exp-amt">${R(e.amount)}</span>
       <button class="exp-del" onclick="deleteExpense('${e.id}')">✕</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 
   renderIncomeItems(date);
 
@@ -2253,6 +2257,46 @@ function _movementTypeLabel(item) {
   return MOVIMENTO_LBL[_movementNature(item)] || 'Gasto';
 }
 
+// ── Abastecimento estruturado ──
+//
+// "Gasolina" sempre foi uma categoria de gasto como outra qualquer — um valor
+// e uma descrição livre. Isso perde o que o próprio recibo do posto já diz:
+// preço por galão, quantos galões, quantas milhas desde o último tanque cheio.
+// Com os três, o consumo (MPG) sai sozinho — DERIVADO, nunca digitado, mesmo
+// princípio do custo do dia: um número calculado envelhece melhor que um
+// digitado à mão.
+//
+// Os campos moram dentro da própria despesa (`expense.meta.abastecimento`),
+// não numa lista paralela: a despesa continua sendo a única fonte de dinheiro
+// que sai, e o abastecimento é só detalhe a mais sobre ELA. Duplicar em duas
+// listas é como duas respostas pra mesma pergunta se desalinham sem ninguém notar.
+function _toggleExpFuelFields() {
+  const cat = document.getElementById('exp-cat');
+  const wrap = document.getElementById('exp-fuel-fields');
+  if (!cat || !wrap) return;
+  wrap.style.display = cat.value === 'Gasolina' ? '' : 'none';
+}
+
+// O total pago É preço × galões quando os dois estão preenchidos — mesma
+// regra do posto. Só não sobrescreve se o usuário ainda não abriu os campos
+// de abastecimento (Valor pode ter sido digitado à mão, sem nota fiscal).
+function _calcExpFuelTotal() {
+  const preco = parseFloat(document.getElementById('exp-fuel-preco').value);
+  const galoes = parseFloat(document.getElementById('exp-fuel-galoes').value);
+  if (preco > 0 && galoes > 0) {
+    document.getElementById('exp-val').value = (preco * galoes).toFixed(2);
+  }
+}
+
+// MPG É SEMPRE CALCULADO, NUNCA GUARDADO — o mesmo motivo do custo do dia:
+// se guardasse, um valor editado depois de um lançamento antigo ficaria
+// mentindo até alguém reabrir aquela despesa específica.
+function _mpgAbastecimento(e) {
+  const ab = e && e.meta && e.meta.abastecimento;
+  if (!ab || !(ab.galoes > 0) || !(ab.milhas > 0)) return null;
+  return ab.milhas / ab.galoes;
+}
+
 function addExpense() {
   const date=selDate(), cat=document.getElementById('exp-cat').value;
   const val=parseFloat(document.getElementById('exp-val').value);
@@ -2261,10 +2305,23 @@ function addExpense() {
   const bemSel = document.getElementById('exp-bem-sel');
   const bemVal = bemSel ? (bemSel.value || '') : '';
   const expObj = {id:uid(),date,category:cat,amount:val,description:desc};
+  if (cat === 'Gasolina') {
+    const preco = parseFloat(document.getElementById('exp-fuel-preco').value);
+    const galoes = parseFloat(document.getElementById('exp-fuel-galoes').value);
+    const milhas = parseFloat(document.getElementById('exp-fuel-milhas').value);
+    const ab = {};
+    if (preco > 0) ab.precoGalao = preco;
+    if (galoes > 0) ab.galoes = galoes;
+    if (milhas > 0) ab.milhas = milhas;
+    if (Object.keys(ab).length) expObj.meta = { ...(expObj.meta||{}), abastecimento: ab };
+  }
   D.expenses.push(expObj);
   if (bemVal) _expSetBemLink(expObj, bemVal); // vínculo canônico (opcional, independente da categoria)
   document.getElementById('exp-val').value='';
   document.getElementById('exp-desc').value='';
+  document.getElementById('exp-fuel-preco').value='';
+  document.getElementById('exp-fuel-galoes').value='';
+  document.getElementById('exp-fuel-milhas').value='';
   if (bemSel) bemSel.value='';
   haptic(10); save(); refreshAfterDayEdit();
   notifyRegistered(val, desc || cat, cat);
@@ -8923,16 +8980,19 @@ function renderDayAccordion() {
     }).join('');
 
     // Expense rows — with delete button
-    const expItems = exps.map(e => `
+    const expItems = exps.map(e => {
+      const mpg = _mpgAbastecimento(e);
+      return `
       <div class="dacc-tx">
         <div class="dacc-tx-ico" style="background:var(--rd-t)">
           <svg viewBox="0 0 24 24" style="stroke:var(--rd)"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>
         </div>
-        <div class="dacc-tx-info"><div class="dacc-tx-lbl">${e.description||e.category}</div><div class="dacc-tx-cat">Gasto · ${e.category}</div></div>
+        <div class="dacc-tx-info"><div class="dacc-tx-lbl">${e.description||e.category}</div><div class="dacc-tx-cat">Gasto · ${e.category}${mpg?' · '+mpg.toFixed(1)+' MPG':''}</div></div>
         <div class="dacc-tx-amt" style="color:var(--rd)">−${R(e.amount)}</div>
         <button class="dacc-tx-edit" title="Editar" aria-label="Editar lançamento" onclick="openQuickAdd({kind:'exp',id:'${e.id}'})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <button class="dacc-tx-del" title="Remover" aria-label="Remover lançamento" onclick="deleteExpense('${e.id}');renderDayAccordion();refreshAfterDayEdit()">✕</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
 
     // Compromissos PREVISTOS do dia (projeção derivada de D.debts; nunca despesa).
     // Não entram no líquido realizado do dia; apenas exibição, com indicação visual.
