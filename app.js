@@ -5319,41 +5319,48 @@ var _jornadaCompromisso = false;
 // termina no formulário pré-preenchido).
 const JORNADA_OVERLAYS = Object.freeze(['modal-obrigacoes', 'debt-pay-sheet', 'modal-baixa', 'modal-quick-add']);
 
-var _fabTimerSeguro = null;
-// Restaura o FAB só quando ninguém mais possa recebê-lo por engano: espera o
-// FIM REAL da transição do overlay que fechou (transitionend), com uma única
-// rede de segurança para os casos em que ela não dispara (aba oculta,
-// prefers-reduced-motion, elemento já invisível). Se outra folha tiver assumido
-// nesse meio-tempo, não faz nada — a jornada continua.
-function _restaurarFabQuandoSeguro(overlayId) {
-  const el = overlayId ? document.getElementById(overlayId) : null;
-  function concluir() {
-    if (_fabTimerSeguro) { clearTimeout(_fabTimerSeguro); _fabTimerSeguro = null; }
-    if (el) el.removeEventListener('transitionend', aoFimDaTransicao);
-    // `.av-overlay` (gdConfirm/gdToast de confirmação) só ganha a classe
-    // `.open` num requestAnimationFrame — existe no DOM um frame antes disso,
-    // pra poder animar a entrada. Um `transitionend` desta folha fechando pode
-    // dar `concluir()` no MESMO frame em que o diálogo foi criado mas ainda
-    // não abriu de verdade: checar só `.open` deixa passar por uma fresta de
-    // um frame e restaura o FAB com o diálogo já na tela. Checar a presença
-    // (sem exigir `.open`) fecha essa fresta — o elemento já existe assim que
-    // é criado, antes de qualquer frame rodar.
+// Restaura o FAB só quando ninguém mais possa recebê-lo por engano.
+//
+// JÁ FOI baseado em `transitionend` — esperar o FIM REAL da transição do
+// overlay que fechou, com um setTimeout de 400ms como rede de segurança para
+// quando ela não dispara (aba oculta, elemento já invisível). Duas corridas
+// reais nasceram disso, uma atrás da outra:
+//
+//   1) `.av-overlay` (gdConfirm) só ganha a classe `.open` num
+//      requestAnimationFrame — existe no DOM um frame antes disso. Um
+//      `transitionend` de outra folha fechando podia cair nesse frame e
+//      restaurar o FAB com o diálogo já visível.
+//   2) Corrigir (1) trocando `.open` por presença no DOM criou uma segunda:
+//      com MAIS de uma folha fechando "ao mesmo tempo" (fila do compromisso:
+//      quick-add → obrigações → confirmação), cada fechamento reagenda o
+//      MESMO temporizador compartilhado e registra seu PRÓPRIO listener de
+//      `transitionend` — e o listener mais antigo, disparando depois que o
+//      mais novo já tinha assumido o relógio, podia cancelar o temporizador
+//      certo e deixar o FAB escondido para sempre.
+//
+// As duas eram sintomas do mesmo problema: múltiplos sinais assíncronos
+// (transitionend × timeout) competindo pelo mesmo relógio compartilhado. Um
+// contador de geração resolve as duas de uma vez, sem depender de nenhum
+// evento de transição: cada chamada invalida QUALQUER verificação anterior
+// ainda pendente — não importa quantas folhas fechem "ao mesmo tempo", só a
+// verificação mais recente chega a rodar, e ela roda num atraso fixo (o
+// tempo que a folha leva sumindo), nunca antes disso — a mesma janela que
+// evitava o toque fantasma no botão por baixo.
+var _fabRestoreGen = 0;
+function _restaurarFabQuandoSeguro() {
+  const geracao = ++_fabRestoreGen;
+  setTimeout(() => {
+    if (geracao !== _fabRestoreGen) return;          // uma chamada mais nova assumiu
     if (document.querySelector('.overlay.open, .av-overlay')) return; // outra folha assumiu
     _jornadaCompromisso = false;
     _restoreFab();
-  }
-  function aoFimDaTransicao(ev) {
-    if (ev.target === el && ev.propertyName === 'opacity') concluir();
-  }
-  if (el) el.addEventListener('transitionend', aoFimDaTransicao);
-  if (_fabTimerSeguro) clearTimeout(_fabTimerSeguro);
-  _fabTimerSeguro = setTimeout(concluir, 400);
+  }, 250);
 }
 
 // Ponto único de encerramento da jornada. No-op fora dela.
-function _encerrarJornadaCompromisso(overlayId) {
+function _encerrarJornadaCompromisso() {
   if (!_jornadaCompromisso) return;
-  _restaurarFabQuandoSeguro(overlayId || null);
+  _restaurarFabQuandoSeguro();
 }
 
 // Roteador único: uma porta de entrada para os três fluxos canônicos, em vez de
@@ -6957,7 +6964,7 @@ function closeOverlay(id) {
   _focoAntesDaFolha = null;
   // Possível fim da jornada especial. A decisão é adiada até este overlay
   // terminar de sumir — e só vale se nenhum outro tiver assumido.
-  if (_jornadaCompromisso && JORNADA_OVERLAYS.includes(id)) _restaurarFabQuandoSeguro(id);
+  if (_jornadaCompromisso && JORNADA_OVERLAYS.includes(id)) _restaurarFabQuandoSeguro();
 }
 // closeOverlayNav: fecha overlay e garante scroll=0 na nova página (iOS-safe)
 // Ao setar top='0' antes de remover position:fixed, o iOS restaura para y=0
@@ -9228,7 +9235,7 @@ function qaAbrirOrigem() {
   _qaEdit = null;
   _qaSaving = true;
   closeOverlay('modal-quick-add');
-  _restaurarFabQuandoSeguro('modal-quick-add');
+  _restaurarFabQuandoSeguro();
   if (alvo.tipo === 'divida') { switchTab('dividas', _currentMainTab); openDebtDetail(alvo.id); return; }
   switchTab('patrimonio', 'mais');
   if (alvo.tipo === 'veiculo') { _vehDetailId = alvo.id; renderVehPatDetail(alvo.id); return; }
@@ -9423,7 +9430,7 @@ function qaCancel() {
   _qaLimparRascunho();  // cancelar o lançamento encerra o rascunho de vez
   const sb = document.getElementById('qa-save-btn'); if (sb) sb.disabled = false;
   closeOverlay('modal-quick-add');
-  _restaurarFabQuandoSeguro('modal-quick-add');
+  _restaurarFabQuandoSeguro();
 }
 
 function qaConfirm() {
@@ -9536,7 +9543,7 @@ function qaConfirm() {
   _qaEdit = null;
   _qaLimparRascunho();   // lançamento gravado: o rascunho cumpriu seu papel
   closeOverlay('modal-quick-add');
-  _restaurarFabQuandoSeguro('modal-quick-add');
+  _restaurarFabQuandoSeguro();
   haptic(10);
   _refreshAfterEntry();
 }
@@ -9560,7 +9567,7 @@ function qaDelete() {
       }
       _qaEdit = null;
       closeOverlay('modal-quick-add');
-      _restaurarFabQuandoSeguro('modal-quick-add');
+      _restaurarFabQuandoSeguro();
       _refreshAfterEntry();
     },
   });
@@ -10267,11 +10274,11 @@ function completePendencia(id) {
       confirmText: 'Registrar',
       cancelText: 'Não',
       onConfirm: () => openPendenciaAsExpense(p),
-      onCancel: () => { gdToast('Pendência concluída!', { type: 'success' }); _encerrarJornadaCompromisso(null); },
+      onCancel: () => { gdToast('Pendência concluída!', { type: 'success' }); _encerrarJornadaCompromisso(); },
     });
   } else {
     gdToast('Pendência concluída!', { type: 'success' });
-    _encerrarJornadaCompromisso(null);
+    _encerrarJornadaCompromisso();
   }
 }
 
