@@ -463,7 +463,9 @@ function selectDay(idx) {
 
 function refreshAfterDayEdit() {
   renderDayDetail();
-  // Update days-grid dots
+  // Update days-grid dots e o estado de folga/meia folga — sem isto, marcar
+  // folga na folha de detalhe deixava a pílula do dia desatualizada até a
+  // próxima renderização completa da semana.
   const dates = weekDates(weekOffset);
   document.querySelectorAll('#days-grid .day-btn').forEach((btn, i) => {
     if (i >= dates.length) return;
@@ -472,7 +474,12 @@ function refreshAfterDayEdit() {
       || getDayExpenses(d).length > 0
       || (D.incomeItems || []).some(it => it.date === d);
     btn.classList.toggle('has-data', hasData);
+    const off = D.daysOff.includes(d);
+    const halfOff = !off && (D.daysHalfOff || []).includes(d);
+    btn.classList.toggle('off', off);
+    btn.classList.toggle('half-off', halfOff);
   });
+  renderDayAccordion();
   // Refresh hero on semana page if active
   if (document.getElementById('page-semana')?.classList.contains('active')) {
     const inc = sumWeekIncome(weekOffset), exp = sumWeekExpenses(weekOffset), liq = inc - exp;
@@ -870,6 +877,7 @@ function defaultData() {
     ],
     dailyIncome: {},
     daysOff: [],
+    daysHalfOff: [],
     expenses: [],
     expCats: ['Gasolina','Alimentação','Moradia','Saúde','Lazer','Transporte','Serviços','Outros'],
     fixedExpenses: [],
@@ -907,6 +915,8 @@ let D = (() => {
       const p=JSON.parse(s);
       if(!p.goals)       p.goals=[];
       if(!p.weeklyGoal)  p.weeklyGoal=0;
+      if(!Array.isArray(p.daysOff))     p.daysOff=[];
+      if(!Array.isArray(p.daysHalfOff)) p.daysHalfOff=[];
       if(!p.incomeItems) p.incomeItems=[];
       if(!p.catBudgets)  p.catBudgets={};
       if(!p.reminders)   p.reminders=[];
@@ -1857,8 +1867,9 @@ function renderSemana() {
   document.getElementById('days-grid').innerHTML=dates.map((d,i)=>{
     const hasData=Object.values(getDayIncome(d)).some(v=>v>0)||getDayExpenses(d).length>0||(D.incomeItems||[]).some(it=>it.date===d);
     const isOff=D.daysOff.includes(d);
+    const isHalfOff=!isOff && (D.daysHalfOff||[]).includes(d);
     const dt=parseDate(d);
-    return `<div class="day-btn${i===selDayIdx?' sel':''}${hasData?' has-data':''}${isOff?' off':''}" onclick="selectDay(${i})">
+    return `<div class="day-btn${i===selDayIdx?' sel':''}${hasData?' has-data':''}${isOff?' off':isHalfOff?' half-off':''}" onclick="selectDay(${i})">
       <div class="day-lbl">${WEEK_DAYS[i]}</div>
       <div class="day-num">${dt.getDate()}</div>
       <div class="day-dot"></div>
@@ -1872,10 +1883,11 @@ function renderSemana() {
 
 function renderDayDetail() {
   const date=selDate(), isOff=D.daysOff.includes(date);
+  const isHalfOff=!isOff && (D.daysHalfOff||[]).includes(date);
   document.getElementById('day-detail-date').textContent=fmtDate(date);
   const fb=document.getElementById('btn-folga');
-  fb.className='btn-folga'+(isOff?' on':'');
-  fb.textContent=isOff?'✓ Folga':'Marcar folga';
+  fb.className='btn-folga'+(isOff?' on':isHalfOff?' half':'');
+  fb.textContent=isOff?'✓ Folga':isHalfOff?'½ Meia folga':'Marcar folga';
 
   const inc=getDayIncome(date);
   const cols=Math.min(D.platforms.length,3);
@@ -2008,10 +2020,21 @@ function toggleIncomeForm() {
   }
 }
 
+// Três estados, um toque de cada vez: normal → meia folga → folga → normal.
+// A meia folga existe para o dia em que se trabalhou uma parte e se folgou o
+// resto — ela NÃO tranca lançamento de receita/gasto (a folga cheia tranca),
+// e conta meio dia rodado no ritmo em vez de um dia inteiro ou nenhum.
 function toggleFolga() {
   const date=selDate();
-  if(D.daysOff.includes(date)) D.daysOff=D.daysOff.filter(d=>d!==date);
-  else D.daysOff.push(date);
+  if(!Array.isArray(D.daysHalfOff)) D.daysHalfOff=[];
+  if(D.daysOff.includes(date)) {
+    D.daysOff=D.daysOff.filter(d=>d!==date);
+  } else if(D.daysHalfOff.includes(date)) {
+    D.daysHalfOff=D.daysHalfOff.filter(d=>d!==date);
+    D.daysOff.push(date);
+  } else {
+    D.daysHalfOff.push(date);
+  }
   save(); refreshAfterDayEdit();
 }
 
@@ -4726,13 +4749,20 @@ function _ritmoSemana(off) {
   const hoje   = todayStr();
   const corrente = semana === 0;
 
+  // MEIA FOLGA conta meio dia rodado, não um dia inteiro nem nenhum. Ela existe
+  // para o dia em que se trabalhou uma parte e se folgou o resto — tratá-lo como
+  // dia cheio infla o quanto já se rodou; tratá-lo como folga apaga o que de
+  // fato se trabalhou. A marcação vale por si (como a folga cheia já valia),
+  // independente de ter entrado receita naquele dia ou não.
   let entrouC = 0, rodados = 0, bateram = 0;
   const alvoC = _c(custo.alvo);
   dias.forEach(d => {
     if (corrente && d > hoje) return;         // dia futuro não é dia perdido
     const v = _c(sumDayIncome(d));
     entrouC += v;
-    if (v > 0) rodados++;
+    if (D.daysOff.includes(d)) { /* folga cheia: não conta rodado */ }
+    else if ((D.daysHalfOff||[]).includes(d)) rodados += 0.5;
+    else if (v > 0) rodados++;
     if (alvoC > 0 && v >= alvoC) bateram++;
   });
 
@@ -4745,9 +4775,12 @@ function _ritmoSemana(off) {
   // Os dias do calendário que sobraram, limitados pelo que você ainda pretende
   // rodar. Prometer seis dias numa quinta não cria dias; e ter quatro dias de
   // calendário não obriga ninguém a rodar os quatro.
+  // Arredondado para cima: ninguém roda "meio dia" por decisão, então o que
+  // falta sempre aparece em dias inteiros — mesmo quando `rodados` é fracionário
+  // por causa de uma meia folga.
   const restamNaSemana = corrente ? dias.filter(d => d >= hoje).length : 0;
   const faltamDias = prometidos > 0
-    ? Math.max(0, Math.min(prometidos - rodados, restamNaSemana))
+    ? Math.max(0, Math.min(Math.ceil(prometidos - rodados), restamNaSemana))
     : restamNaSemana;
 
   // ── A fase: um alvo de cada vez ──
@@ -5636,9 +5669,17 @@ function _ritmoBlocoSemana(s) {
     </div>
     <div class="rit-escala">
       <span>${R(s.entrou)} nesta semana</span>
-      <span>${s.rodados} de ${s.prometidos || '?'} dias</span>
+      <span>${_fmtDiasRitmo(s.rodados)} de ${s.prometidos || '?'} dias</span>
     </div>
   </div>`;
+}
+
+// "4" quando inteiro, "4,5" quando uma meia folga entrou na conta — nunca
+// "4.5" (ponto não é decimal em português) nem casas quebradas por arredondamento
+// de ponto flutuante.
+function _fmtDiasRitmo(n) {
+  const r = Math.round(n * 2) / 2;
+  return Number.isInteger(r) ? String(r) : String(r).replace('.', ',');
 }
 
 /**
@@ -8848,6 +8889,7 @@ function renderDayAccordion() {
     const dayLiq = dayInc - dayExp;
     const exps = getDayExpenses(d);
     const isOff = D.daysOff.includes(d);
+    const isHalfOff = !isOff && (D.daysHalfOff||[]).includes(d);
 
     // Income rows — each incomeItem gets its own row+delete; legacy dailyIncome entries get one row
     const platItems = D.platforms.map(p => {
@@ -8907,7 +8949,7 @@ function renderDayAccordion() {
     const hasData = dayInc > 0 || exps.length > 0;
     const hasContent = hasData || dayVencs.length > 0;
     const txCount = (D.platforms.filter(p=>getDayPlatIncome(d,p.id)>0).length) + exps.length;
-    const subLabel = isOff ? 'Folga' : hasData ? txCount + (txCount===1?' lançamento':' lançamentos') : (dayVencs.length ? dayVencs.length + (dayVencs.length===1?' previsto':' previstos') : 'Nenhum lançamento');
+    const subLabel = isOff ? 'Folga' : isHalfOff ? 'Meia folga' : hasData ? txCount + (txCount===1?' lançamento':' lançamentos') : (dayVencs.length ? dayVencs.length + (dayVencs.length===1?' previsto':' previstos') : 'Nenhum lançamento');
     const liqColor = dayLiq > 0 ? 'var(--gn)' : dayLiq < 0 ? 'var(--rd)' : 'var(--tx3)';
     const liqSign = dayLiq > 0 ? '+' : '';
     const isToday = d === todayStr();
@@ -8925,6 +8967,7 @@ function renderDayAccordion() {
     return {
       i, isToday, hasData, hasContent, dayLabel, subLabel, dayLiq, liqColor, liqSign,
       temVenc: dayVencs.length > 0,
+      isOff, isHalfOff,
       curto: NAMES[i].slice(0, 3),
       diaNum: dt.getDate(),
       corpo: (hasContent ? platItems + expItems + vencItems : emptyMsg) + editFooter,
@@ -8940,13 +8983,13 @@ function renderDayAccordion() {
   const sel = dias[_semDia] || dias[0];
 
   const faixa = dias.map(x => `
-    <button class="dsem-dia${x.i === sel.i ? ' sel' : ''}${x.isToday ? ' hoje' : ''}"
+    <button class="dsem-dia${x.i === sel.i ? ' sel' : ''}${x.isToday ? ' hoje' : ''}${x.isOff ? ' off' : x.isHalfOff ? ' half-off' : ''}"
             onclick="selecionarDiaSemana(${x.i})"
             aria-pressed="${x.i === sel.i}"
             aria-label="${escHtml(x.dayLabel + ', ' + x.subLabel)}">
       <span class="dsem-dia-nome">${x.curto}</span>
       <span class="dsem-dia-num">${x.diaNum}</span>
-      <span class="dsem-dia-dot ${x.hasData ? 'dacc-dot-active' : x.temVenc ? 'dacc-dot-venc' : 'dacc-dot-empty'}"></span>
+      <span class="dsem-dia-dot ${x.hasData ? 'dacc-dot-active' : x.temVenc ? 'dacc-dot-venc' : x.isOff ? 'dacc-dot-off' : x.isHalfOff ? 'dacc-dot-half' : 'dacc-dot-empty'}"></span>
     </button>`).join('');
 
   // O `.dacc.open` continua existindo com o mesmo nome: o CSS do corpo e as

@@ -943,6 +943,7 @@ main{background:var(--bg);min-height:100dvh}
 }
 .day-btn.sel{background:var(--gold);border-color:transparent;color:#fff;box-shadow:0 2px 12px var(--gold-t30)}
 .day-btn.off{opacity:.35}
+.day-btn.half-off{opacity:.65;border-color:var(--gold)}
 .day-lbl{font-size:8px;color:var(--text3);font-weight:700}
 .day-btn.sel .day-lbl{color:#fff;opacity:.7}
 .day-num{font-size:15px;font-weight:800;margin-top:1px}
@@ -1032,6 +1033,7 @@ main{background:var(--bg);min-height:100dvh}
 .btn-row{display:flex;gap:8px;margin-top:6px}
 .btn-row .btn{flex:1}
 .btn-folga{background:var(--ol1);border:1px solid var(--border);color:var(--text2);font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;cursor:pointer;transition:background .2s}
+.btn-folga.half{background:var(--ol1);border:1px solid var(--gold);color:var(--gold)}
 .btn-folga.on{background:linear-gradient(135deg,var(--gold),var(--orange));color:#fff;border-color:transparent}
 /* ── Botão perigo ── */
 .btn-danger{background:var(--rd);color:#fff;box-shadow:0 4px 14px var(--rd-t);transition:box-shadow .2s,transform .1s}
@@ -5273,6 +5275,10 @@ button:focus-visible, [role="button"]:focus-visible {
 }
 .dsem-dia.sel .dsem-dia-num { color: var(--on-flood); }
 .dsem-dia.sel .dsem-dia-dot { background: var(--on-flood) !important; }
+.dsem-dia.off { opacity: .45; }
+.dsem-dia.half-off { opacity: .75; border-color: var(--gold); }
+.dacc-dot-off { background: var(--border); }
+.dacc-dot-half { background: transparent; border: 1.5px solid var(--gold); }
 .dsem-dia:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
 :root[data-theme="dark"] .dsem-dia.sel { color: #0A2E22; }
 :root[data-theme="dark"] .dsem-dia.sel .dsem-dia-num { color: #0A2E22; }
