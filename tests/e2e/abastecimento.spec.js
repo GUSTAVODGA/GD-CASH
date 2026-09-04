@@ -135,3 +135,103 @@ test('a despesa some do acordeão da Semana com o MPG junto', async ({ page }) =
 
   await expect(page.locator('#days-accordion .dacc-tx-cat')).toContainText('25.0 MPG');
 });
+
+// ── O MESMO ABASTECIMENTO, PELO "+" GLOBAL ──────────────────────────────────
+//
+// "Editar dia completo" não é por onde a maioria dos lançamentos passa — o
+// caminho normal é o "+" global (o formulário de "Novo lançamento"), inclusive
+// para editar depois pelo acordeão da Semana. Os campos de abastecimento só
+// tinham sido plugados no primeiro formulário; o relatado foi exatamente
+// selecionar Gasolina ali e não ver nada — porque de fato não tinha nada.
+async function abrirFormularioDeGasto(page) {
+  await page.locator('#global-fab').click();
+  await esperarOverlay(page, 'modal-quick-add', true);
+  await page.locator('#qa-btn-gas').click();
+  await page.locator('#qa-cat-sel').selectOption('Gasolina');
+}
+
+test('NO "+" GLOBAL: Gasolina também mostra os campos de abastecimento', async ({ page }) => {
+  await abrir(page);
+  await abrirFormularioDeGasto(page);
+  await expect(page.locator('#qa-fuel-fields')).toBeVisible();
+
+  await page.locator('#qa-cat-sel').selectOption('Alimentação');
+  await expect(page.locator('#qa-fuel-fields')).toBeHidden();
+});
+
+test('NO "+" GLOBAL: preço × galões preenche o Valor sozinho', async ({ page }) => {
+  await abrir(page);
+  await abrirFormularioDeGasto(page);
+  await page.locator('#qa-fuel-preco').fill('5.50');
+  await page.locator('#qa-fuel-galoes').fill('10');
+  await expect(page.locator('#qa-amt-input')).toHaveValue('55.00');
+});
+
+test('NO "+" GLOBAL: lançar abastecimento grava meta.abastecimento e mostra o MPG', async ({ page }) => {
+  await abrir(page);
+  await abrirFormularioDeGasto(page);
+  await page.locator('#qa-desc').fill('Shell');
+  await page.locator('#qa-fuel-preco').fill('5.50');
+  await page.locator('#qa-fuel-galoes').fill('10');
+  await page.locator('#qa-fuel-milhas').fill('350');
+  await page.locator('#qa-save-btn').click();
+  await esperarOverlay(page, 'modal-quick-add', false);
+
+  const exps = await lerEstado(page, 'D.expenses');
+  expect(exps.length).toBe(1);
+  expect(exps[0].meta.abastecimento).toEqual({ precoGalao: 5.5, galoes: 10, milhas: 350 });
+
+  await expect(page.locator('#days-accordion .dacc-tx-cat')).toContainText('35.0 MPG');
+});
+
+test('NO "+" GLOBAL: editar um abastecimento existente reabre com os campos preenchidos', async ({ page }) => {
+  await abrir(page, {
+    expenses: [{
+      id: 'g1', date: '2026-08-20', category: 'Gasolina', description: 'Shell', amount: 55,
+      meta: { abastecimento: { precoGalao: 5.5, galoes: 10, milhas: 350 } },
+    }],
+  });
+  await page.locator('#days-accordion .dacc-tx-edit').first().click();
+  await esperarOverlay(page, 'modal-quick-add', true);
+
+  await expect(page.locator('#qa-fuel-fields')).toBeVisible();
+  await expect(page.locator('#qa-fuel-preco')).toHaveValue('5.5');
+  await expect(page.locator('#qa-fuel-galoes')).toHaveValue('10');
+  await expect(page.locator('#qa-fuel-milhas')).toHaveValue('350');
+});
+
+test('NO "+" GLOBAL: editar e mudar as milhas atualiza o MPG mostrado', async ({ page }) => {
+  await abrir(page, {
+    expenses: [{
+      id: 'g1', date: '2026-08-20', category: 'Gasolina', description: 'Shell', amount: 55,
+      meta: { abastecimento: { precoGalao: 5.5, galoes: 10, milhas: 350 } },
+    }],
+  });
+  await page.locator('#days-accordion .dacc-tx-edit').first().click();
+  await esperarOverlay(page, 'modal-quick-add', true);
+  await page.locator('#qa-fuel-milhas').fill('400');
+  await page.locator('#qa-save-btn').click();
+  await esperarOverlay(page, 'modal-quick-add', false);
+
+  const exp = await lerEstado(page, "D.expenses.find(e => e.id === 'g1')");
+  expect(exp.meta.abastecimento).toEqual({ precoGalao: 5.5, galoes: 10, milhas: 400 });
+  await expect(page.locator('#days-accordion .dacc-tx-cat')).toContainText('40.0 MPG');
+});
+
+test('NO "+" GLOBAL: mudar a categoria pra longe de Gasolina remove o abastecimento', async ({ page }) => {
+  await abrir(page, {
+    expenses: [{
+      id: 'g1', date: '2026-08-20', category: 'Gasolina', description: 'Shell', amount: 55,
+      meta: { abastecimento: { precoGalao: 5.5, galoes: 10, milhas: 350 } },
+    }],
+  });
+  await page.locator('#days-accordion .dacc-tx-edit').first().click();
+  await esperarOverlay(page, 'modal-quick-add', true);
+  await page.locator('#qa-cat-sel').selectOption('Alimentação');
+  await expect(page.locator('#qa-fuel-fields')).toBeHidden();
+  await page.locator('#qa-save-btn').click();
+  await esperarOverlay(page, 'modal-quick-add', false);
+
+  const exp = await lerEstado(page, "D.expenses.find(e => e.id === 'g1')");
+  expect(exp.meta?.abastecimento).toBeUndefined();
+});

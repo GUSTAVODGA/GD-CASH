@@ -9024,6 +9024,26 @@ function qaSetType(type) {
   const aqWrap = document.getElementById('qa-aq-wrap'); if (aqWrap) aqWrap.style.display = (type === 'gas' && _qaReclassivel) ? '' : 'none';
   document.getElementById('qa-plat-row').style.display = type === 'rec' ? '' : 'none';
   document.getElementById('qa-suggest-row').style.display = 'none';
+  _qaToggleFuelFields();
+}
+
+// Mesma regra do formulário de "Editar dia completo": os campos de
+// abastecimento só aparecem em gasto da categoria Gasolina. Este é o
+// formulário que a maioria dos lançamentos de fato usa (o "+" global), então
+// precisa da mesma inteligência — não só o outro.
+function _qaToggleFuelFields() {
+  const cat = document.getElementById('qa-cat-sel');
+  const wrap = document.getElementById('qa-fuel-fields');
+  if (!cat || !wrap) return;
+  wrap.style.display = (qaType === 'gas' && cat.value === 'Gasolina') ? '' : 'none';
+}
+
+function _qaCalcFuelTotal() {
+  const preco = parseFloat(document.getElementById('qa-fuel-preco').value);
+  const galoes = parseFloat(document.getElementById('qa-fuel-galoes').value);
+  if (preco > 0 && galoes > 0) {
+    document.getElementById('qa-amt-input').value = (preco * galoes).toFixed(2);
+  }
 }
 
 // Popula os selects de plataforma e categoria do formulário de lançamento.
@@ -9289,6 +9309,9 @@ function openQuickAdd(editRef) {
     if (dateEl) dateEl.value = selDate() || todayStr();
     if (amtEl) amtEl.value = '';
     if (descEl) descEl.value = '';
+    const fpC = document.getElementById('qa-fuel-preco'); if (fpC) fpC.value = '';
+    const fgC = document.getElementById('qa-fuel-galoes'); if (fgC) fgC.value = '';
+    const fmC = document.getElementById('qa-fuel-milhas'); if (fmC) fmC.value = '';
     qaType = 'rec';
     _qaReclassivel = true;           // criação é sempre despesa manual reclassificável
     _qaApplyMode();
@@ -9335,9 +9358,16 @@ function openQuickAdd(editRef) {
     _qaBemVal = _expBemSelValue(_e);
     _qaReclassivel = (type === 'gas') && _expIsReclassificavel(_e);
     if (_e && _movementNature(_e) === 'asset-acquisition') _eNature = 'asset-acquisition';
+    // Abastecimento: reabre com os campos já preenchidos, se a despesa em
+    // edição já tiver essa estrutura salva.
+    const _ab = _e && _e.meta && _e.meta.abastecimento;
+    const fpE = document.getElementById('qa-fuel-preco'); if (fpE) fpE.value = _ab && _ab.precoGalao ? _ab.precoGalao : '';
+    const fgE = document.getElementById('qa-fuel-galoes'); if (fgE) fgE.value = _ab && _ab.galoes ? _ab.galoes : '';
+    const fmE = document.getElementById('qa-fuel-milhas'); if (fmE) fmE.value = _ab && _ab.milhas ? _ab.milhas : '';
   } else {
     _qaReclassivel = false;
   }
+  _qaToggleFuelFields();
   _populateBemSel('qa-bem-sel', _qaBemVal);
   _qaInitSaida(_eNature);
   const aqWrapE = document.getElementById('qa-aq-wrap');
@@ -9376,6 +9406,9 @@ function _qaCapturarRascunho() {
     descricao: document.getElementById('qa-desc')?.value || '',
     bem: document.getElementById('qa-bem-sel')?.value || '',
     aquisicao: _qaSaidaValue() === 'aquisicao',
+    precoGalao: document.getElementById('qa-fuel-preco')?.value || '',
+    galoes: document.getElementById('qa-fuel-galoes')?.value || '',
+    milhas: document.getElementById('qa-fuel-milhas')?.value || '',
   };
 }
 
@@ -9392,6 +9425,10 @@ function _qaAplicarRascunho(r, bemSel) {
   if (catSel && r.categoria && [...catSel.options].some(o => o.value === r.categoria)) catSel.value = r.categoria;
   const platSel = document.getElementById('qa-plat-sel');
   if (platSel && r.plataforma && [...platSel.options].some(o => o.value === r.plataforma)) platSel.value = r.plataforma;
+  set('qa-fuel-preco', r.precoGalao || '');
+  set('qa-fuel-galoes', r.galoes || '');
+  set('qa-fuel-milhas', r.milhas || '');
+  _qaToggleFuelFields();
   // O select é repopulado para que o bem recém-criado exista como opção.
   _populateBemSel('qa-bem-sel', bemSel || r.bem || '');
   _qaInitSaida(r.aquisicao ? 'asset-acquisition' : 'consumo');
@@ -9497,6 +9534,22 @@ function qaConfirm() {
           pay.paidDate = localDateKey(date) || date; // "Pago em DD/MM" reflete a nova data
         }
         e.date = date; e.category = cat; e.description = desc || cat; e.amount = amt;
+        // Abastecimento (Gasolina): grava/atualiza junto com a despesa, ou
+        // remove se a categoria mudou ou os campos foram apagados — mesma
+        // regra da criação, agora também valendo na edição.
+        if (cat === 'Gasolina') {
+          const preco = parseFloat(document.getElementById('qa-fuel-preco')?.value);
+          const galoes = parseFloat(document.getElementById('qa-fuel-galoes')?.value);
+          const milhas = parseFloat(document.getElementById('qa-fuel-milhas')?.value);
+          const ab = {};
+          if (preco > 0) ab.precoGalao = preco;
+          if (galoes > 0) ab.galoes = galoes;
+          if (milhas > 0) ab.milhas = milhas;
+          if (Object.keys(ab).length) e.meta = { ...(e.meta||{}), abastecimento: ab };
+          else if (e.meta) delete e.meta.abastecimento;
+        } else if (e.meta) {
+          delete e.meta.abastecimento;
+        }
         // Vínculo com patrimônio (adicionar / trocar / remover) — independente da categoria.
         _expSetBemLink(e, document.getElementById('qa-bem-sel')?.value || '');
         // Tipo de saída (só despesa manual reclassificável): grava/remove o override de natureza.
@@ -9543,6 +9596,19 @@ function qaConfirm() {
       _pendOrigem.despesaId = expObj.id;
     }
     _pendOrigemId = null;
+    // Abastecimento (Gasolina): mesma estrutura de "Editar dia completo" —
+    // preço/galão, galões e milhas viram `meta.abastecimento`, de onde o MPG
+    // é calculado depois.
+    if (cat === 'Gasolina') {
+      const preco = parseFloat(document.getElementById('qa-fuel-preco')?.value);
+      const galoes = parseFloat(document.getElementById('qa-fuel-galoes')?.value);
+      const milhas = parseFloat(document.getElementById('qa-fuel-milhas')?.value);
+      const ab = {};
+      if (preco > 0) ab.precoGalao = preco;
+      if (galoes > 0) ab.galoes = galoes;
+      if (milhas > 0) ab.milhas = milhas;
+      if (Object.keys(ab).length) expObj.meta = { ...(expObj.meta||{}), abastecimento: ab };
+    }
     D.expenses.push(expObj);
     // Vínculo com patrimônio escolhido em "Relacionado a" (opcional, canônico).
     _expSetBemLink(expObj, document.getElementById('qa-bem-sel')?.value || '');

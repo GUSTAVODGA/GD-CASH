@@ -1148,10 +1148,13 @@
         <input class="fi" type="number" id="exp-val" min="0" step="0.01" placeholder="Valor" style="flex:1">
       </div>
       <input class="fi" type="text" id="exp-desc" placeholder="Descrição (ex: Shell, Pizza, Spotify...)" style="margin-bottom:8px">
-      <div id="exp-fuel-fields" class="fi-row" style="margin-bottom:8px;display:none">
-        <input class="fi" type="number" id="exp-fuel-preco" min="0" step="0.001" placeholder="Preço/gal" oninput="_calcExpFuelTotal()" style="flex:1" aria-label="Preço por galão">
-        <input class="fi" type="number" id="exp-fuel-galoes" min="0" step="0.01" placeholder="Galões" oninput="_calcExpFuelTotal()" style="flex:1" aria-label="Galões abastecidos">
-        <input class="fi" type="number" id="exp-fuel-milhas" min="0" step="0.1" placeholder="Milhas" style="flex:1" aria-label="Milhas desde o último abastecimento">
+      <div id="exp-fuel-fields" style="margin-bottom:8px;display:none">
+        <div class="fi-row" style="margin-bottom:4px">
+          <input class="fi" type="number" id="exp-fuel-preco" min="0" step="0.001" placeholder="Preço/gal" oninput="_calcExpFuelTotal()" style="flex:1" aria-label="Preço por galão">
+          <input class="fi" type="number" id="exp-fuel-galoes" min="0" step="0.01" placeholder="Galões" oninput="_calcExpFuelTotal()" style="flex:1" aria-label="Galões abastecidos">
+          <input class="fi" type="number" id="exp-fuel-milhas" min="0" step="0.1" placeholder="Milhas" style="flex:1" aria-label="Milhas desde o último abastecimento">
+        </div>
+        <span class="field-hint">"Milhas" é quanto o carro rodou desde o abastecimento anterior (o marcador parcial do painel) — não o hodômetro total.</span>
       </div>
       <label class="fl" for="exp-bem-sel" style="display:block;margin-bottom:4px">Relacionado a (opcional)</label>
       <select class="fi" id="exp-bem-sel" style="width:100%;margin-bottom:8px"></select>
@@ -1447,7 +1450,19 @@
     <!-- Categoria (Gasto) -->
     <div class="fg" id="qa-cat-row" style="display:none">
       <label class="fl" for="qa-cat-sel">Categoria</label>
-      <select class="fi" id="qa-cat-sel"></select>
+      <select class="fi" id="qa-cat-sel" onchange="_qaToggleFuelFields()"></select>
+    </div>
+    <!-- Abastecimento (Gasolina): mesmo formulário estruturado de "Editar dia
+         completo", agora também aqui — que é por onde a maioria dos lançamentos
+         de fato passa. Preço/galão e galões calculam o total sozinhos; milhas
+         alimenta o MPG mostrado depois na lista de gastos. -->
+    <div id="qa-fuel-fields" style="margin-bottom:8px;display:none">
+      <div class="fi-row" style="margin-bottom:4px">
+        <input class="fi" type="number" id="qa-fuel-preco" min="0" step="0.001" placeholder="Preço/gal" oninput="_qaCalcFuelTotal()" style="flex:1" aria-label="Preço por galão">
+        <input class="fi" type="number" id="qa-fuel-galoes" min="0" step="0.01" placeholder="Galões" oninput="_qaCalcFuelTotal()" style="flex:1" aria-label="Galões abastecidos">
+        <input class="fi" type="number" id="qa-fuel-milhas" min="0" step="0.1" placeholder="Milhas" style="flex:1" aria-label="Milhas desde o último abastecimento">
+      </div>
+      <span class="field-hint">"Milhas" é quanto o carro rodou desde o abastecimento anterior (o marcador parcial do painel) — não o hodômetro total.</span>
     </div>
     <!-- Aquisição de patrimônio (Gasto manual): decisão explícita numa linha só.
          Só aparece em gasto manual reclassificável — nunca em pagamento de
