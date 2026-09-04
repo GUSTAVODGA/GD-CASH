@@ -5330,7 +5330,15 @@ function _restaurarFabQuandoSeguro(overlayId) {
   function concluir() {
     if (_fabTimerSeguro) { clearTimeout(_fabTimerSeguro); _fabTimerSeguro = null; }
     if (el) el.removeEventListener('transitionend', aoFimDaTransicao);
-    if (document.querySelector('.overlay.open, .av-overlay.open')) return; // outra folha assumiu
+    // `.av-overlay` (gdConfirm/gdToast de confirmação) só ganha a classe
+    // `.open` num requestAnimationFrame — existe no DOM um frame antes disso,
+    // pra poder animar a entrada. Um `transitionend` desta folha fechando pode
+    // dar `concluir()` no MESMO frame em que o diálogo foi criado mas ainda
+    // não abriu de verdade: checar só `.open` deixa passar por uma fresta de
+    // um frame e restaura o FAB com o diálogo já na tela. Checar a presença
+    // (sem exigir `.open`) fecha essa fresta — o elemento já existe assim que
+    // é criado, antes de qualquer frame rodar.
+    if (document.querySelector('.overlay.open, .av-overlay')) return; // outra folha assumiu
     _jornadaCompromisso = false;
     _restoreFab();
   }
@@ -6921,9 +6929,11 @@ function openOverlay(id) {
   // está, a folha nova abre de verdade (classList tem 'open', o clique
   // funcionou) só que ATRÁS da folha antiga — invisível, inalcançável, e o
   // botão que a abriu parece simplesmente não fazer nada. Mover a folha para
-  // o fim do próprio pai a cada abertura garante que a mais recente sempre
-  // vença o empate de z-index, não importa a ordem em que nasceu no HTML.
-  ov.parentNode.appendChild(ov);
+  // o fim do próprio pai garante que a mais recente vença o empate de
+  // z-index. Só move quando precisa (ainda não é o último filho): a maioria
+  // das aberturas já está no lugar certo, e reordenar o DOM à toa custa um
+  // reflow que uma folha sozinha nunca precisou pagar.
+  if (ov.parentNode.lastElementChild !== ov) ov.parentNode.appendChild(ov);
   _acabarFolhas(ov);   // o corpo pode ter sido montado por JS depois do boot
 
   // O foco ficava no <body> com a folha aberta: quem navega por teclado ou
