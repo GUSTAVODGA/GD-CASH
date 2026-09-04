@@ -1513,39 +1513,6 @@
   </div>
 </div>
 
-<!-- Apontamento de veículo -->
-<div class="overlay" id="modal-veh-event">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
-    <div class="sheet-title" id="veh-event-modal-title">Apontamento</div>
-    <div class="form-group">
-      <label class="form-label">Tipo</label>
-      <select class="form-input" id="ve-type" onchange="_vehEventTypeToggle()">
-        <option value="evento">Evento / manutenção</option>
-        <option value="km_update">Atualizar quilometragem</option>
-      </select>
-    </div>
-    <div class="form-group" id="ve-note-row">
-      <label class="form-label">Descrição</label>
-      <input class="form-input" id="ve-note" type="text" placeholder="Ex: Troca de óleo, revisão…">
-    </div>
-    <div class="form-group" id="ve-km-row" style="display:none">
-      <label class="form-label">Quilometragem atual</label>
-      <input class="form-input" id="ve-km" type="number" min="0" placeholder="Ex: 52000">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Valor (opcional)</label>
-      <input class="form-input" id="ve-amount" type="number" min="0" step="0.01" placeholder="0,00">
-    </div>
-    <div class="form-group">
-      <label class="form-label">Data</label>
-      <input class="form-input" id="ve-date" type="date">
-    </div>
-    <button class="btn btn-primary" onclick="saveVehEvent()">Salvar</button>
-    <button class="btn btn-secondary" style="margin-top:8px" onclick="closeOverlay('modal-veh-event')">Cancelar</button>
-  </div>
-</div>
-
 <!-- Vincular despesa -->
 <div class="overlay" id="modal-veh-link-exp">
   <div class="sheet">

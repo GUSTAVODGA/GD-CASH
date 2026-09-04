@@ -353,3 +353,34 @@ test('NADA SE PERDEU: o custo por veículo continua somando e nomeando', async (
   expect(custo, 'o custo mensal do bem sumiu').toBeTruthy();
   expect(custo.uso, 'a soma de uso e manutenção mudou').toBe(550);
 });
+
+// A varredura de código morto removeu openVehEvent/saveVehEvent/deleteVehHistItem
+// e o modal "Apontamento" — um fluxo que já não tinha nenhum botão que o
+// alcançasse (nenhum onclick no app inteiro chamava openVehEvent). O
+// histórico de eventos ANTIGOS (v.history) continua sendo só leitura na
+// tela de detalhe; este teste garante que remover o formulário morto não
+// levou junto a exibição do que já existia.
+test('detalhe do veículo mostra histórico legado sem erro, mesmo sem o formulário morto', async ({ page }) => {
+  const erros = [];
+  const abrirComErros = async () => {
+    const e = await abrirAppEmDemo(page, { agora: AGORA });
+    erros.push(...e);
+  };
+  await page.setViewportSize({ width: 390, height: 844 });
+  await abrirComErros();
+  await semearDados(page, {
+    ...BASE,
+    vehicles: [{ ...VEICULO, history: [{ id: 'h1', type: 'km_update', date: '2026-08-01', km: 79000 }] }],
+  }, 'inicio');
+  page.on('console', msg => { if (msg.type() === 'error') erros.push(msg.text()); });
+  page.on('pageerror', err => erros.push(err.message));
+
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Gol 2015');
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Atualização de km');
+
+  await page.evaluate(() => window.openVehMenu('v1'));
+  await expect(page.locator('#veh-menu-sheet')).toHaveClass(/open/);
+
+  expect(erros, `erros de console: ${erros.join(' | ')}`).toEqual([]);
+});

@@ -498,10 +498,6 @@ function refreshAfterDayEdit() {
 }
 
 // ── Mais / FAB ──
-// "Mais" agora é uma aba real. Estes wrappers mantêm compatibilidade com
-// chamadas/testes antigos.
-function openMoreMenu() { switchTab('mais'); }
-function switchMore(tab) { switchTab(tab, 'mais'); }
 // Voltar de uma tela interna → volta à origem (Mais ou Início).
 function navBack() { switchTab(_navOrigin || 'mais'); }
 // Engrenagem do cabeçalho → abre Ajustes direto, preservando a origem
@@ -1527,7 +1523,6 @@ function _periodMovementSummary(keys) {
   };
 }
 function _monthMovementSummary(off=0) { return _periodMovementSummary(new Set(monthDates(off))); }
-function _weekMovementSummary(off=0) { return _periodMovementSummary(new Set(weekDates(off))); }
 // Razão de consumo: consumo / receita OPERACIONAL (asset-sale nunca no denominador).
 // Retorna null quando não há receita operacional (evita percentual absurdo/infinito).
 function _consumptionRatio(sum) { return sum.operationalIncome > 0 ? (sum.consumo / sum.operationalIncome) : null; }
@@ -2071,7 +2066,6 @@ function _onPendCatChange() {
 // A categoria responde "com o que gastei"; o vínculo responde "com qual bem gastei".
 // Conceitos independentes. Sem nova entidade — o vínculo mora na própria despesa.
 // ══════════════════════════════════════════════════════════════════════════
-function _expBemId(e) { return (e && (e.vehicleId || e.patrimonioId)) || null; }
 // Id do bem para consulta/filtro (canônico OU índice legado veh/pat.linkedExpenses).
 function _expBemLegacyId(e) {
   if (!e) return null;
@@ -2804,11 +2798,6 @@ function _migrateLembretesParaPendencias() {
   // legível pelo app antigo em outra aba; nada aqui volta a escrever nele.
   return { ran: migrados > 0, migrados };
 }
-
-// A tela da Reserva deixou de existir por conta própria: a reserva é a
-// primeira meta, e quem desenha as duas agora é `renderGoals`. O nome fica
-// porque `switchTab` e o roteador de abas o chamam.
-function renderReserva() { renderGoals(); }
 
 // ── Escrita no razão de uma meta ──────────────────────────────────────────
 //
@@ -3724,11 +3713,6 @@ function deleteGoal(id) {
   });
 }
 
-// "Adicionar valor" virou "Guardar", e passou a mover dinheiro de verdade:
-// o mesmo caminho da reserva, com data, nota, histórico e saída do caixa.
-// O nome antigo continua respondendo porque o tour e telas antigas o chamam.
-function openAddToGoal(id) { openResModal('dep', id); }
-
 // ── Notificações ──
 function maybePromptNotif() {
   if (!('Notification' in window)) return;
@@ -3814,11 +3798,6 @@ function fxState(f, cycle) {
   if (dueDate && baseline && dueDate < baseline) return { status: 'preexisting', dueDate };
   if (dueDate && cycle <= fxCurrentCycle() && fxTodayKey() > dueDate) return { status: 'overdue', dueDate };
   return { status: 'pending', dueDate };
-}
-// Itens ativos vencidos e sem baixa no ciclo atual (para o aviso da Home).
-function fxOverdueCurrent() {
-  const cycle = fxCurrentCycle();
-  return (D.fixedExpenses||[]).filter(f => fxState(f, cycle).status === 'overdue');
 }
 // Reconciliação segura: remove APENAS marcadores de baixa órfãos —
 // despesa vinculada inexistente (expenseId) ou cadastro inexistente (fixedId).
@@ -4247,7 +4226,6 @@ function _debtStatus(debt) {
   if (no) { const dd = _debtDueDate(debt, no); if (dd && dd < todayStr()) return 'atrasada'; }
   return 'ativa';
 }
-function _debtAtrasada(debt) { return _debtStatus(debt) === 'atrasada'; }
 // Estado agregado — usado por TODAS as telas (fonte única).
 function _debtState(debt) {
   const proximaNo = _debtProximaParcelaNo(debt);
@@ -4266,8 +4244,7 @@ function _debtState(debt) {
     ativa: !['quitada', 'cancelada'].includes(_debtStatus(debt)),
   };
 }
-// Dívidas vinculadas a um patrimônio (por id) ou a um veículo (por vehicleId).
-function _debtsForPatrimonio(patId) { return (D.debts || []).filter(d => d.patrimonioId && d.patrimonioId === patId); }
+// Dívidas vinculadas a um veículo (por vehicleId).
 function _debtsForVehicle(vehId) { return (D.debts || []).filter(d => d.vehicleId && d.vehicleId === vehId); }
 
 // ══════════════════════════════════════════
@@ -6181,106 +6158,6 @@ function migrateDebtsV1() {
 }
 
 // ══════════════════════════════════════════
-// PARCELAMENTOS (Compras Parceladas)
-// Módulo INDEPENDENTE de Patrimônio/Financiamento. Espelha o padrão dos Gastos
-// Fixos: o cadastro (D.installments) é o "plano" imutável; cada parcela confirmada
-// gera UMA despesa real + um marcador (D.installmentPayments). Nenhuma despesa é
-// criada antecipadamente. Todo o estado (pagas, restantes, %, próxima) é DERIVADO
-// dos marcadores — fonte única, sem saldo armazenado.
-//   installment:        { id, descricao, valorTotal, parcelas, valorParcela,
-//                          dataPrimeira, frequencia, categoria, conta, observacoes, criadoEm }
-//   installmentPayment: { installmentId, parcelNo(1..N), expenseId, valor, paidDate }
-//   despesa gerada:     meta:{ source:'installment', installmentId, parcelNo }
-// ══════════════════════════════════════════
-function _round2(v) { return Math.round((Number(v) || 0) * 100) / 100; }
-
-function _normInstallment(raw) {
-  const r = raw || {};
-  const N = Math.max(1, Math.round(Number(r.parcelas) || 1));
-  const total = Math.max(0, _round2(r.valorTotal));
-  let vp = _round2(r.valorParcela);
-  if (!(vp > 0)) vp = _round2(total / N);
-  return {
-    id: r.id || uid(),
-    descricao: String(r.descricao || '').trim() || 'Compra',
-    valorTotal: total,
-    parcelas: N,
-    valorParcela: vp,
-    dataPrimeira: r.dataPrimeira || dateStr(new Date()),
-    frequencia: r.frequencia || 'mensal',
-    categoria: r.categoria || (D.expCats && D.expCats[0]) || 'Outros',
-    conta: String(r.conta || '').trim(),
-    observacoes: String(r.observacoes || '').trim(),
-    criadoEm: r.criadoEm || Date.now(),
-  };
-}
-
-// Valor da parcela k (1..N): a ÚLTIMA absorve o resíduo de arredondamento, de modo
-// que a soma das parcelas seja exatamente igual ao valorTotal.
-function _instParcelaValor(inst, parcelNo) {
-  const N = inst.parcelas || 1;
-  const vp = _round2(inst.valorParcela);
-  if (parcelNo >= N) return _round2(inst.valorTotal - vp * (N - 1));
-  return vp;
-}
-// Vencimento da parcela k: dataPrimeira + frequência·(k−1). Mensal clampa dia curto.
-function _instDueDate(inst, parcelNo) {
-  const base = parseDate(inst.dataPrimeira);
-  if (!base || isNaN(base)) return '';
-  const k = Math.max(1, parcelNo) - 1;
-  const freq = inst.frequencia || 'mensal';
-  let d;
-  if (freq === 'semanal')       d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 7 * k);
-  else if (freq === 'quinzenal') d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 14 * k);
-  else if (freq === 'anual')     d = new Date(base.getFullYear() + k, base.getMonth(), base.getDate());
-  else { // mensal (default): preserva o dia, clampando ao último dia do mês curto
-    const y = base.getFullYear(), mo = base.getMonth() + k, day = base.getDate();
-    const last = new Date(y, mo + 1, 0).getDate();
-    d = new Date(y, mo, Math.min(day, last));
-  }
-  return dateStr(d);
-}
-function _instPayment(instId, parcelNo) {
-  return (D.installmentPayments || []).find(p => p.installmentId === instId && p.parcelNo === parcelNo) || null;
-}
-function _instPaidCount(inst) {
-  return (D.installmentPayments || []).filter(p => p.installmentId === inst.id).length;
-}
-function _instValorPago(inst) {
-  return _round2((D.installmentPayments || [])
-    .filter(p => p.installmentId === inst.id)
-    .reduce((s, p) => s + (Number(p.valor) || 0), 0));
-}
-// Estado derivado (FONTE ÚNICA). % concluído = parcelas pagas ÷ total (contagem).
-function _instState(inst) {
-  const N = inst.parcelas || 1;
-  const pagas = Math.min(N, _instPaidCount(inst));
-  const restantes = Math.max(0, N - pagas);
-  const pct = N > 0 ? Math.max(0, Math.min(100, Math.round(pagas / N * 100))) : 0;
-  const concluido = pagas >= N;
-  const proximaNo = concluido ? null : pagas + 1; // confirmação sempre sequencial
-  return {
-    N, pagas, restantes, pct, concluido, proximaNo,
-    proximaVenc: proximaNo ? _instDueDate(inst, proximaNo) : '',
-    proximaValor: proximaNo ? _instParcelaValor(inst, proximaNo) : 0,
-    pago: _instValorPago(inst),
-    emAberto: _round2(inst.valorTotal - _instValorPago(inst)),
-  };
-}
-// Reconciliação segura: remove APENAS marcadores órfãos — despesa vinculada
-// inexistente (expenseId) ou parcelamento inexistente (installmentId). Não cria
-// despesas, não migra nada. Como o estado é derivado, remover o marcador faz a
-// parcela voltar sozinha ao estado "prevista". Retorna true se removeu algo.
-function reconcileInstallmentPayments() {
-  if (!Array.isArray(D.installmentPayments)) { D.installmentPayments = []; return false; }
-  const expIds = new Set((D.expenses || []).map(e => e.id));
-  const instIds = new Set((D.installments || []).map(i => i.id));
-  const before = D.installmentPayments.length;
-  D.installmentPayments = D.installmentPayments.filter(p => p && expIds.has(p.expenseId) && instIds.has(p.installmentId));
-  return D.installmentPayments.length !== before;
-}
-
-// ══════════════════════════════════════════
 // CENTRAL DE DÍVIDAS (Fase 2) — interface visual de D.debts / D.debtPayments
 // ══════════════════════════════════════════
 // Não cria estrutura nova, não copia registros, não materializa vencimentos nem
@@ -6964,10 +6841,6 @@ function salvarDivida() {
   gdToast(id ? 'Dívida atualizada.' : 'Dívida cadastrada.', { type: 'success' });
 }
 
-// Compat: rotas antigas de Parcelamentos redirecionam para a central de Dívidas.
-function renderParcelamentos() { renderDividas(); }
-function openParcelForm(id) { openDebtForm(id); }
-
 // ══════════════════════════════════════════
 // CATEGORY MANAGEMENT
 // ══════════════════════════════════════════
@@ -7415,7 +7288,7 @@ function exitDemo() {
 
 // ── Tour ──
 const TOUR_STEPS = [
-  { tab:'inicio',  anchor:'car-inner',       title:'Tela Início',            text:'Resumo da semana, reserva e movimentações recentes. É aqui que você começa o dia no Avenco.' },
+  { tab:'inicio',  anchor:'hc-header',       title:'Tela Início',            text:'Resumo da semana, reserva e movimentações recentes. É aqui que você começa o dia no Avenco.' },
   { tab:'semana',  anchor:'days-accordion',  title:'Dias da semana',          text:'Veja e edite os lançamentos de cada dia. Toque em um dia para expandir. Use o + para adicionar receita ou gasto.' },
   { tab:'mes',     anchor:'big-donut-card', title:'Gastos por categoria',    text:'No mês você vê exatamente onde o dinheiro foi — o gráfico de rosca mostra cada categoria.' },
   { tab:'mes',     anchor:'trends-chart',   title:'Histórico 6 meses',       text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês.' },
@@ -8446,7 +8319,6 @@ var PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baix
 var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
 var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'var(--c-warning)', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
 var _vehDetailId = null;
-var _vehEventTarget = null;
 var _vehLinkExpTarget = null;
 var _vehLinkPendTarget = null;
 var _vehStatusTarget = null;
@@ -8551,16 +8423,6 @@ function setCurrencyFromSheet(sym) {
   const chip = document.getElementById('srow-curr-val');
   if (chip) chip.textContent = sym;
   gdToast('Moeda alterada.');
-}
-
-// ══════════════════════════════════════════
-// CAROUSEL DOTS
-// ══════════════════════════════════════════
-function updCarDots() {
-  const c = document.getElementById('car-inner');
-  if (!c) return;
-  const i = Math.round(c.scrollLeft / (c.scrollWidth / 2));
-  document.querySelectorAll('#car-dots .cdot').forEach((d, j) => d.classList.toggle('on', j === i));
 }
 
 // ══════════════════════════════════════════
@@ -10285,12 +10147,6 @@ function pendAddDays(dateStr, n) {
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
-function pendFmtDate(dateStr) {
-  if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-');
-  return `${d}/${m}/${y}`;
-}
-
 // Avisar e repetir só existem se houver prazo — os dois se medem a partir
 // dele. Sem prazo eles não são "opcionais", são sem sentido, e um campo sem
 // sentido na tela é uma pergunta que o usuário tenta responder à toa.
@@ -10801,39 +10657,6 @@ function _syncVehPatrimonioValor(vehId, valorEstimado, isEdit) {
   }
 }
 
-function archiveVehicle(id) {
-  const v = (D.vehicles || []).find(x => x.id === id);
-  if (!v) return;
-  if (v.status === 'arquivado') { gdToast('Veículo já está arquivado.'); return; }
-  v.status = 'arquivado';
-  save();
-  renderVehList();
-  gdToast('Veículo arquivado. Histórico e vínculos preservados.');
-}
-
-function deleteVehicle(id) {
-  const v = (D.vehicles || []).find(x => x.id === id);
-  if (!v) return;
-  const hasHistory = (v.history || []).length > 0;
-  const hasLinks   = (v.linkedExpenses || []).length > 0 || (v.linkedPendencias || []).length > 0;
-  if (hasHistory || hasLinks) {
-    gdToast('Veículo com histórico ou vínculos não pode ser excluído. Use "Arquivar".', { type: 'error' });
-    return;
-  }
-  gdConfirm({
-    title: 'Excluir veículo',
-    msg: 'Excluir permanentemente este veículo? Esta ação não pode ser desfeita.',
-    confirmText: 'Excluir',
-    variant: 'danger',
-    onConfirm: () => {
-      D.vehicles = (D.vehicles || []).filter(x => x.id !== id);
-      save();
-      renderVehList();
-      gdToast('Veículo excluído definitivamente.', { type: 'success' });
-    },
-  });
-}
-
 function onVehPhotoChange(input) {
   const file = input.files[0];
   if (!file) return;
@@ -10869,64 +10692,6 @@ function resizeVehPhoto(file) {
     img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
     img.src = url;
   });
-}
-
-// ── Apontamento modal ──
-var _vehEventTarget = null;
-function openVehEvent(vehId) {
-  _vehEventTarget = vehId;
-  const v = (D.vehicles || []).find(x => x.id === vehId);
-  if (!v) return;
-  document.getElementById('veh-event-modal-title').textContent = 'Apontamento — ' + v.name;
-  document.getElementById('ve-date').value = todayStr();
-  document.getElementById('ve-type').value = 'evento';
-  document.getElementById('ve-note').value = '';
-  document.getElementById('ve-km').value = '';
-  document.getElementById('ve-amount').value = '';
-  _vehEventTypeToggle();
-  openOverlay('modal-veh-event');
-}
-
-function _vehEventTypeToggle() {
-  const t = document.getElementById('ve-type')?.value;
-  const kmRow   = document.getElementById('ve-km-row');
-  const noteRow = document.getElementById('ve-note-row');
-  if (kmRow)   kmRow.style.display   = (t === 'km_update') ? '' : 'none';
-  if (noteRow) noteRow.style.display = (t !== 'km_update') ? '' : 'none';
-}
-
-function saveVehEvent() {
-  const vehId = _vehEventTarget;
-  const v = (D.vehicles || []).find(x => x.id === vehId);
-  if (!v) return;
-  const type   = document.getElementById('ve-type').value;
-  const date   = document.getElementById('ve-date').value || todayStr();
-  const note   = (document.getElementById('ve-note').value || '').trim();
-  const kmVal  = document.getElementById('ve-km').value;
-  const amtVal = document.getElementById('ve-amount').value;
-  if (type === 'km_update') {
-    if (!kmVal) { gdToast('Informe a quilometragem.'); return; }
-    v.km = Number(kmVal);
-  } else {
-    if (!note) { gdToast('Informe uma descrição.'); return; }
-  }
-  if (!v.history) v.history = [];
-  const entry = { id: uid(), type, date, note };
-  if (kmVal)  entry.km     = Number(kmVal);
-  if (amtVal) entry.amount = Number(amtVal);
-  v.history.push(entry);
-  save();
-  closeOverlay('modal-veh-event');
-  _refreshVehDetail(vehId);
-  gdToast('Apontamento salvo.');
-}
-
-function deleteVehHistItem(vehId, histId) {
-  const v = (D.vehicles || []).find(x => x.id === vehId);
-  if (!v) return;
-  v.history = (v.history || []).filter(h => h.id !== histId);
-  save();
-  _refreshVehDetail(vehId);
 }
 
 // ── Vincular despesa ──
@@ -11097,37 +10862,11 @@ function _normFinanciamento(raw) {
 }
 
 // ── Fonte única dos números do financiamento ──────────────────────────────
-// "Valor já pago", "Saldo devedor" e "% quitado" derivam SEMPRE de
-// (valorFinanciado, saldoDevedor). Assim nunca há divergência entre eles.
-function _finJaPago(f) { return Math.max(0, (f?.valorFinanciado || 0) - (f?.saldoDevedor || 0)); }
+// "% quitado" deriva SEMPRE de (valorFinanciado, saldoDevedor).
 function _finQuitadoPct(f) {
   const base = f?.valorFinanciado || 0;
   if (base <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((base - (f.saldoDevedor || 0)) / base * 100)));
-}
-// Reconciliação segura dos pagamentos de financiamento: remove pagamentos cuja
-// despesa não existe mais (expenseId inválido) e devolve o valor ao saldo devedor,
-// recalculando-o automaticamente. Nunca deixa pagamento órfão. Retorna true se mudou.
-function reconcilePatFinPayments() {
-  const expIds = new Set((D.expenses || []).map(e => e.id));
-  let changed = false;
-  (D.patrimonios || []).forEach(p => {
-    (p.financiamentos || []).forEach(f => {
-      if (!Array.isArray(f.pagamentos) || !f.pagamentos.length) return;
-      const kept = [];
-      let back = 0;
-      f.pagamentos.forEach(pg => {
-        if (pg && pg.expenseId && !expIds.has(pg.expenseId)) back += (pg.valor || 0);
-        else kept.push(pg);
-      });
-      if (kept.length !== f.pagamentos.length) {
-        f.saldoDevedor = (f.saldoDevedor || 0) + back; // devolve ao saldo o valor dos órfãos
-        f.pagamentos = kept;
-        changed = true;
-      }
-    });
-  });
-  return changed;
 }
 
 function normalizePatrimonio(raw) {
@@ -11159,21 +10898,6 @@ function updatePatrimonio(id, changes) {
   list[idx] = normalizePatrimonio(Object.assign({}, list[idx], changes, { updatedAt: Date.now() }));
   save();
   return true;
-}
-
-function archivePatrimonio(id, status) {
-  return updatePatrimonio(id, { status: status || 'inativo' });
-}
-
-function listPatrimonios(tipo) {
-  const all = D.patrimonios || [];
-  return tipo ? all.filter(p => p.tipo === tipo) : all.slice();
-}
-
-function sumPatrimonioTotal() {
-  return (D.patrimonios || [])
-    .filter(p => p.status !== 'vendido' && p.status !== 'inativo')
-    .reduce((s, p) => s + (p.valorEstimado || 0), 0);
 }
 
 // Migração segura de D.vehicles → D.patrimonios.
