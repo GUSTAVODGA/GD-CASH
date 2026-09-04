@@ -7041,6 +7041,16 @@ function openOverlay(id) {
   document.body.style.width = '100%';
   const ov = document.getElementById(id);
   ov.classList.add('open');
+  // Todo `.overlay` divide o MESMO z-index — quem fica por cima é quem vem
+  // depois no DOM, não quem abriu por último. Um fluxo em duas folhas (dívida
+  // → registrar pagamento, patrimônio → financiamento…) abre a segunda em
+  // cima da primeira só se ela também estiver depois no HTML; quando não
+  // está, a folha nova abre de verdade (classList tem 'open', o clique
+  // funcionou) só que ATRÁS da folha antiga — invisível, inalcançável, e o
+  // botão que a abriu parece simplesmente não fazer nada. Mover a folha para
+  // o fim do próprio pai a cada abertura garante que a mais recente sempre
+  // vença o empate de z-index, não importa a ordem em que nasceu no HTML.
+  ov.parentNode.appendChild(ov);
   _acabarFolhas(ov);   // o corpo pode ter sido montado por JS depois do boot
 
   // O foco ficava no <body> com a folha aberta: quem navega por teclado ou

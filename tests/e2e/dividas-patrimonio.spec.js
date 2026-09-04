@@ -118,3 +118,53 @@ test('INVARIANTE de tela: o mês não conta dívida nem aquisição como consumo
   const totalDonut = await page.evaluate(() => window.eval('_mesCatTotal'));
   expect(totalDonut).toBe(100);
 });
+
+// ── Folha em cima de folha: quem abriu por último tem que ficar visível ──
+//
+// "Registrar pagamento" abre uma segunda folha por cima da folha de detalhe
+// da dívida — de propósito: fechar a segunda revela a primeira de novo,
+// já atualizada (é o que `salvarPagamentoDivida` faz ao chamar
+// `openDebtDetail` de novo depois de salvar). O defeito: todo `.overlay`
+// divide o MESMO z-index, e como CSS empata z-index pela ordem no DOM, quem
+// vence não é quem abriu por último — é quem está depois no HTML. Como
+// `debt-pay-sheet` vem ANTES de `debt-detail-sheet` no index.html, a folha
+// de pagamento abria de verdade (a classe `open` estava lá, o clique
+// funcionou) só que ATRÁS da folha de detalhe: invisível, inalcançável. Do
+// lado de quem usa, o botão "Registrar pagamento" simplesmente não fazia
+// nada.
+const DIVIDA_HOJE = {
+  id: 'divida-hoje', titulo: 'FUSION 2013', tipo: 'parcelamento', credor: 'Banco Teste',
+  categoria: 'Transporte', valorOriginal: 6600, valorParcela: 200, parcelasTotal: 33,
+  amortizadoInicial: 2000, dataInicio: '2026-08-07', periodicidade: 'mensal', status: 'ativa',
+};
+
+test('a folha de "Registrar pagamento" abre por CIMA da folha de detalhe, não atrás dela', async ({ page }) => {
+  await abrirAppEmDemo(page, { agora: new Date(2026, 8, 4, 7, 41, 0) }); // 04/09/2026
+  await semearDados(page, {
+    debts: [DIVIDA_HOJE],
+    debtPayments: [
+      { id: 'pay13', debtId: 'divida-hoje', valor: 200, data: '2026-08-21', parcelNo: 13 },
+      { id: 'pay14', debtId: 'divida-hoje', valor: 200, data: '2026-08-28', parcelNo: 14 },
+    ],
+  }, 'dividas');
+
+  await page.locator('.div-card', { hasText: 'FUSION 2013' }).click();
+  await page.locator('#debt-detail-body').getByRole('button', { name: 'Registrar pagamento' }).click();
+
+  // As duas seguem "abertas" (é o desenho — a de trás não fecha). O que
+  // importa é qual delas o dedo realmente alcança.
+  const topo = await page.evaluate(() => {
+    const dp = document.getElementById('debt-pay-sheet');
+    const r = dp.querySelector('.sheet').getBoundingClientRect();
+    const el = document.elementFromPoint(r.left + r.width / 2, r.top + 40);
+    return dp.contains(el);
+  });
+  expect(topo, 'a folha de pagamento abriu atrás da folha de detalhe').toBe(true);
+
+  await expect(page.locator('#debt-pay-valor')).toBeVisible();
+  await page.locator('#debt-pay-valor').fill('200');
+  await page.locator('#debt-pay-save').click();
+
+  const pagamentos = await lerEstado(page, "D.debtPayments.filter(p => p.debtId === 'divida-hoje')");
+  expect(pagamentos.length, 'o pagamento não foi registrado — a folha nunca foi alcançada').toBe(3);
+});
