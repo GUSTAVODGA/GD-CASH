@@ -395,6 +395,7 @@ test('"+ Apontamento" atualiza a quilometragem e aparece no histórico', async (
   await irParaAba(page, 'patrimonio');
   await page.evaluate(() => window.openVehPatDetail('v1'));
 
+  await page.getByRole('tab', { name: 'Histórico' }).click();
   await page.getByRole('button', { name: '+ Apontamento' }).click();
   await esperarOverlay(page, 'modal-veh-event', true);
   await page.locator('#ve-type').selectOption('km_update');
@@ -416,6 +417,7 @@ test('"+ Apontamento" registra evento/manutenção sem mexer na quilometragem', 
   await irParaAba(page, 'patrimonio');
   await page.evaluate(() => window.openVehPatDetail('v1'));
 
+  await page.getByRole('tab', { name: 'Histórico' }).click();
   await page.getByRole('button', { name: '+ Apontamento' }).click();
   await esperarOverlay(page, 'modal-veh-event', true);
   await expect(page.locator('#ve-km-row')).toBeHidden(); // "evento" é o tipo padrão
@@ -434,6 +436,7 @@ test('apontamento sem quilometragem informada é recusado', async ({ page }) => 
   await abrir(page);
   await irParaAba(page, 'patrimonio');
   await page.evaluate(() => window.openVehPatDetail('v1'));
+  await page.getByRole('tab', { name: 'Histórico' }).click();
   await page.getByRole('button', { name: '+ Apontamento' }).click();
   await page.locator('#ve-type').selectOption('km_update');
   await page.locator('#modal-veh-event').getByRole('button', { name: 'Salvar' }).click();
@@ -450,6 +453,7 @@ test('excluir um apontamento tira ele do histórico', async ({ page }) => {
   await irParaAba(page, 'patrimonio');
   await page.evaluate(() => window.openVehPatDetail('v1'));
   await expect(page.locator('#pat-veh-detail-cont')).toContainText('Pneu novo');
+  await page.getByRole('tab', { name: 'Histórico' }).click();
 
   await page.locator('.pat-hist-item', { hasText: 'Pneu novo' })
     .getByRole('button', { name: 'Excluir apontamento' }).click();
@@ -529,4 +533,90 @@ test('sem nenhuma despesa de Gasolina vinculada, a seção Abastecimento nem apa
   await irParaAba(page, 'patrimonio');
   await page.evaluate(() => window.openVehPatDetail('v1'));
   await expect(page.locator('#pat-veh-detail-cont')).not.toContainText('Abastecimento');
+});
+
+// ── Abas do detalhe do veículo ──────────────────────────────────────────────
+//
+// Custo, abastecimento, financiamento, informações, pendências, despesas e
+// histórico empilhados um embaixo do outro viravam uma rolagem só, sem jeito
+// de ir direto pro que interessa. Três abas — Visão geral, Financiamento,
+// Histórico — agrupam pelo que a pergunta realmente é.
+
+test('a aba padrão é Visão geral, com custo e abastecimento visíveis', async ({ page }) => {
+  await abrir(page, {
+    ...BASE,
+    expenses: [{
+      id: 'g1', vehicleId: 'v1', date: '2026-08-10', category: 'Gasolina', description: 'Shell', amount: 55,
+      meta: { abastecimento: { precoGalao: 5.5, galoes: 10, milhas: 300 } },
+    }],
+  });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+
+  await expect(page.getByRole('tab', { name: 'Visão geral' })).toHaveClass(/active/);
+  const geral = page.locator('.veh-panel.active');
+  await expect(geral).toContainText('Custo deste mês');
+  await expect(geral).toContainText('Abastecimento');
+  await expect(geral).not.toContainText('Registrar pagamento');
+});
+
+test('trocar para Financiamento mostra o financiamento e esconde a visão geral', async ({ page }) => {
+  await abrir(page, {
+    ...BASE,
+    debts: [{
+      id: 'f1', tipo: 'financiamento', titulo: 'Financiamento', credor: 'Banco', vehicleId: 'v1',
+      valorOriginal: 6500, valorParcela: 200, parcelasTotal: 33, parcelasPagasAntes: 15,
+      periodicidade: 'semanal', dataInicio: '2026-01-01', categoria: 'Carros', status: 'ativa', pagamentos: [],
+    }],
+  });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+
+  await page.getByRole('tab', { name: 'Financiamento' }).click();
+  await expect(page.getByRole('tab', { name: 'Financiamento' })).toHaveClass(/active/);
+  const fin = page.locator('.veh-panel.active');
+  await expect(fin).toContainText('Registrar pagamento');
+  await expect(fin).not.toContainText('Custo deste mês');
+});
+
+test('sem financiamento, a aba Financiamento mostra estado vazio, não fica em branco', async ({ page }) => {
+  await abrir(page);
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await page.getByRole('tab', { name: 'Financiamento' }).click();
+  await expect(page.locator('.veh-panel.active')).toContainText('financiado — adicionar');
+});
+
+test('excluir um apontamento na aba Histórico não volta pra Visão geral', async ({ page }) => {
+  await abrir(page, {
+    ...BASE,
+    vehicles: [{
+      ...VEICULO,
+      history: [
+        { id: 'h1', type: 'evento', date: '2026-08-01', note: 'Pneu novo' },
+        { id: 'h2', type: 'evento', date: '2026-08-05', note: 'Alinhamento' },
+      ],
+    }],
+  });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await page.getByRole('tab', { name: 'Histórico' }).click();
+
+  await page.locator('.pat-hist-item', { hasText: 'Pneu novo' })
+    .getByRole('button', { name: 'Excluir apontamento' }).click();
+
+  await expect(page.getByRole('tab', { name: 'Histórico' }), 'voltou pra Visão geral depois de excluir').toHaveClass(/active/);
+  await expect(page.locator('.veh-panel.active')).toContainText('Alinhamento');
+});
+
+test('abrir um veículo diferente reseta a aba pra Visão geral', async ({ page }) => {
+  const OUTRO = { ...VEICULO, id: 'v2', name: 'Onix 2019', plate: 'XYZ9K88' };
+  await abrir(page, { ...BASE, vehicles: [VEICULO, OUTRO] });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await page.getByRole('tab', { name: 'Histórico' }).click();
+  await expect(page.getByRole('tab', { name: 'Histórico' })).toHaveClass(/active/);
+
+  await page.evaluate(() => window.openVehPatDetail('v2'));
+  await expect(page.getByRole('tab', { name: 'Visão geral' }), 'abrir outro veículo devia voltar pra Visão geral').toHaveClass(/active/);
 });

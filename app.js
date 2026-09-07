@@ -8367,6 +8367,10 @@ var PEND_PRIO_LABELS = { alta:'🔴 Alta', media:'🟡 Média', baixa:'🟢 Baix
 var VEH_STATUS_LABELS = { em_uso:'Em uso', na_oficina:'Na oficina', a_venda:'À venda', vendido:'Vendido', arquivado:'Arquivado' };
 var VEH_STATUS_COLORS = { em_uso:'var(--green)', na_oficina:'var(--c-warning)', a_venda:'var(--ac)', vendido:'var(--tx3)', arquivado:'var(--tx3)' };
 var _vehDetailId = null;
+// Aba ativa do detalhe do veículo. Sobrevive a um refresh do MESMO veículo
+// (apontamento salvo, despesa desvinculada etc.) — só volta pra "geral"
+// quando se abre um veículo diferente. Ver renderVehPatDetail.
+var _vehDetailTab = 'geral';
 var _vehEventTarget = null;
 var _vehLinkExpTarget = null;
 var _vehLinkPendTarget = null;
@@ -12830,6 +12834,7 @@ function _vehLinkedPends(v) {
 function renderVehPatDetail(id) {
   const v = (D.vehicles || []).find(x => x.id === id);
   if (!v) { renderPatrimonioHome(); return; }
+  if (_vehDetailId !== id) _vehDetailTab = 'geral'; // veículo novo: começa na visão geral
   _vehDetailId = id;
   _vehShowView('pat-veh-detail-view');
   window.scrollTo(0, 0);
@@ -12956,6 +12961,47 @@ function renderVehPatDetail(id) {
     ? `<img src="${escHtml(safePhoto)}" alt="${escHtml(v.name)}" onerror="_vehImgError(this)">`
     : _vehIconSvg(26);
 
+  // ── Painel em abas ──
+  //
+  // Custo, abastecimento, financiamento, informações, pendências, despesas e
+  // histórico empilhados um embaixo do outro viravam uma rolagem só, sem
+  // nenhum jeito de ir direto pro que interessa. As três abas agrupam pelo
+  // que a pergunta realmente é: "como estou indo" (geral), "quanto falta
+  // pagar" (financiamento) e "o que já aconteceu" (histórico).
+  const geralHtml = `
+    ${custoHtml}
+    ${abHtml}
+
+    ${hasInfo ? `
+    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Informações do veículo</div></div>
+    <div class="pat-list-group" style="margin-bottom:0">
+      ${infoRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
+      ${v.notes ? `<div class="pat-det-row pat-det-row-notes"><span class="pat-det-row-lbl">Observações</span><span class="pat-det-row-val pat-det-row-val-notes">${escHtml(v.notes)}</span></div>` : ''}
+    </div>` : ''}
+
+    ${(!readonly || pends.length) ? `
+    <div class="pat-det-sec-head">
+      <div class="sec-label" style="margin:0">Pendências</div>
+      ${readonly ? '' : `<button class="pat-link-add" onclick="openVehLinkPend('${v.id}')">+ Vincular</button>`}
+    </div>
+    <div class="pat-list-group" style="margin-bottom:0">${pendHtml}</div>` : ''}
+
+    ${(!readonly || exps.length) ? `
+    <div class="pat-det-sec-head">
+      <div class="sec-label" style="margin:0">Despesas</div>
+      <div style="display:flex;gap:12px;align-items:center">
+        ${exps.length ? `<button class="pat-link-add" onclick="abrirDespesasDoBem('${v.id}')">Ver despesas</button>` : ''}
+        ${readonly ? '' : `<button class="pat-link-add" onclick="openVehLinkExp('${v.id}')">+ Vincular</button>`}
+      </div>
+    </div>
+    <div class="pat-list-group pat-det-lastgroup">${expHtml}</div>` : ''}
+  `;
+
+  const finTabHtml = finVehHtml
+    || _patEmptyState('historico', 'Sem financiamento', 'Este veículo não tem financiamento registrado.');
+
+  const tab = _vehDetailTab;
+
   cont.innerHTML = `
     ${_pageHeader("_backToPatHomePreserveScroll()", 'Veículo', `
       <div class="phr-actions">
@@ -12989,40 +13035,25 @@ function renderVehPatDetail(id) {
 
     ${venda ? _patVendaSummaryHtml(venda) : ''}
 
-    ${custoHtml}
-
-    ${abHtml}
-
-    ${finVehHtml}
-
-    ${hasInfo ? `
-    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Informações do veículo</div></div>
-    <div class="pat-list-group" style="margin-bottom:0">
-      ${infoRows.map(r => `<div class="pat-det-row"><span class="pat-det-row-lbl">${escHtml(r[0])}</span><span class="pat-det-row-val">${escHtml(r[1])}</span></div>`).join('')}
-      ${v.notes ? `<div class="pat-det-row pat-det-row-notes"><span class="pat-det-row-lbl">Observações</span><span class="pat-det-row-val pat-det-row-val-notes">${escHtml(v.notes)}</span></div>` : ''}
-    </div>` : ''}
-
-    ${(!readonly || pends.length) ? `
-    <div class="pat-det-sec-head">
-      <div class="sec-label" style="margin:0">Pendências</div>
-      ${readonly ? '' : `<button class="pat-link-add" onclick="openVehLinkPend('${v.id}')">+ Vincular</button>`}
+    <div class="veh-tabs" role="tablist" aria-label="Seções do veículo">
+      <button class="veh-tab${tab === 'geral' ? ' active' : ''}" role="tab" aria-selected="${tab === 'geral'}" onclick="_vehSetTab('${v.id}','geral')">Visão geral</button>
+      <button class="veh-tab${tab === 'fin' ? ' active' : ''}" role="tab" aria-selected="${tab === 'fin'}" onclick="_vehSetTab('${v.id}','fin')">Financiamento</button>
+      <button class="veh-tab${tab === 'hist' ? ' active' : ''}" role="tab" aria-selected="${tab === 'hist'}" onclick="_vehSetTab('${v.id}','hist')">Histórico</button>
     </div>
-    <div class="pat-list-group" style="margin-bottom:0">${pendHtml}</div>` : ''}
 
-    ${(!readonly || exps.length) ? `
-    <div class="pat-det-sec-head">
-      <div class="sec-label" style="margin:0">Despesas</div>
-      <div style="display:flex;gap:12px;align-items:center">
-        ${exps.length ? `<button class="pat-link-add" onclick="abrirDespesasDoBem('${v.id}')">Ver despesas</button>` : ''}
-        ${readonly ? '' : `<button class="pat-link-add" onclick="openVehLinkExp('${v.id}')">+ Vincular</button>`}
-      </div>
-    </div>
-    <div class="pat-list-group" style="margin-bottom:0">${expHtml}</div>` : ''}
-
-    ${histHtml}
+    <div class="veh-panel${tab === 'geral' ? ' active' : ''}" role="tabpanel">${geralHtml}</div>
+    <div class="veh-panel${tab === 'fin' ? ' active' : ''}" role="tabpanel">${finTabHtml}</div>
+    <div class="veh-panel${tab === 'hist' ? ' active' : ''}" role="tabpanel">${histHtml}</div>
 
     <div class="pat-home-bottom-spacer"></div>
   `;
+}
+
+// Troca a aba do detalhe do veículo e re-renderiza. `_vehDetailTab` é o
+// módulo que guarda o estado — renderVehPatDetail só lê.
+function _vehSetTab(id, tab) {
+  _vehDetailTab = tab;
+  renderVehPatDetail(id);
 }
 
 // ── Menu de ações secundárias do veículo (kebab) ──
