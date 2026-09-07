@@ -374,7 +374,7 @@ test('detalhe do veículo mostra histórico sem erro', async ({ page }) => {
 
   await page.evaluate(() => window.openVehPatDetail('v1'));
   await expect(page.locator('#pat-veh-detail-cont')).toContainText('Gol 2015');
-  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Atualização de km');
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Atualização de milhagem');
 
   await page.evaluate(() => window.openVehMenu('v1'));
   await expect(page.locator('#veh-menu-sheet')).toHaveClass(/open/);
@@ -406,9 +406,9 @@ test('"+ Apontamento" atualiza a quilometragem e aparece no histórico', async (
   await esperarOverlay(page, 'modal-veh-event', false);
   expect(await lerEstado(page, "D.vehicles[0].km")).toBe(85000);
   expect(await lerEstado(page, "D.vehicles[0].history.length")).toBe(1);
-  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Atualização de km');
-  // "85.000 km" aparece duas vezes: no hero (km atual) e na linha do histórico.
-  await expect(page.locator('#pat-veh-detail-cont')).toContainText('85.000 km');
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Atualização de milhagem');
+  // "85.000 milhas" aparece duas vezes: no hero (milhagem atual) e na linha do histórico.
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('85.000 milhas');
 });
 
 test('"+ Apontamento" registra evento/manutenção sem mexer na quilometragem', async ({ page }) => {

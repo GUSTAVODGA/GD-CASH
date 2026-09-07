@@ -10569,7 +10569,7 @@ function openVehForm(id) {
     </div>
     <div class="veh-form-row">
       <div class="form-group"><label class="form-label">Placa</label><input class="form-input" id="vf-plate" value="${escHtml(v?.plate||'')}" placeholder="ABC-1234"></div>
-      <div class="form-group"><label class="form-label">Quilometragem</label><input class="form-input" id="vf-km" type="number" min="0" value="${v?.km ?? ''}" placeholder="45000"></div>
+      <div class="form-group"><label class="form-label">Milhagem</label><input class="form-input" id="vf-km" type="number" min="0" value="${v?.km ?? ''}" placeholder="45000"></div>
     </div>
     <div class="form-group">
       <label class="form-label">Status</label>
@@ -10842,7 +10842,7 @@ function saveVehEvent() {
   const kmVal  = document.getElementById('ve-km').value;
   const amtVal = document.getElementById('ve-amount').value;
   if (type === 'km_update') {
-    if (!kmVal) { gdToast('Informe a quilometragem.'); return; }
+    if (!kmVal) { gdToast('Informe a milhagem.'); return; }
     v.km = Number(kmVal);
   } else {
     if (!note) { gdToast('Informe uma descrição.'); return; }
@@ -12478,8 +12478,8 @@ function renderPatDetail(id) {
           title = 'Reavaliação';
           body  = `<span class="pat-hist-old">${R(e.valorAnterior || 0)}</span> <span class="pat-hist-arrow">→</span> <span class="pat-hist-new">${R(e.valor || 0)}</span>`;
         } else if (e.tipo === 'km_update' || e._legacyType === 'km_update') {
-          title = 'Atualização de km';
-          body  = e._legacyKm != null ? `${Number(e._legacyKm).toLocaleString('pt-BR')} km` : escHtml(e.descricao || '');
+          title = 'Atualização de milhagem';
+          body  = e._legacyKm != null ? `${Number(e._legacyKm).toLocaleString('pt-BR')} milhas` : escHtml(e.descricao || '');
         } else {
           title = escHtml(e.descricao || 'Evento');
           body  = e.valor ? R(e.valor) : '';
@@ -12910,8 +12910,8 @@ function renderVehPatDetail(id) {
   const histItems = [];
   (v.history || []).forEach(h => histItems.push({
     id: h.id, kind: h.type === 'km_update' ? 'km' : 'evento',
-    data: h.date, title: h.type === 'km_update' ? 'Atualização de km' : (h.note || 'Evento'),
-    body: h.type === 'km_update' ? (h.km != null ? `${Number(h.km).toLocaleString('pt-BR')} km` : '') : (h.amount ? R(h.amount) : ''),
+    data: h.date, title: h.type === 'km_update' ? 'Atualização de milhagem' : (h.note || 'Evento'),
+    body: h.type === 'km_update' ? (h.km != null ? `${Number(h.km).toLocaleString('pt-BR')} milhas` : '') : (h.amount ? R(h.amount) : ''),
   }));
   if (pat) {
     (pat.historico || []).forEach(e => {
@@ -12929,7 +12929,7 @@ function renderVehPatDetail(id) {
     </div>
     <div class="pat-list-group pat-det-lastgroup">
       ${histItems.length === 0
-        ? _patEmptyState('historico', 'Nenhum evento ainda', 'Atualizações de km e reavaliações do veículo aparecem aqui.')
+        ? _patEmptyState('historico', 'Nenhum evento ainda', 'Atualizações de milhagem e reavaliações do veículo aparecem aqui.')
         : histItems.map(e => `
         <div class="pat-hist-item">
           <div class="pat-hist-dot-col"><span class="pat-hist-dot ${e.kind === 'aval' ? 'pat-hist-dot-aval' : ''}"></span></div>
@@ -12976,7 +12976,7 @@ function renderVehPatDetail(id) {
             <span class="pat-chip pat-chip-veiculo">Veículo</span>
             ${statusK === 'ativo' ? `<span class="pat-status s-${statusK}"><span class="pat-status-dot"></span><span class="pat-status-lbl">${escHtml(statusLbl)}</span></span>` : ''}
           </div>
-          ${(v.plate || (v.km != null && v.km !== '')) ? `<div class="pat-det-sub-line" style="margin-top:4px">${[v.plate ? escHtml(v.plate) : '', (v.km != null && v.km !== '') ? Number(v.km).toLocaleString('pt-BR') + ' km' : ''].filter(Boolean).join(' · ')}</div>` : ''}
+          ${(v.plate || (v.km != null && v.km !== '')) ? `<div class="pat-det-sub-line" style="margin-top:4px">${[v.plate ? escHtml(v.plate) : '', (v.km != null && v.km !== '') ? Number(v.km).toLocaleString('pt-BR') + ' milhas' : ''].filter(Boolean).join(' · ')}</div>` : ''}
         </div>
       </div>
       <div class="pat-det-valblock">
