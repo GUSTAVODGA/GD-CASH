@@ -469,3 +469,64 @@ test('veículo vendido (só leitura) não mostra "+ Apontamento" nem excluir', a
   await expect(page.getByRole('button', { name: '+ Apontamento' })).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Excluir apontamento' })).toHaveCount(0);
 });
+
+// ── Abastecimento no detalhe do veículo ─────────────────────────────────────
+//
+// O relatado: "abasteci pelo app e não vejo milhagem nem galão em lugar
+// nenhum do carro". A despesa de Gasolina até aparecia em "Despesas", mas sem
+// o MPG (diferente de todo outro lugar do app que mostra); e nenhuma tela
+// somava os abastecimentos num resumo. Hoje é agosto de 2026 nesta suíte
+// (AGORA = 20/08/2026).
+
+test('o MPG aparece junto da despesa de Gasolina na lista do veículo', async ({ page }) => {
+  await abrir(page, {
+    ...BASE,
+    expenses: [{
+      id: 'g1', vehicleId: 'v1', date: '2026-08-10', category: 'Gasolina', description: 'Shell', amount: 55,
+      meta: { abastecimento: { precoGalao: 5.5, galoes: 10, milhas: 300 } },
+    }],
+  });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('30.0 MPG');
+});
+
+test('o resumo de Abastecimento mostra MPG médio e o gasto do mês', async ({ page }) => {
+  await abrir(page, {
+    ...BASE,
+    expenses: [
+      { id: 'g1', vehicleId: 'v1', date: '2026-08-05', category: 'Gasolina', description: 'Shell', amount: 55,
+        meta: { abastecimento: { precoGalao: 5.5, galoes: 10, milhas: 250 } } }, // 25.0 MPG
+      { id: 'g2', vehicleId: 'v1', date: '2026-08-15', category: 'Gasolina', description: 'Chevron', amount: 60,
+        meta: { abastecimento: { precoGalao: 5.0, galoes: 12, milhas: 360 } } }, // 30.0 MPG
+    ],
+  });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('Abastecimento');
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('27.5 MPG'); // média de 25 e 30
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('R$ 115,00'); // 55 + 60, os dois em agosto
+});
+
+test('MPG médio olha todo o histórico, não só o mês corrente — gasto do mês fica em zero sem abastecimento em agosto', async ({ page }) => {
+  await abrir(page, {
+    ...BASE,
+    expenses: [{
+      id: 'g1', vehicleId: 'v1', date: '2026-07-10', category: 'Gasolina', description: 'Shell', amount: 50,
+      meta: { abastecimento: { precoGalao: 5.0, galoes: 10, milhas: 200 } }, // 20.0 MPG, mês passado
+    }],
+  });
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('20.0 MPG');
+  await expect(page.locator('#pat-veh-detail-cont')).toContainText('R$ 0,00');
+});
+
+test('sem nenhuma despesa de Gasolina vinculada, a seção Abastecimento nem aparece', async ({ page }) => {
+  await abrir(page); // BASE: vehicles sem despesas vinculadas
+  await irParaAba(page, 'patrimonio');
+  await page.evaluate(() => window.openVehPatDetail('v1'));
+  await expect(page.locator('#pat-veh-detail-cont')).not.toContainText('Abastecimento');
+});

@@ -2291,6 +2291,22 @@ function _mpgAbastecimento(e) {
   return ab.milhas / ab.galoes;
 }
 
+// Resumo de abastecimento de um veículo: a tela de detalhe lista as despesas
+// vinculadas, mas nenhuma delas mostra o consumo — quem quisesse ver MPG
+// tinha que ir atrás na Semana ou no Mês. MPG médio é de todo o histórico do
+// veículo (um abastecimento isolado oscila demais pra dizer algo sozinho);
+// o gasto é só do mês corrente, mesmo recorte do "Custo deste mês".
+function _vehAbastecimentoResumo(vehId) {
+  const gasExps = _expensesDoBem(vehId).filter(e => e.category === 'Gasolina');
+  const mpgs = gasExps.map(e => _mpgAbastecimento(e)).filter(m => m != null);
+  const mpgMedio = mpgs.length ? mpgs.reduce((a, b) => a + b, 0) / mpgs.length : null;
+  const ym = _ymNow();
+  const gastoMes = gasExps
+    .filter(e => String(e.date || '').slice(0, 7) === ym)
+    .reduce((s, e) => s + (e.amount || 0), 0);
+  return { mpgMedio, gastoMes, temDados: gasExps.length > 0 };
+}
+
 function addExpense() {
   const date=selDate(), cat=document.getElementById('exp-cat').value;
   const val=parseFloat(document.getElementById('exp-val').value);
@@ -12855,17 +12871,17 @@ function renderVehPatDetail(id) {
     .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
   const expHtml = exps.length === 0
     ? _patEmptyState('despesa', 'Nenhuma despesa vinculada', 'Registre um gasto e escolha este veículo em “Relacionado a”. Ele aparece aqui e no custo do mês.')
-    : exps.map(e => `
+    : exps.map(e => { const mpg = _mpgAbastecimento(e); return `
         <div class="pat-fin-item" style="cursor:default">
           <div class="pat-fin-body">
             <div class="pat-fin-name">${escHtml(e.description || e.category)}</div>
-            <div class="pat-fin-sub">${fmtShort(e.date)} · ${escHtml(e.category)}</div>
+            <div class="pat-fin-sub">${fmtShort(e.date)} · ${escHtml(e.category)}${mpg ? ' · ' + mpg.toFixed(1) + ' MPG' : ''}</div>
           </div>
           <div class="pat-fin-right">
             <span class="pat-fin-saldo" style="color:var(--rd)">−${R(e.amount)}</span>
             ${readonly ? '' : `<button class="pat-mini-del" onclick="unlinkVehExp('${v.id}','${e.id}')" aria-label="Desvincular despesa">${_patTrashSvg()}</button>`}
           </div>
-        </div>`).join('');
+        </div>`; }).join('');
 
   // ── Custo deste mês (só veículo ativo): uso/manutenção + financiamento, sem dupla contagem ──
   const custo = readonly ? null : _vehCustoMes(v.id);
@@ -12876,6 +12892,18 @@ function renderVehPatDetail(id) {
       <div class="veh-custo-row"><span>Financiamento</span><span>${R(custo.fin)}</span></div>${custo.aquisicao > 0 ? `
       <div class="veh-custo-row"><span>Aquisição</span><span>${R(custo.aquisicao)}</span></div>` : ''}
       <div class="veh-custo-row veh-custo-total"><span>Total desembolsado</span><span>${R(custo.total)}</span></div>
+    </div></div>` : '';
+
+  // ── Abastecimento: recorte de Gasolina que a lista de despesas genérica não
+  // mostra. MPG médio é de TODO o histórico do veículo (um só abastecimento
+  // isolado oscila demais pra dizer algo sozinho); gasto é só do mês corrente,
+  // mesmo recorte do "Custo deste mês" ao lado.
+  const abResumo = _vehAbastecimentoResumo(v.id);
+  const abHtml = abResumo.temDados ? `
+    <div class="pat-det-sec-head"><div class="sec-label" style="margin:0">Abastecimento</div></div>
+    <div class="pat-list-group" style="margin-bottom:0"><div class="veh-custo-card">
+      <div class="veh-custo-row"><span>MPG médio</span><span>${abResumo.mpgMedio != null ? abResumo.mpgMedio.toFixed(1) + ' MPG' : '—'}</span></div>
+      <div class="veh-custo-row"><span>Combustível este mês</span><span>${R(abResumo.gastoMes)}</span></div>
     </div></div>` : '';
 
   // ── Histórico: eventos legacy (v.history) + reavaliações (patrimônio) ──
@@ -12962,6 +12990,8 @@ function renderVehPatDetail(id) {
     ${venda ? _patVendaSummaryHtml(venda) : ''}
 
     ${custoHtml}
+
+    ${abHtml}
 
     ${finVehHtml}
 
