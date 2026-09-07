@@ -513,12 +513,15 @@ input,select{background:var(--surface2);border:1px solid var(--border);border-ra
 .login-brand{display:flex;flex-direction:column;align-items:center;margin-bottom:24px;gap:14px}
 .login-badge{
   width:72px;height:72px;
-  background:linear-gradient(180deg,#4A7AF5 0%,#1D4ED8 55%,#0C2494 100%);
+  /* Mesmo campo verde do ícone real do app (icon.svg), não uma cor à parte:
+     claro em cima, escuro embaixo, passando pelo tom principal no meio. */
+  background:linear-gradient(180deg,var(--flood-2) 0%,var(--flood) 52%,var(--flood-3) 100%);
   border-radius:20px;
   display:flex;align-items:center;justify-content:center;
   box-shadow:0 8px 32px var(--gold-t30),0 2px 8px rgba(0,0,0,.3);
 }
 .login-badge svg{width:40px;height:40px}
+.login-badge svg path, .login-badge svg line{stroke:var(--on-flood)}
 .login-wordmark{
   font-size:30px;font-weight:800;letter-spacing:-.5px;color:var(--text);
 }

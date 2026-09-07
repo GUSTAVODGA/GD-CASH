@@ -192,8 +192,12 @@ test('um cartão só não vira baralho: sem pontos', async ({ page }) => {
 // ── O ícone ───────────────────────────────────────────────────────────────
 
 test('ÍCONE: não sobrou azul da identidade anterior', async () => {
+  // `style.css` ficou de fora desta lista, e foi exatamente lá que a marca do
+  // login sobreviveu azul por várias versões depois do resto virar verde —
+  // o teste vigiava o ícone e o HTML, mas não o CSS que pinta o crachá do
+  // login. Um usuário reparou antes deste teste.
   const AZUIS = ['#0C2494', '#1D4ED8', '#4A7AF5'];
-  for (const arq of ['icon.svg', 'icon-maskable.svg', 'manifest.json', 'index.html']) {
+  for (const arq of ['icon.svg', 'icon-maskable.svg', 'manifest.json', 'index.html', 'style.css']) {
     const txt = fs.readFileSync(path.join(RAIZ, arq), 'utf8');
     for (const azul of AZUIS) {
       expect(txt.toUpperCase(), `${arq} ainda traz o azul ${azul}`)
