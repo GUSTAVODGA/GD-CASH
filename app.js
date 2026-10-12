@@ -180,7 +180,7 @@ const TAB_HELP = {
   mes: {
     icon: '📊',
     title: 'Aba Mês',
-    text: 'Visão completa do mês: resultado, gráfico de gastos por categoria, receita por plataforma e histórico dos últimos 6 meses. Toque no mês para navegar.',
+    text: 'Visão completa do mês: resultado, gráfico de gastos por categoria, receita por plataforma e histórico dos últimos 12 meses. Toque no mês para navegar.',
   },
   fixos: {
     icon: '🔁',
@@ -7339,7 +7339,7 @@ const TOUR_STEPS = [
   { tab:'inicio',  anchor:'hc-header',       title:'Tela Início',            text:'Resumo da semana, reserva e movimentações recentes. É aqui que você começa o dia no Avenco.' },
   { tab:'semana',  anchor:'days-accordion',  title:'Dias da semana',          text:'Veja e edite os lançamentos de cada dia. Toque em um dia para expandir. Use o + para adicionar receita ou gasto.' },
   { tab:'mes',     anchor:'big-donut-card', title:'Gastos por categoria',    text:'No mês você vê exatamente onde o dinheiro foi — o gráfico de rosca mostra cada categoria.' },
-  { tab:'mes',     anchor:'trends-chart',   title:'Histórico 6 meses',       text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês.' },
+  { tab:'mes',     anchor:'trends-chart',   title:'Histórico 12 meses',       text:'Barras verdes são receita, vermelhas são gastos. Fica claro se você está evoluindo mês a mês — arraste pros lados pra ver o ano inteiro.' },
   { tab:'metas',   anchor:'goals-list',      title:'Metas e reserva',         text:'A reserva de emergência é a primeira meta. Guarde e retire com data e histórico — e o que você guarda sai do dinheiro disponível do mês.', last:true },
 ];
 let tourStep = 0;
@@ -7441,14 +7441,14 @@ function finishOnboarding() {
 }
 
 // ══════════════════════════════════════════
-// TRENDS CHART (últimos 6 meses)
+// TRENDS CHART (últimos 12 meses)
 // ══════════════════════════════════════════
 function renderTrendsChart() {
   const container = document.getElementById('trends-chart');
   if (!container) return;
   const now = new Date();
   const months = [];
-  for (let i = 5; i >= 0; i--) {
+  for (let i = 11; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const off = (d.getFullYear() - now.getFullYear()) * 12 + (d.getMonth() - now.getMonth());
     months.push({ label: MONTH_NAMES[d.getMonth()], inc: sumMonthIncome(off), exp: sumMonthExpenses(off) });
@@ -7476,8 +7476,14 @@ function renderTrendsChart() {
         font-size="9.5" font-family="-apple-system,sans-serif" font-weight="700">${m.label}</text>
     `;
   });
+  // Doze meses não cabem lado a lado sem encolher a barra até ficar
+  // ilegível. Em vez disso, a faixa rola — mesma saída que a semana já usa
+  // pra sete dias em 320px — e o SVG nasce na LARGURA NATURAL (não 100%),
+  // senão o navegador encolheria tudo de volta pra caber no cartão.
   container.innerHTML = `
-    <svg viewBox="0 0 ${totalW} ${H}" style="width:100%;overflow:visible;display:block">${bars}</svg>
+    <div class="trends-scroll">
+      <svg viewBox="0 0 ${totalW} ${H}" width="${totalW}" height="${H}" style="display:block">${bars}</svg>
+    </div>
     <div class="trends-legend">
       <span class="trends-dot" style="background:${_cssVar('--gn')}"></span><span>Receita</span>
       <span class="trends-dot" style="background:${_cssVar('--rd')}"></span><span>Gastos</span>
@@ -11035,14 +11041,6 @@ function _normFinanciamento(raw) {
   if (!out.id) out.id = uid();
   out.pagamentos = Array.isArray(f.pagamentos) ? f.pagamentos : [];
   return out;
-}
-
-// ── Fonte única dos números do financiamento ──────────────────────────────
-// "% quitado" deriva SEMPRE de (valorFinanciado, saldoDevedor).
-function _finQuitadoPct(f) {
-  const base = f?.valorFinanciado || 0;
-  if (base <= 0) return 0;
-  return Math.max(0, Math.min(100, Math.round((base - (f.saldoDevedor || 0)) / base * 100)));
 }
 
 function normalizePatrimonio(raw) {

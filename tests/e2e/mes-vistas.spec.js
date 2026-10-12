@@ -145,3 +145,41 @@ test('a tela Mês não solta erro de console ao trocar de vista', async ({ page 
   await irParaAba(page, 'mes');
   expect(erros).toEqual([]);
 });
+
+// ── Histórico 12 meses (antes era só 6) ─────────────────────────────────────
+//
+// O usuário queria enxergar o ano inteiro de uma vez, não só o último
+// semestre. Doze meses lado a lado não cabem sem encolher a barra até ficar
+// ilegível, então a faixa passou a rolar — mesma solução que a Semana já
+// usa pra sete dias em 320px — em vez de espremer tudo pra caber no cartão.
+
+test('o histórico mostra 12 meses, não 6', async ({ page }) => {
+  await abrir(page);
+  await page.evaluate(() => window.setMesView('evolucao'));
+  const rotulos = await page.locator('#trends-chart text').allTextContents();
+  expect(rotulos).toHaveLength(12);
+  // AGORA é agosto/2026: a janela vai de set/2025 até ago/2026.
+  expect(rotulos[0]).toBe('Set');
+  expect(rotulos[rotulos.length - 1]).toBe('Ago');
+});
+
+test('o título da seção diz 12 meses, não 6', async ({ page }) => {
+  await abrir(page);
+  await expect(page.locator('.av-sec-title', { hasText: 'Histórico' })).toHaveText('Histórico 12 meses');
+});
+
+test('a faixa de 12 meses rola, e abre já mostrando o mês mais recente', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await abrir(page);
+  await page.evaluate(() => window.setMesView('evolucao'));
+  await page.waitForTimeout(150);
+  const estado = await page.locator('.trends-scroll').evaluate(n => ({
+    rola: n.scrollWidth > n.clientWidth + 1,
+    // Contêiner é RTL de propósito (ver CSS): "já no mês mais recente" é
+    // scrollLeft ≈ 0, não o máximo — é a convenção RTL do navegador, com o
+    // conteúdo em si renderizado LTR por dentro.
+    noFim: Math.abs(n.scrollLeft) <= 1,
+  }));
+  expect(estado.rola, 'doze meses deveriam ultrapassar a largura do cartão').toBe(true);
+  expect(estado.noFim, 'a faixa não abriu mostrando o mês mais recente').toBe(true);
+});

@@ -1469,7 +1469,7 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 .tx-icon-exp{background:rgba(255,77,106,.12);color:var(--red)}
 .tx-info{flex:1;min-width:0}
 .tx-label{font-size:14.5px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tx-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.tx-sub{font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx-amt{font-size:15px;font-weight:800;flex-shrink:0}
 .tx-amt.pos{color:var(--green)}
 .tx-amt.neg{color:var(--red)}
@@ -1646,6 +1646,17 @@ input:disabled,input[disabled],select:disabled,select[disabled],textarea:disable
 /* ══════════════════════════════════════════
    TRENDS CHART
    ══════════════════════════════════════════ */
+.trends-scroll{
+  overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  /* Abre já mostrando o mês mais recente (a ponta direita), mesmo quando o
+     render acontece com a vista ainda escondida (display:none) e um
+     scrollLeft via JS não tem o que medir. RTL no contêiner + LTR de volta
+     no SVG resolve isso sem depender de medir nada: o navegador recalcula
+     sozinho, toda vez que a faixa é de fato exibida. */
+  direction:rtl;
+}
+.trends-scroll::-webkit-scrollbar{display:none}
+.trends-scroll>svg{direction:ltr}
 .trends-legend{
   display:flex;align-items:center;gap:14px;justify-content:center;
   margin-top:12px;font-size:12px;color:var(--text2);font-weight:600;
